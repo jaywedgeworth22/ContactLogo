@@ -8,7 +8,7 @@ Company logos for the contacts that need them.
 
 Crest finds company cards in an address book, suggests a simple square or round mark, and only writes a photo after you approve it. Existing pictures are never replaced unless you tap **Replace**.
 
-**Live site (ContactLogo):** [contactlogo.grok.me](https://contactlogo.grok.me)
+**Live site (ContactLogo):** [contactlogo.com](https://contactlogo.com)
 
 ## License
 
@@ -46,9 +46,10 @@ Optional: set `GOOGLE_CLIENT_ID` (or `VITE_GOOGLE_CONTACTS_CLIENT_ID`) so **Impo
 | Place | What updates it |
 | --- | --- |
 | This GitHub repo | Commits on `main` |
-| [contactlogo.grok.me](https://contactlogo.grok.me) | Grok **Publish** (still the Crest Grok project until republished) |
+| [contactlogo.com](https://contactlogo.com) | Coolify + Cloudflare (not Render).  Zone was not in the jay Cloudflare account as of 2026-08-22. |
+| Grok `*.grok.me` | Legacy Publish only (`contact-logo.grok.me` / `contactlogo.grok.me` / `bizlogo.grok.me`) |
 
-Grok hosts the live `*.grok.me` site from a Grok project, not from a GitHub Action. After ContactLogo changes land here, publish again in Grok so the live page says ContactLogo. Pull requests on GitHub do not deploy to grok.me by themselves.
+GitHub Actions do not deploy this product.  Point `contactlogo.com` at Coolify when DNS is in Cloudflare.
 
 ## Source layout
 

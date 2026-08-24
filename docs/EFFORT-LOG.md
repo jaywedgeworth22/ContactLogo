@@ -6,7 +6,7 @@ by CURSOR the same day. ContactLogo is not yet in fleet-apps.json and has no
 CI — see Planned rows below.
 
 ## Deployed
-- (none — web is a Grok Publish at https://contact-logo.grok.me, not this repo's Actions)
+- (none on Coolify/Cloudflare yet.  Official product URL is https://contactlogo.com.  Grok Publish at https://contact-logo.grok.me is legacy only.)
 
 ## Completed
 - **2026-08-21 — CURSOR — COMPLETED — Local folder `~/Code/ContactLogo` + GitHub `jaywedgeworth22/ContactLogo` + Cursor project name ContactLogo.**  `mv` of `/Users/jay/Code/BadgeBook` (git history, uncommitted merge, `backups/`, `vendor/crest/` intact).  GitHub already renamed (0 forks, old BadgeBook slug redirects).  Origin set to `https://github.com/jaywedgeworth22/ContactLogo.git`.  Cursor project list name/path updated; `~/.cursor/projects/Users-jay-Code-ContactLogo` created.  Frozen snapshots stay `backups/badgebook/` (`18fcf25`) and `backups/crest/` (`8b4ca72`).  Product docs/homepages use `contact-logo.grok.me` (live 200; unhyphenated host 404s).
@@ -18,12 +18,14 @@ CI — see Planned rows below.
 - **2026-08-22 — AG — COMPLETED — Xcode project (iOS & macOS), ContactLogo.com domain alignment, Android app build.**  Xcode project generation with iOS 17+ min deployment, document format 26 compatibility, bundle IDs `com.contactlogo` and `com.contactlogo.macos`, display name `ContactLogo`, category `utilities`, Dev Team `CC8UTF7ATG`, verified on iOS simulator with screenshot, domain aligned everywhere to `ContactLogo.com` / `https://contactlogo.com` (GitHub metadata, package.json, web, docs), and full native Android application in `Apps/ContactLogoAndroid` built and verified (`app-debug.apk`).  PR merged.
 
 ## In Progress
-- (none)
+- **2026-08-22 — CURSOR — IN PROGRESS — Domain + CI leftovers (uncommitted).**  Official host `contactlogo.com`.  Added `.github/workflows/ci.yml` (web Node job + macOS `swift test`) and `AGENTS.md`.  Did not run `onboard-new-app.sh` (must be from a fleet worktree, not `~/Code`).  Cloudflare jay account has no `contactlogo.com` zone; no DNS invented.  Personal-Site project list now points at ContactLogo + contactlogo.com.
 
 ## Planned / Reserved
-- **2026-08-21 — KIMI — PLANNED — [P1] Onboard ContactLogo to the fleet + add CI.**  Board item 3b9ca6cf.  No CI despite Tests/ and web/engine.test.ts, no AGENTS.md/CLAUDE.md/.claude, no dependabot, absent from fleet-apps.json and the digest.  Copy the DealDex coordination skeleton; add macOS runner job (`swift test`) + Node job for `web/`.  `jaywedgeworth22/crest` is archived (2026-08-21); `vendor/crest` remains a subtree path, not a second product.
+- **2026-08-21 — KIMI — PLANNED — [P1] Onboard ContactLogo to the fleet.**  Board item 3b9ca6cf.  Still absent from fleet-apps.json and the digest.  CI workflow now exists locally (see In Progress); dependabot and seat worktrees still missing.  `jaywedgeworth22/crest` is archived (2026-08-21); `vendor/crest` remains a subtree path, not a second product.
+- **2026-08-22 — CURSOR — PLANNED — Attach contactlogo.com to Coolify + Cloudflare.**  Domain is owned (Grok tapspin log).  Zone not in Cloudflare yet.  Do not use Render.
 
 ## Changelog of this log
 - 2026-08-21 — KIMI — file created during owner-requested fleet setup audit.
 - 2026-08-21 — P0 history rewrite completed (filter-repo + force-push); no contact names in this log.
 - 2026-08-21 — CURSOR — renamed local folder and GitHub product to ContactLogo; moved P0 to Completed; recorded merge+backup preservation; live site URL hyphenated.
+- 2026-08-22 — CURSOR — official product URL is contactlogo.com; CI + AGENTS.md added locally; Coolify/Cloudflare attach still waiting on DNS zone.

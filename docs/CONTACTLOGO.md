@@ -10,7 +10,8 @@ Crest). Those names are retired. GitHub is
 `~/Code/ContactLogo`.
 
 The Grok web app that also shipped at contactlogo.grok.me and bizlogo.grok.me
-is the same product — not a second app.  Crest (`jaywedgeworth22/crest`) is a
+is the same product — not a second app.  Official URL is
+[contactlogo.com](https://contactlogo.com).  Crest (`jaywedgeworth22/crest`) is a
 legacy archive.
 
 The combine work stays: catalog, phones, and iconic marks from the

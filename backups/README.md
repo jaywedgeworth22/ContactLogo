@@ -57,7 +57,7 @@ Overlaps were not copied blindly.
 | Auth | ContactLogo (none) | Local-first; no account for the free web path. | Better Auth, email/password, isolation middleware. |
 | Export | Both | Web: backup + approved vCard.  Native: undo log before write. | Crest share-sheet vCard helper. |
 | Tests | ContactLogo | Swift `ContactLogoKitTests` + web `engine.test.ts`. | Crest `scripts/**/*.test.mjs`. |
-| Hosting | ContactLogo site URL | `contact-logo.grok.me`.  Production elsewhere is Coolify + Cloudflare, not Render. | Crest-only Grok publish notes. |
+| Hosting | ContactLogo site URL | `contactlogo.com`.  Production is Coolify + Cloudflare, not Render.  Grok `.me` hosts are legacy Publish only. | Crest-only Grok publish notes. |
 
 ## What was merged into the live app (this snapshot's work)
 
