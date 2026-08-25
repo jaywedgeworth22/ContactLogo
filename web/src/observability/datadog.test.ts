@@ -17,7 +17,7 @@ test("production hostnames require Datadog", () => {
   assert.equal(productionHostname("contact-logo.grok.me"), false);
 });
 
-test("fail closed when production env is set", () => {
+test("production and the public host still mark Datadog required", () => {
   assert.equal(datadogIsRequired({ env: "production" }), true);
   assert.equal(datadogIsRequired({ env: "development" }), false);
   assert.equal(datadogIsRequired({ requireFlag: "1" }), true);
@@ -55,21 +55,31 @@ test("defaults site and service to the existing US5 account", () => {
   assert.equal(resolveDatadogSite(""), DEFAULT_DD_SITE);
 });
 
-test("dev without keys is a no-op; production without keys throws", () => {
+test("dev and production without keys stay dark", () => {
   const empty = readDatadogPublicEnv({});
   assert.equal(empty.config, null);
   assert.deepEqual(empty.missing, ["DD_APPLICATION_ID", "DD_CLIENT_TOKEN"]);
   assert.equal(assertDatadogPublicConfig({}), null);
-  assert.throws(
-    () =>
-      assertDatadogPublicConfig(
-        { DD_ENV: "production" },
-        { hostname: "localhost" },
-      ),
-    /DD_APPLICATION_ID/,
+  assert.equal(
+    assertDatadogPublicConfig(
+      { DD_ENV: "production" },
+      { hostname: "localhost" },
+    ),
+    null,
+  );
+  assert.equal(
+    assertDatadogPublicConfig({}, { hostname: "contactlogo.com" }),
+    null,
   );
 });
 
-test("unsupported DD_SITE fails closed", () => {
-  assert.throws(() => resolveDatadogSite("not-a-datadog-site"), /Unsupported DD_SITE/);
+test("unsupported DD_SITE stays dark", () => {
+  assert.equal(resolveDatadogSite("not-a-datadog-site"), null);
+  const { config, missing } = readDatadogPublicEnv({
+    DD_APPLICATION_ID: "app-id",
+    DD_CLIENT_TOKEN: "pubtoken",
+    DD_SITE: "not-a-datadog-site",
+  });
+  assert.equal(config, null);
+  assert.deepEqual(missing, ["DD_SITE"]);
 });

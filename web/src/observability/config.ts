@@ -41,10 +41,10 @@ export function isDatadogSite(value: string): value is DatadogSite {
   return (DATADOG_SITES as readonly string[]).includes(value);
 }
 
-export function resolveDatadogSite(raw: string | undefined): DatadogSite {
+export function resolveDatadogSite(raw: string | undefined): DatadogSite | null {
   const site = trimEnv(raw) || DEFAULT_DD_SITE;
   if (isDatadogSite(site)) return site;
-  throw new Error(`Unsupported DD_SITE: ${site}`);
+  return null;
 }
 
 export function readDatadogPublicEnv(source: DatadogEnvSource): {
@@ -53,17 +53,19 @@ export function readDatadogPublicEnv(source: DatadogEnvSource): {
 } {
   const applicationId = trimEnv(source.DD_APPLICATION_ID);
   const clientToken = trimEnv(source.DD_CLIENT_TOKEN);
+  const site = resolveDatadogSite(source.DD_SITE);
   const missing: string[] = [];
   if (!applicationId) missing.push("DD_APPLICATION_ID");
   if (!clientToken) missing.push("DD_CLIENT_TOKEN");
-  if (missing.length > 0) {
+  if (!site && trimEnv(source.DD_SITE)) missing.push("DD_SITE");
+  if (missing.length > 0 || !site) {
     return { config: null, missing };
   }
   return {
     config: {
       applicationId,
       clientToken,
-      site: resolveDatadogSite(source.DD_SITE),
+      site,
       service: trimEnv(source.DD_SERVICE) || DEFAULT_DD_SERVICE,
       env: trimEnv(source.DD_ENV) || "development",
       version: trimEnv(source.DD_VERSION) || "unknown",
@@ -104,8 +106,10 @@ export function assertDatadogPublicConfig(
     requireFlag: source.DD_REQUIRE,
   });
   if (config) return config;
-  if (!required) return null;
-  throw new Error(
-    `Datadog keys missing (${missing.join(", ")}).  Refusing to start.`,
-  );
+  if (required && missing.length > 0) {
+    console.warn(
+      `Datadog keys missing (${missing.join(", ")}).  Staying dark.`,
+    );
+  }
+  return null;
 }

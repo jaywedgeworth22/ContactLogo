@@ -25,6 +25,7 @@ CI — see Planned rows below.
 - **2026-08-22 — CURSOR — PLANNED — Attach contactlogo.com to Coolify + Cloudflare.**  Domain is owned (Grok tapspin log).  Zone not in Cloudflare yet.  Do not use Render.
 
 ## Changelog of this log
+- 2026-08-25 — CURSOR-BUGBOT: Datadog stay-dark — missing keys must not block Coolify boot or white-screen contactlogo.com (`cursor/datadog-fail-closed-no-boot-kill`).
 - 2026-08-21 — KIMI — file created during owner-requested fleet setup audit.
 - 2026-08-21 — P0 history rewrite completed (filter-repo + force-push); no contact names in this log.
 - 2026-08-21 — CURSOR — renamed local folder and GitHub product to ContactLogo; moved P0 to Completed; recorded merge+backup preservation; live site URL hyphenated.
