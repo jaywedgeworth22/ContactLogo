@@ -25,6 +25,7 @@ struct ContentView: View {
                 }
             }
             .navigationTitle("ContactLogo")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 if model.stage == .idle || model.stage == .review {
                     Button("Scan") { Task { await model.scanAndMatch() } }
