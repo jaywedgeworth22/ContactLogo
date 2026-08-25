@@ -163,9 +163,35 @@ test("source labels cover every logo source", async () => {
   const { sourceLabel } = await import("./logos.ts");
   assert.equal(sourceLabel("preferred"), "Iconic mark");
   assert.equal(sourceLabel("simpleicons"), "Simple Icons");
+  assert.equal(sourceLabel("clearbit"), "Clearbit (512px)");
+  assert.equal(sourceLabel("google"), "Google (256px)");
   assert.equal(sourceLabel("favicon"), "Favicon");
   assert.equal(sourceLabel("upload"), "Your file");
+  assert.equal(sourceLabel("crop"), "Custom crop");
   assert.equal(sourceLabel("url"), "Pasted URL");
+});
+
+test("candidateUrls provides high-res sources and avoids unknown simpleicons", async () => {
+  const { candidateUrls } = await import("./logos.ts");
+  const known = candidateUrls("apple.com");
+  assert.equal(known.some((c) => c.source === "simpleicons"), true);
+  assert.equal(known.some((c) => c.source === "clearbit"), true);
+  assert.equal(known.some((c) => c.source === "google"), true);
+
+  const unknown = candidateUrls("random-local-bakery.com");
+  assert.equal(unknown.some((c) => c.source === "simpleicons"), false);
+  assert.equal(unknown.some((c) => c.source === "clearbit"), true);
+  assert.equal(unknown.some((c) => c.source === "google"), true);
+});
+
+test("email and guessed domains stay in review", async () => {
+  const emailItem = matchContact({
+    id: "101",
+    displayName: "Jay's Receipts",
+    email: "receipts@mycustomdomain.com",
+  });
+  assert.notEqual(emailItem.confidence, "high");
+  assert.equal(emailItem.selected, false);
 });
 
 test("google person mapping", async () => {
