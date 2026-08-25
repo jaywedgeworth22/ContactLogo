@@ -12,6 +12,7 @@ import {
   composeFromFile,
   composeFromUrl,
   embedSrc,
+  isVectorSource,
   padAndSquareImage,
   sourceLabel,
   viaLabel,
@@ -130,14 +131,21 @@ async function importFromDevice() {
   }
 }
 
-function applySelected(): BookContact[] {
+function applySelected(onlySelected: boolean = true): BookContact[] {
   const byId = new Map(state.contacts.map((c) => [c.id, { ...c }]));
+  const updatedIds = new Set<string>();
   for (const item of state.items) {
     if (!item.selected) continue;
     const hit = item.candidates[item.chosenIndex];
     if (!hit) continue;
     const next = byId.get(item.contact.id);
-    if (next) next.photoDataUrl = hit.src;
+    if (next) {
+      next.photoDataUrl = hit.src;
+      updatedIds.add(item.contact.id);
+    }
+  }
+  if (onlySelected) {
+    return [...byId.values()].filter((c) => updatedIds.has(c.id));
   }
   return [...byId.values()];
 }
@@ -146,18 +154,39 @@ function downloadBackup() {
   downloadText(backupFilename(), contactsToVcard(state.contacts), "text/vcard;charset=utf-8");
 }
 
-async function downloadUpdated() {
-  state.notice = "Embedding and formatting approved logos…";
+async function downloadApproved() {
+  const selectedCount = state.items.filter((i) => i.selected && i.candidates[i.chosenIndex]).length;
+  if (selectedCount === 0) {
+    state.notice = "No approved logos selected to export. Check the contacts you want to update first.";
+    render();
+    return;
+  }
+  state.notice = `Embedding and formatting ${selectedCount} approved logo${selectedCount === 1 ? "" : "s"}…`;
   render();
-  const updated = applySelected();
+  const updated = applySelected(true);
   for (const contact of updated) {
     if (contact.photoDataUrl) {
       const embedded = await embedSrc(contact.photoDataUrl);
       contact.photoDataUrl = await padAndSquareImage(embedded);
     }
   }
-  downloadText("contactlogo-contacts.vcf", contactsToVcard(updated), "text/vcard;charset=utf-8");
-  state.notice = "Download started.  Import the vCard back into your address book.";
+  downloadText("contactlogo-approved-updates.vcf", contactsToVcard(updated), "text/vcard;charset=utf-8");
+  state.notice = `Downloaded ${updated.length} updated contact${updated.length === 1 ? "" : "s"}. Import this file into Contacts to safely update only these cards.`;
+  render();
+}
+
+async function downloadFull() {
+  state.notice = "Embedding approved logos into full address book…";
+  render();
+  const updated = applySelected(false);
+  for (const contact of updated) {
+    if (contact.photoDataUrl && state.items.some((i) => i.selected && i.contact.id === contact.id)) {
+      const embedded = await embedSrc(contact.photoDataUrl);
+      contact.photoDataUrl = await padAndSquareImage(embedded);
+    }
+  }
+  downloadText("contactlogo-full-addressbook.vcf", contactsToVcard(updated), "text/vcard;charset=utf-8");
+  state.notice = `Downloaded full address book (${updated.length} contacts).`;
   render();
 }
 
@@ -510,6 +539,16 @@ function card(item: ReviewItem): HTMLElement {
         render();
       }
     });
+    (thumb as HTMLImageElement).addEventListener("load", () => {
+      const isVector = isVectorSource(hit.src);
+      const imgEl = thumb as HTMLImageElement;
+      if (!isVector && imgEl.naturalWidth > 0 && (imgEl.naturalWidth < 48 || imgEl.naturalHeight < 48)) {
+        if (item.candidates.length > 1 && item.chosenIndex < item.candidates.length - 1) {
+          item.chosenIndex += 1;
+          render();
+        }
+      }
+    });
   }
 
   const check = el("input", { type: "checkbox" }) as HTMLInputElement;
@@ -525,6 +564,16 @@ function card(item: ReviewItem): HTMLElement {
     const cImg = el("img", { src: cand.src, alt: cand.source }) as HTMLImageElement;
     cImg.addEventListener("error", () => {
       b.style.display = "none";
+    });
+    cImg.addEventListener("load", () => {
+      const isVector = isVectorSource(cand.src);
+      if (!isVector && cImg.naturalWidth > 0 && (cImg.naturalWidth < 48 || cImg.naturalHeight < 48)) {
+        b.style.display = "none";
+        if (item.chosenIndex === i && item.candidates.length > 1) {
+          item.chosenIndex = (i + 1) % item.candidates.length;
+          render();
+        }
+      }
     });
     b.append(cImg);
     b.addEventListener("click", () => {
@@ -757,12 +806,38 @@ export function render() {
     selectHigh.addEventListener("click", () => setAllHigh(true));
     const clearHigh = el("button", { class: "btn ghost", type: "button" }, "Clear high-confidence");
     clearHigh.addEventListener("click", () => setAllHigh(false));
-    const backup = el("button", { class: "btn secondary", type: "button" }, "Download backup");
-    backup.addEventListener("click", downloadBackup);
-    const save = el("button", { class: "btn", type: "button" }, "Download approved vCard");
-    save.addEventListener("click", () => void downloadUpdated());
 
-    const toolbarItems = [selectHigh, clearHigh, backup, save];
+    const selectedCount = state.items.filter((i) => i.selected && i.candidates[i.chosenIndex]).length;
+    const saveApproved = el(
+      "button",
+      {
+        class: "btn",
+        type: "button",
+        title: "Export ONLY modified business contacts as a delta vCard to safely import into Apple Contacts without touching other cards",
+      },
+      `Download ${selectedCount} Approved Update${selectedCount === 1 ? "" : "s"}`,
+    );
+    saveApproved.addEventListener("click", () => void downloadApproved());
+
+    const exportFull = el(
+      "button",
+      {
+        class: "btn secondary",
+        type: "button",
+        title: "Export full address book with all contacts merged",
+      },
+      `Export full address book (${state.contacts.length})`,
+    );
+    exportFull.addEventListener("click", () => void downloadFull());
+
+    const backup = el(
+      "button",
+      { class: "btn ghost", type: "button", title: "Download untouched original address book backup" },
+      "Download backup",
+    );
+    backup.addEventListener("click", downloadBackup);
+
+    const toolbarItems = [selectHigh, clearHigh, saveApproved, exportFull, backup];
     const hasGoogleContacts = state.contacts.some((c) => Boolean(c.googleResourceName));
     if (hasGoogleContacts) {
       const googleSyncBtn = el("button", { class: "btn secondary google-sync-btn", type: "button" }, "⚡ Apply to Google Contacts");

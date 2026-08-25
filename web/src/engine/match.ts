@@ -41,6 +41,9 @@ function confidenceFor(item: Omit<ReviewItem, "selected" | "chosenIndex" | "conf
   switch (best.source) {
     case "preferred":
     case "simpleicons":
+    case "ticker":
+    case "brandfetch":
+    case "logodev":
     case "clearbit":
     case "google":
       tier = item.via === "catalog" || item.via === "website" || item.via === "phone" ? "high" : "medium";
