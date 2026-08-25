@@ -23,6 +23,7 @@ struct ContactLogoiOSApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(model)
+                .appUpdatePrompt()
         }
     }
 }

@@ -6,18 +6,34 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.contactlogo.engine.ContactsRepository
 import com.contactlogo.ui.ContactLogoApp
 import com.contactlogo.ui.ContactLogoViewModel
+import com.contactlogo.ui.PlayUpdateDialog
 import com.contactlogo.ui.theme.ContactLogoTheme
+import com.google.android.play.core.appupdate.AppUpdateInfo
+import com.google.android.play.core.appupdate.AppUpdateManager
+import com.google.android.play.core.appupdate.AppUpdateManagerFactory
+import com.google.android.play.core.appupdate.AppUpdateOptions
+import com.google.android.play.core.install.model.AppUpdateType
+import com.google.android.play.core.install.model.UpdateAvailability
 
 class MainActivity : ComponentActivity() {
 
     private lateinit var viewModel: ContactLogoViewModel
+    private var appUpdateManager: AppUpdateManager? = null
+    private var pendingUpdateInfo: AppUpdateInfo? = null
+    private var showPlayUpdate by mutableStateOf(false)
+    private var playUpdateDismissed = false
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -26,6 +42,12 @@ class MainActivity : ComponentActivity() {
         if (readGranted) {
             viewModel.scanContacts()
         }
+    }
+
+    private val playUpdateLauncher = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) {
+        // Flexible Play updates are skippable.  Any result is silent.
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -43,10 +65,18 @@ class MainActivity : ComponentActivity() {
         )[ContactLogoViewModel::class.java]
 
         checkAndRequestPermissions()
+        checkPlayUpdate()
 
         setContent {
             ContactLogoTheme {
-                ContactLogoApp(viewModel)
+                Box(Modifier.fillMaxSize()) {
+                    ContactLogoApp(viewModel)
+                    PlayUpdateDialog(
+                        visible = showPlayUpdate,
+                        onUpdate = { startFlexibleUpdate() },
+                        onNotNow = { dismissPlayUpdate() },
+                    )
+                }
             }
         }
     }
@@ -65,5 +95,48 @@ class MainActivity : ComponentActivity() {
                 )
             )
         }
+    }
+
+    private fun checkPlayUpdate() {
+        try {
+            val manager = AppUpdateManagerFactory.create(this)
+            appUpdateManager = manager
+            manager.appUpdateInfo
+                .addOnSuccessListener { info ->
+                    val available = info.updateAvailability() == UpdateAvailability.UPDATE_AVAILABLE
+                    val flexible = info.isUpdateTypeAllowed(AppUpdateType.FLEXIBLE)
+                    if (PlayAppUpdate.shouldOffer(available, flexible, playUpdateDismissed)) {
+                        pendingUpdateInfo = info
+                        showPlayUpdate = true
+                    }
+                }
+                .addOnFailureListener {
+                    // Fail silent when Play is missing, sideloaded, or offline.
+                }
+        } catch (_: Exception) {
+            // Fail silent.
+        }
+    }
+
+    private fun startFlexibleUpdate() {
+        val manager = appUpdateManager
+        val info = pendingUpdateInfo
+        showPlayUpdate = false
+        if (manager == null || info == null) return
+        try {
+            manager.startUpdateFlowForResult(
+                info,
+                playUpdateLauncher,
+                AppUpdateOptions.newBuilder(AppUpdateType.FLEXIBLE).build(),
+            )
+        } catch (_: Exception) {
+            // Fail silent.
+        }
+    }
+
+    private fun dismissPlayUpdate() {
+        playUpdateDismissed = true
+        showPlayUpdate = false
+        pendingUpdateInfo = null
     }
 }

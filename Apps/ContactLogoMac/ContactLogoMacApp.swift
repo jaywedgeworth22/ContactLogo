@@ -11,6 +11,7 @@ struct ContactLogoMacApp: App {
             ContentView()
                 .environmentObject(model)
                 .frame(minWidth: 760, minHeight: 520)
+                .appUpdatePrompt()
         }
         .windowStyle(.titleBar)
     }

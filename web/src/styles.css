@@ -143,3 +143,27 @@ button { cursor: pointer; }
   margin-top: 12px;
 }
 
+.update-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  padding: 12px 20px;
+  background: var(--card);
+  border-bottom: 1px solid var(--line);
+  box-shadow: 0 8px 24px #1c191714;
+}
+.update-banner[hidden] { display: none; }
+.update-banner-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.update-banner-copy strong { font-size: 1rem; }
+.update-banner-copy span { color: var(--muted); font-size: 0.92rem; }
+.update-banner-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
