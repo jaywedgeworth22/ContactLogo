@@ -201,6 +201,76 @@ test("candidateUrls provides high-res sources and avoids unknown simpleicons", a
   assert.equal(unknown.some((c) => c.source === "google"), true);
 });
 
+test("low-res auto-skip never wraps and never discards uploads", async () => {
+  const { nextIndexAfterUnusableLogo } = await import("./logos.ts");
+  assert.equal(
+    nextIndexAfterUnusableLogo({
+      chosenIndex: 4,
+      candidateCount: 5,
+      source: "favicon",
+      isVector: false,
+      width: 16,
+      height: 16,
+    }),
+    null,
+  );
+  assert.equal(
+    nextIndexAfterUnusableLogo({
+      chosenIndex: 0,
+      candidateCount: 5,
+      source: "brandfetch",
+      isVector: false,
+      width: 16,
+      height: 16,
+    }),
+    1,
+  );
+  assert.equal(
+    nextIndexAfterUnusableLogo({
+      chosenIndex: 0,
+      candidateCount: 5,
+      source: "upload",
+      isVector: false,
+      width: 16,
+      height: 16,
+    }),
+    null,
+  );
+  assert.equal(
+    nextIndexAfterUnusableLogo({
+      chosenIndex: 0,
+      candidateCount: 5,
+      source: "crop",
+      isVector: false,
+      width: 32,
+      height: 32,
+    }),
+    null,
+  );
+  assert.equal(
+    nextIndexAfterUnusableLogo({
+      chosenIndex: 2,
+      candidateCount: 5,
+      source: "clearbit",
+      isVector: false,
+      width: 512,
+      height: 512,
+    }),
+    null,
+  );
+  assert.equal(
+    nextIndexAfterUnusableLogo({
+      chosenIndex: 0,
+      candidateCount: 5,
+      source: "simpleicons",
+      isVector: true,
+      width: 16,
+      height: 16,
+    }),
+    null,
+  );
+});
+
 test("email and guessed domains stay in review", async () => {
   const emailItem = matchContact({
     id: "101",

@@ -12,7 +12,10 @@ import {
   composeFromFile,
   composeFromUrl,
   embedSrc,
+  isLowResRaster,
+  isUserPinnedLogoSource,
   isVectorSource,
+  nextIndexAfterUnusableLogo,
   padAndSquareImage,
   sourceLabel,
   viaLabel,
@@ -540,13 +543,18 @@ function card(item: ReviewItem): HTMLElement {
       }
     });
     (thumb as HTMLImageElement).addEventListener("load", () => {
-      const isVector = isVectorSource(hit.src);
       const imgEl = thumb as HTMLImageElement;
-      if (!isVector && imgEl.naturalWidth > 0 && (imgEl.naturalWidth < 48 || imgEl.naturalHeight < 48)) {
-        if (item.candidates.length > 1 && item.chosenIndex < item.candidates.length - 1) {
-          item.chosenIndex += 1;
-          render();
-        }
+      const next = nextIndexAfterUnusableLogo({
+        chosenIndex: item.chosenIndex,
+        candidateCount: item.candidates.length,
+        source: hit.source,
+        isVector: isVectorSource(hit.src),
+        width: imgEl.naturalWidth,
+        height: imgEl.naturalHeight,
+      });
+      if (next !== null) {
+        item.chosenIndex = next;
+        render();
       }
     });
   }
@@ -567,12 +575,21 @@ function card(item: ReviewItem): HTMLElement {
     });
     cImg.addEventListener("load", () => {
       const isVector = isVectorSource(cand.src);
-      if (!isVector && cImg.naturalWidth > 0 && (cImg.naturalWidth < 48 || cImg.naturalHeight < 48)) {
+      if (isLowResRaster(cImg.naturalWidth, cImg.naturalHeight, isVector) && !isUserPinnedLogoSource(cand.source)) {
         b.style.display = "none";
-        if (item.chosenIndex === i && item.candidates.length > 1) {
-          item.chosenIndex = (i + 1) % item.candidates.length;
-          render();
-        }
+      }
+      if (item.chosenIndex !== i) return;
+      const next = nextIndexAfterUnusableLogo({
+        chosenIndex: i,
+        candidateCount: item.candidates.length,
+        source: cand.source,
+        isVector,
+        width: cImg.naturalWidth,
+        height: cImg.naturalHeight,
+      });
+      if (next !== null) {
+        item.chosenIndex = next;
+        render();
       }
     });
     b.append(cImg);

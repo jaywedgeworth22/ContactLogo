@@ -292,6 +292,38 @@ export function isVectorSource(src: string): boolean {
   );
 }
 
+export const LOW_RES_MIN_PX = 48;
+
+const USER_PINNED_SOURCES: ReadonlySet<LogoSourceName> = new Set(["upload", "crop", "url"]);
+
+export function isUserPinnedLogoSource(source: LogoSourceName): boolean {
+  return USER_PINNED_SOURCES.has(source);
+}
+
+export function isLowResRaster(width: number, height: number, isVector: boolean): boolean {
+  return !isVector && width > 0 && height > 0 && (width < LOW_RES_MIN_PX || height < LOW_RES_MIN_PX);
+}
+
+/**
+ * Auto-skip a failed/tiny catalog fetch. Never wrap — wrapping plus render()
+ * livelocks the review page when every candidate is a 16px favicon. Never
+ * discard a user upload/crop/URL.
+ */
+export function nextIndexAfterUnusableLogo(opts: {
+  chosenIndex: number;
+  candidateCount: number;
+  source: LogoSourceName;
+  isVector: boolean;
+  width: number;
+  height: number;
+}): number | null {
+  if (opts.candidateCount < 2) return null;
+  if (isUserPinnedLogoSource(opts.source)) return null;
+  if (!isLowResRaster(opts.width, opts.height, opts.isVector)) return null;
+  if (opts.chosenIndex >= opts.candidateCount - 1) return null;
+  return opts.chosenIndex + 1;
+}
+
 export async function getImageDimensions(
   src: string,
 ): Promise<{ width: number; height: number; isVector: boolean; isLowRes: boolean }> {
