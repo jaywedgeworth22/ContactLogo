@@ -5,8 +5,9 @@ import java.net.URI
 object MatchPipeline {
 
     fun match(contact: ContactIdentity): MatchResult {
-        // Skip if person with photo already present and not explicitly a business
-        if (contact.hasCustomPhoto && contact.organization.isBlank() && isPersonName(contact.displayName)) {
+        // Same contract as ContactLogoKit / web: people are never logo targets.
+        // A catalog organization must not auto-apply a brand mark over a person.
+        if (isPersonContact(contact)) {
             return MatchResult(contact, null, Confidence.SKIP)
         }
 
@@ -132,7 +133,49 @@ object MatchPipeline {
         return blocked.contains(domain)
     }
 
-    private fun isPersonName(name: String): Boolean {
+    /** Lone first/last that is a catalog firm, matching ContactLogoKit. */
+    fun inferCompanyFromLoneName(contact: ContactIdentity): String? {
+        val given = Normalize.cleanName(contact.givenName)
+        val family = Normalize.cleanName(contact.familyName)
+        val onlyGiven = given.isNotBlank() && family.isBlank()
+        val onlyFamily = family.isNotBlank() && given.isBlank()
+        val unstructured = given.isBlank() && family.isBlank()
+        if (!onlyGiven && !onlyFamily && !unstructured) return null
+        if (contact.emailAddresses.any { email ->
+                val domain = email.substringAfter("@", "").trim().lowercase()
+                domain.isNotEmpty() && isFreemailOrSocial(domain)
+            }
+        ) {
+            return null
+        }
+        val candidate = Normalize.cleanName(
+            when {
+                onlyGiven -> given
+                onlyFamily -> family
+                else -> contact.displayName
+            }
+        )
+        if (candidate.isBlank() || looksLikePersonName(candidate)) return null
+        return if (CompanyCatalog.domainForName(candidate) != null) candidate else null
+    }
+
+    fun isPersonContact(contact: ContactIdentity): Boolean {
+        if (inferCompanyFromLoneName(contact) != null) return false
+        val hasPersonName = contact.givenName.isNotBlank() || contact.familyName.isNotBlank()
+        if (hasPersonName) return true
+        val org = contact.organization.trim()
+        return isTwoTokenPersonName(contact.displayName) &&
+            org.isNotBlank() &&
+            !contact.displayName.equals(org, ignoreCase = true)
+    }
+
+    private fun looksLikePersonName(name: String): Boolean {
+        val parts = Normalize.cleanName(name).replace(",", " ").split(Regex("""\s+""")).filter { it.isNotBlank() }
+        if (parts.size !in 2..4) return false
+        return parts.all { it.matches(Regex("""^[A-Za-z][A-Za-z'.-]{1,30}$""")) }
+    }
+
+    private fun isTwoTokenPersonName(name: String): Boolean {
         val parts = name.trim().split(Regex("""\s+"""))
         return parts.size == 2 && parts.all { it.firstOrNull()?.isUpperCase() == true }
     }
