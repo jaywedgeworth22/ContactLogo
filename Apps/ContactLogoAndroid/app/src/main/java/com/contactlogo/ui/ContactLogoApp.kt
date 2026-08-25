@@ -82,6 +82,7 @@ class ContactLogoViewModel(private val repository: ContactsRepository) : ViewMod
             _isApplying.value = true
             val approvedItems = _results.value.filter { it.approved && it.selectedLogo != null }
             for (item in approvedItems) {
+                if (MatchPipeline.isPerson(item.contact)) continue
                 val logo = item.selectedLogo ?: continue
                 repository.applyPhoto(item.contact.id, logo.url)
             }
