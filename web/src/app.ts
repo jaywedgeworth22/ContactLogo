@@ -13,6 +13,7 @@ import {
   composeFromUrl,
   embedSrc,
   isVectorSource,
+  nextCandidateIndex,
   padAndSquareImage,
   sourceLabel,
   viaLabel,
@@ -533,9 +534,9 @@ function card(item: ReviewItem): HTMLElement {
     thumb.setAttribute("title", "Click to crop and adjust logo");
     thumb.addEventListener("click", () => openCropFor(item));
     (thumb as HTMLImageElement).addEventListener("error", () => {
-      // If current candidate image fails, try next candidate
-      if (item.candidates.length > 1 && item.chosenIndex < item.candidates.length - 1) {
-        item.chosenIndex += 1;
+      const next = nextCandidateIndex(item.chosenIndex, item.candidates.length);
+      if (next !== undefined) {
+        item.chosenIndex = next;
         render();
       }
     });
@@ -543,8 +544,9 @@ function card(item: ReviewItem): HTMLElement {
       const isVector = isVectorSource(hit.src);
       const imgEl = thumb as HTMLImageElement;
       if (!isVector && imgEl.naturalWidth > 0 && (imgEl.naturalWidth < 48 || imgEl.naturalHeight < 48)) {
-        if (item.candidates.length > 1 && item.chosenIndex < item.candidates.length - 1) {
-          item.chosenIndex += 1;
+        const next = nextCandidateIndex(item.chosenIndex, item.candidates.length);
+        if (next !== undefined) {
+          item.chosenIndex = next;
           render();
         }
       }
@@ -569,9 +571,12 @@ function card(item: ReviewItem): HTMLElement {
       const isVector = isVectorSource(cand.src);
       if (!isVector && cImg.naturalWidth > 0 && (cImg.naturalWidth < 48 || cImg.naturalHeight < 48)) {
         b.style.display = "none";
-        if (item.chosenIndex === i && item.candidates.length > 1) {
-          item.chosenIndex = (i + 1) % item.candidates.length;
-          render();
+        if (item.chosenIndex === i) {
+          const next = nextCandidateIndex(i, item.candidates.length);
+          if (next !== undefined) {
+            item.chosenIndex = next;
+            render();
+          }
         }
       }
     });
