@@ -20,6 +20,7 @@ import { bucket, matchBook, type ReviewItem } from "./engine/match.ts";
 import { canPickDeviceContacts, pickDeviceContacts } from "./engine/picker.ts";
 import { getGoogleClientId, setGoogleClientId } from "./engine/settings.ts";
 import { backupFilename, contactsToVcard, downloadText, parseVcard } from "./engine/vcard.ts";
+import { reportClientError } from "./observability/datadog.ts";
 
 type FilterStatus = "all" | "ready" | "review" | "notfound" | "missingphoto";
 
@@ -83,10 +84,16 @@ function importText(name: string, text: string) {
 }
 
 async function importFile(file: File) {
-  state.notice = `Reading ${file.name}…`;
-  render();
-  const text = await file.text();
-  importText(file.name, text);
+  try {
+    state.notice = `Reading ${file.name}…`;
+    render();
+    const text = await file.text();
+    importText(file.name, text);
+  } catch (err) {
+    reportClientError(err, { operation: "import-file" });
+    state.notice = err instanceof Error ? err.message : "Could not read that file";
+    render();
+  }
 }
 
 async function importFromGoogle() {
@@ -99,6 +106,7 @@ async function importFromGoogle() {
     });
     adopt(contacts, "Google Contacts");
   } catch (err) {
+    reportClientError(err, { operation: "import-google" });
     const message = err instanceof Error ? err.message : "Google import failed";
     state.notice =
       message === "GOOGLE_CONTACTS_NOT_CONFIGURED"
@@ -116,6 +124,7 @@ async function importFromDevice() {
     const contacts = await pickDeviceContacts();
     adopt(contacts, "This phone");
   } catch (err) {
+    reportClientError(err, { operation: "import-device" });
     state.notice = err instanceof Error ? err.message : "Could not read contacts";
     render();
   }
@@ -185,12 +194,14 @@ async function syncToGoogleContacts() {
         item.contact.hadExistingPhoto = true;
         done += 1;
       } catch (err) {
+        reportClientError(err, { operation: "google-sync-photo" });
         failed += 1;
       }
     }
     state.notice = `Google Contacts sync complete: ${done} updated${failed > 0 ? `, ${failed} failed` : ""}.`;
     render();
   } catch (err) {
+    reportClientError(err, { operation: "google-sync" });
     state.notice = err instanceof Error ? err.message : "Google sync failed";
     render();
   }
@@ -224,6 +235,7 @@ async function pasteUrlFor(item: ReviewItem) {
     item.confidence = "high";
     render();
   } catch (err) {
+    reportClientError(err, { operation: "paste-logo-url" });
     state.notice = err instanceof Error ? err.message : "Could not use that URL";
     render();
   }
