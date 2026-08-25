@@ -41,10 +41,13 @@ function confidenceFor(item: Omit<ReviewItem, "selected" | "chosenIndex" | "conf
   switch (best.source) {
     case "preferred":
     case "simpleicons":
-      tier = "high";
+    case "clearbit":
+    case "google":
+      tier = item.via === "catalog" || item.via === "website" || item.via === "phone" ? "high" : "medium";
       break;
     case "favicon":
     case "upload":
+    case "crop":
     case "url":
       tier = "medium";
       break;
@@ -54,8 +57,8 @@ function confidenceFor(item: Omit<ReviewItem, "selected" | "chosenIndex" | "conf
       break;
     }
   }
-  if (item.via === "guess") tier = "medium";
-  if (item.flags.includes("homonym-risk") && item.via !== "website" && item.via !== "email") {
+  if (item.via === "guess" || item.via === "email") tier = "medium";
+  if (item.flags.includes("guessed-domain") || item.flags.includes("brand-tail") || item.flags.includes("homonym-risk")) {
     tier = "medium";
   }
   if (item.via === "guess" && best.source === "favicon") tier = "low";

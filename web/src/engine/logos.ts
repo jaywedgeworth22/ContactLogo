@@ -1,6 +1,14 @@
 import { lookupCompanyDomain } from "./catalog.ts";
 
-export type LogoSourceName = "preferred" | "simpleicons" | "favicon" | "upload" | "url";
+export type LogoSourceName =
+  | "preferred"
+  | "simpleicons"
+  | "clearbit"
+  | "google"
+  | "favicon"
+  | "upload"
+  | "crop"
+  | "url";
 
 export type LogoHit = {
   src: string;
@@ -70,6 +78,29 @@ const SIMPLE_SLUGS: Record<string, string> = {
   "usaa.com": "usaa",
   "centerpointenergy.com": "centerpointenergy",
   "x.ai": "x",
+  "x.com": "x",
+  "twitter.com": "x",
+  "github.com": "github",
+  "linkedin.com": "linkedin",
+  "youtube.com": "youtube",
+  "discord.com": "discord",
+  "slack.com": "slack",
+  "zoom.us": "zoom",
+  "notion.so": "notion",
+  "figma.com": "figma",
+  "dropbox.com": "dropbox",
+  "pinterest.com": "pinterest",
+  "reddit.com": "reddit",
+  "tiktok.com": "tiktok",
+  "whatsapp.com": "whatsapp",
+  "telegram.org": "telegram",
+  "signal.org": "signal",
+  "ebay.com": "ebay",
+  "shopify.com": "shopify",
+  "hulu.com": "hulu",
+  "disneyplus.com": "disneyplus",
+  "spacex.com": "spacex",
+  "starlink.com": "spacex",
   "squareup.com": "square",
   "walgreens.com": "walgreens",
   "cvs.com": "cvs",
@@ -82,8 +113,8 @@ const PREFERRED: Record<string, string> = {
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 443.13 354"><polygon fill="#E31937" points="16.25,316.21 221.56,0 221.56,217.38"/><polygon fill="#E31937" points="0,354 221.56,354 221.56,260.39"/><polygon fill="#98002E" points="221.56,217.38 221.56,0 426.87,316.21"/><polygon fill="#98002E" points="221.56,260.39 221.56,354 443.13,354"/></svg>',
 };
 
-export function simpleIconsSlug(domain: string): string {
-  return SIMPLE_SLUGS[domain] ?? domain.split(".")[0] ?? domain;
+export function simpleIconsSlug(domain: string): string | undefined {
+  return SIMPLE_SLUGS[domain];
 }
 
 export function candidateUrls(domain: string): LogoHit[] {
@@ -96,13 +127,24 @@ export function candidateUrls(domain: string): LogoHit[] {
       kind: "icon",
     });
   }
-  if (!SKIP_SIMPLE.has(domain)) {
+  const slug = simpleIconsSlug(domain);
+  if (slug && !SKIP_SIMPLE.has(domain)) {
     out.push({
-      src: `https://cdn.simpleicons.org/${encodeURIComponent(simpleIconsSlug(domain))}`,
+      src: `https://cdn.simpleicons.org/${encodeURIComponent(slug)}`,
       source: "simpleicons",
       kind: "icon",
     });
   }
+  out.push({
+    src: `https://logo.clearbit.com/${encodeURIComponent(domain)}?size=512`,
+    source: "clearbit",
+    kind: "icon",
+  });
+  out.push({
+    src: `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${encodeURIComponent(domain)}&size=256`,
+    source: "google",
+    kind: "icon",
+  });
   out.push({
     src: `https://icons.duckduckgo.com/ip3/${domain}.ico`,
     source: "favicon",
@@ -122,10 +164,16 @@ export function sourceLabel(source: LogoSourceName): string {
       return "Iconic mark";
     case "simpleicons":
       return "Simple Icons";
+    case "clearbit":
+      return "Clearbit (512px)";
+    case "google":
+      return "Google (256px)";
     case "favicon":
       return "Favicon";
     case "upload":
       return "Your file";
+    case "crop":
+      return "Custom crop";
     case "url":
       return "Pasted URL";
     default:
@@ -197,36 +245,84 @@ export async function embedSrc(src: string): Promise<string> {
   }
 }
 
+export type PadAndSquareOptions = {
+  size?: number;
+  paddingFraction?: number;
+  addBadgeForDarkAlpha?: boolean;
+  zoom?: number;
+  panX?: number;
+  panY?: number;
+  backgroundColor?: string;
+  circleClip?: boolean;
+};
+
+export function isVectorSource(src: string): boolean {
+  if (!src) return false;
+  return (
+    src.startsWith("data:image/svg") ||
+    src.includes(".svg") ||
+    src.includes("cdn.simpleicons.org")
+  );
+}
+
+export async function getImageDimensions(
+  src: string,
+): Promise<{ width: number; height: number; isVector: boolean; isLowRes: boolean }> {
+  const isVector = isVectorSource(src);
+  if (typeof Image === "undefined") {
+    return { width: isVector ? 512 : 128, height: isVector ? 512 : 128, isVector, isLowRes: false };
+  }
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const w = img.naturalWidth || img.width;
+      const h = img.naturalHeight || img.height;
+      const isLowRes = !isVector && (w < 48 || h < 48);
+      resolve({ width: w, height: h, isVector, isLowRes });
+    };
+    img.onerror = () => {
+      resolve({ width: 0, height: 0, isVector, isLowRes: false });
+    };
+    img.src = src;
+  });
+}
+
 /**
  * Render any image / svg onto a square canvas (512x512) centered within
- * a circular safe-ring with customizable padding and optional badge backing.
+ * a circular safe-ring with customizable zoom, pan, padding and optional badge backing.
  */
 export async function padAndSquareImage(
   src: string,
-  options: { size?: number; paddingFraction?: number; addBadgeForDarkAlpha?: boolean } = {},
+  options: PadAndSquareOptions = {},
 ): Promise<string> {
   if (typeof document === "undefined") return src; // Node test environment fallback
   const size = options.size ?? 512;
   const padding = options.paddingFraction ?? 0.15; // 15% safe margin for circular contact icons
+  const zoom = Math.max(0.2, Math.min(5.0, options.zoom ?? 1.0));
+  const panX = options.panX ?? 0;
+  const panY = options.panY ?? 0;
+
   const canvas = document.createElement("canvas");
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext("2d");
   if (!ctx) return src;
 
+  // High-quality bicubic resampling
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+
   return new Promise((resolve) => {
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.onload = () => {
-      const availWidth = size * (1 - padding * 2);
-      const availHeight = size * (1 - padding * 2);
-      const scale = Math.min(availWidth / img.width, availHeight / img.height, 1.0);
-      const drawWidth = img.width * scale;
-      const drawHeight = img.height * scale;
-      const drawX = (size - drawWidth) / 2;
-      const drawY = (size - drawHeight) / 2;
+      if (options.backgroundColor && options.backgroundColor !== "transparent") {
+        ctx.fillStyle = options.backgroundColor;
+        ctx.fillRect(0, 0, size, size);
+      }
 
-      // Check if we should add a circular / rounded badge
+      // Check if we should add a circular white badge backing
       if (options.addBadgeForDarkAlpha) {
         ctx.fillStyle = "#ffffff";
         ctx.beginPath();
@@ -234,7 +330,28 @@ export async function padAndSquareImage(
         ctx.fill();
       }
 
+      if (options.circleClip) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+        ctx.clip();
+      }
+
+      const availWidth = size * (1 - padding * 2);
+      const availHeight = size * (1 - padding * 2);
+      const baseScale = Math.min(availWidth / img.width, availHeight / img.height, 1.0);
+      const scale = baseScale * zoom;
+      const drawWidth = img.width * scale;
+      const drawHeight = img.height * scale;
+      const drawX = (size - drawWidth) / 2 + panX;
+      const drawY = (size - drawHeight) / 2 + panY;
+
       ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
+
+      if (options.circleClip) {
+        ctx.restore();
+      }
+
       try {
         resolve(canvas.toDataURL("image/png"));
       } catch {

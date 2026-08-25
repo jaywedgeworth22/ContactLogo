@@ -241,6 +241,251 @@ async function pasteUrlFor(item: ReviewItem) {
   }
 }
 
+type CropModalState = {
+  item: ReviewItem | null;
+  imgSrc: string;
+  zoom: number;
+  panX: number;
+  panY: number;
+  addBadge: boolean;
+  bgColor: string;
+};
+
+const cropState: CropModalState = {
+  item: null,
+  imgSrc: "",
+  zoom: 1.0,
+  panX: 0,
+  panY: 0,
+  addBadge: false,
+  bgColor: "transparent",
+};
+
+function openCropFor(item: ReviewItem) {
+  const hit = item.candidates[item.chosenIndex];
+  if (!hit) return;
+  cropState.item = item;
+  cropState.imgSrc = hit.src;
+  cropState.zoom = 1.0;
+  cropState.panX = 0;
+  cropState.panY = 0;
+  cropState.addBadge = false;
+  cropState.bgColor = "transparent";
+  render();
+}
+
+function closeCrop() {
+  cropState.item = null;
+  render();
+}
+
+async function applyCrop() {
+  if (!cropState.item || !cropState.imgSrc) return;
+  const item = cropState.item;
+  try {
+    const croppedSrc = await padAndSquareImage(cropState.imgSrc, {
+      zoom: cropState.zoom,
+      panX: cropState.panX,
+      panY: cropState.panY,
+      addBadgeForDarkAlpha: cropState.addBadge,
+      backgroundColor: cropState.bgColor,
+    });
+    item.candidates = [{ src: croppedSrc, source: "crop", kind: "icon" }, ...item.candidates];
+    item.chosenIndex = 0;
+    item.selected = true;
+    item.confidence = "high";
+    cropState.item = null;
+    state.notice = `Applied custom crop for ${item.contact.displayName}.`;
+    render();
+  } catch (err) {
+    reportClientError(err, { operation: "apply-crop" });
+    cropState.item = null;
+    render();
+  }
+}
+
+function cropModal(): HTMLElement {
+  const item = cropState.item;
+  if (!item) return el("div", { class: "hidden" });
+
+  const backdrop = el("div", { class: "modal-backdrop" });
+  backdrop.addEventListener("click", (e) => {
+    if (e.target === backdrop) closeCrop();
+  });
+
+  const modal = el("div", { class: "crop-modal" });
+
+  const header = el(
+    "div",
+    { class: "crop-header" },
+    el("h3", {}, `Crop & Adjust — ${item.contact.displayName}`),
+    el("p", { class: "meta" }, "Drag the image to center it and adjust the zoom slider for circular contact framing."),
+  );
+
+  const canvas = el("canvas", { class: "crop-canvas", width: "280", height: "280" }) as HTMLCanvasElement;
+  const ctx = canvas.getContext("2d");
+
+  const img = new Image();
+  img.crossOrigin = "anonymous";
+  img.src = cropState.imgSrc;
+
+  function drawPreview() {
+    if (!ctx) return;
+    const w = canvas.width;
+    const h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    if (cropState.bgColor && cropState.bgColor !== "transparent") {
+      ctx.fillStyle = cropState.bgColor;
+      ctx.fillRect(0, 0, w, h);
+    }
+
+    if (cropState.addBadge) {
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.arc(w / 2, h / 2, w / 2 - 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    if (img.complete && img.naturalWidth > 0) {
+      ctx.save();
+      const availWidth = w * 0.7;
+      const availHeight = h * 0.7;
+      const baseScale = Math.min(availWidth / img.naturalWidth, availHeight / img.naturalHeight, 1.0);
+      const scale = baseScale * cropState.zoom;
+      const dw = img.naturalWidth * scale;
+      const dh = img.naturalHeight * scale;
+      const dx = (w - dw) / 2 + cropState.panX * (w / 512);
+      const dy = (h - dh) / 2 + cropState.panY * (h / 512);
+
+      ctx.drawImage(img, dx, dy, dw, dh);
+      ctx.restore();
+    }
+
+    // Circular safe-ring mask overlay
+    ctx.save();
+    ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+    ctx.beginPath();
+    ctx.rect(0, 0, w, h);
+    ctx.arc(w / 2, h / 2, w / 2 - 6, 0, Math.PI * 2, true);
+    ctx.fill();
+
+    // Circular guideline border
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.85)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(w / 2, h / 2, w / 2 - 6, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  img.onload = () => drawPreview();
+
+  let isDragging = false;
+  let startX = 0;
+  let startY = 0;
+  let initialPanX = 0;
+  let initialPanY = 0;
+
+  canvas.addEventListener("mousedown", (e) => {
+    isDragging = true;
+    startX = e.clientX;
+    startY = e.clientY;
+    initialPanX = cropState.panX;
+    initialPanY = cropState.panY;
+  });
+
+  window.addEventListener("mousemove", (e) => {
+    if (!isDragging) return;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    cropState.panX = initialPanX + dx * (512 / 280);
+    cropState.panY = initialPanY + dy * (512 / 280);
+    drawPreview();
+  });
+
+  window.addEventListener("mouseup", () => {
+    isDragging = false;
+  });
+
+  canvas.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const delta = e.deltaY < 0 ? 0.05 : -0.05;
+    cropState.zoom = Math.max(0.4, Math.min(4.0, cropState.zoom + delta));
+    zoomInput.value = String(cropState.zoom);
+    zoomLabel.textContent = `${Math.round(cropState.zoom * 100)}%`;
+    drawPreview();
+  }, { passive: false });
+
+  canvas.addEventListener("touchstart", (e) => {
+    if (e.touches.length === 1) {
+      isDragging = true;
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+      initialPanX = cropState.panX;
+      initialPanY = cropState.panY;
+    }
+  });
+
+  canvas.addEventListener("touchmove", (e) => {
+    if (!isDragging || e.touches.length !== 1) return;
+    e.preventDefault();
+    const dx = e.touches[0].clientX - startX;
+    const dy = e.touches[0].clientY - startY;
+    cropState.panX = initialPanX + dx * (512 / 280);
+    cropState.panY = initialPanY + dy * (512 / 280);
+    drawPreview();
+  }, { passive: false });
+
+  canvas.addEventListener("touchend", () => { isDragging = false; });
+
+  const zoomLabel = el("span", { class: "zoom-val" }, `${Math.round(cropState.zoom * 100)}%`);
+  const zoomInput = el("input", {
+    type: "range",
+    min: "0.4",
+    max: "3.0",
+    step: "0.05",
+    value: String(cropState.zoom),
+    class: "zoom-slider",
+  }) as HTMLInputElement;
+  zoomInput.addEventListener("input", () => {
+    cropState.zoom = parseFloat(zoomInput.value);
+    zoomLabel.textContent = `${Math.round(cropState.zoom * 100)}%`;
+    drawPreview();
+  });
+  const zoomRow = el("div", { class: "crop-row" }, el("label", {}, "Zoom:"), zoomInput, zoomLabel);
+
+  const badgeCheck = el("input", { type: "checkbox" }) as HTMLInputElement;
+  badgeCheck.checked = cropState.addBadge;
+  badgeCheck.addEventListener("change", () => {
+    cropState.addBadge = badgeCheck.checked;
+    drawPreview();
+  });
+  const badgeToggle = el("label", { class: "crop-check-row" }, badgeCheck, el("span", {}, "White circular backing (for dark logos)"));
+
+  const resetBtn = el("button", { class: "btn secondary small", type: "button" }, "Center / Reset");
+  resetBtn.addEventListener("click", () => {
+    cropState.zoom = 1.0;
+    cropState.panX = 0;
+    cropState.panY = 0;
+    zoomInput.value = "1.0";
+    zoomLabel.textContent = "100%";
+    drawPreview();
+  });
+
+  const controls = el("div", { class: "crop-controls" }, zoomRow, badgeToggle, resetBtn);
+
+  const applyBtn = el("button", { class: "btn", type: "button" }, "Apply Crop");
+  applyBtn.addEventListener("click", () => void applyCrop());
+  const cancelBtn = el("button", { class: "btn ghost", type: "button" }, "Cancel");
+  cancelBtn.addEventListener("click", () => closeCrop());
+  const actions = el("div", { class: "crop-actions" }, cancelBtn, applyBtn);
+
+  modal.append(header, canvas, controls, actions);
+  backdrop.append(modal);
+  return backdrop;
+}
+
 function tryAnother(item: ReviewItem) {
   if (item.candidates.length < 2) return;
   item.chosenIndex = (item.chosenIndex + 1) % item.candidates.length;
@@ -250,10 +495,23 @@ function tryAnother(item: ReviewItem) {
 
 function card(item: ReviewItem): HTMLElement {
   const hit = item.candidates[item.chosenIndex];
-  const thumbClass = `thumb${state.showCircleMask ? " circle-mask" : ""}`;
+  const thumbClass = `thumb${state.showCircleMask ? " circle-mask" : ""}${hit ? " clickable" : ""}`;
   const thumb = hit
     ? el("img", { class: thumbClass, src: hit.src, alt: item.contact.displayName })
     : el("div", { class: "noimg" }, "?");
+
+  if (hit) {
+    thumb.setAttribute("title", "Click to crop and adjust logo");
+    thumb.addEventListener("click", () => openCropFor(item));
+    (thumb as HTMLImageElement).addEventListener("error", () => {
+      // If current candidate image fails, try next candidate
+      if (item.candidates.length > 1 && item.chosenIndex < item.candidates.length - 1) {
+        item.chosenIndex += 1;
+        render();
+      }
+    });
+  }
+
   const check = el("input", { type: "checkbox" }) as HTMLInputElement;
   check.checked = item.selected;
   check.disabled = item.candidates.length === 0;
@@ -263,8 +521,12 @@ function card(item: ReviewItem): HTMLElement {
 
   const alts = el("div", { class: "alts" });
   item.candidates.forEach((cand, i) => {
-    const b = el("button", { class: i === item.chosenIndex ? "on" : "", type: "button" });
-    b.append(el("img", { src: cand.src, alt: cand.source }));
+    const b = el("button", { class: i === item.chosenIndex ? "on" : "", type: "button", title: sourceLabel(cand.source) });
+    const cImg = el("img", { src: cand.src, alt: cand.source }) as HTMLImageElement;
+    cImg.addEventListener("error", () => {
+      b.style.display = "none";
+    });
+    b.append(cImg);
     b.addEventListener("click", () => {
       item.chosenIndex = i;
       item.selected = true;
@@ -281,6 +543,11 @@ function card(item: ReviewItem): HTMLElement {
   });
   const uploadBtn = el("button", { class: "btn secondary", type: "button" }, "Upload");
   uploadBtn.addEventListener("click", () => upload.click());
+
+  const cropBtn = el("button", { class: "btn secondary", type: "button" }, "Crop");
+  cropBtn.disabled = !hit;
+  cropBtn.addEventListener("click", () => openCropFor(item));
+
   const pasteBtn = el("button", { class: "btn secondary", type: "button" }, "Paste URL");
   pasteBtn.addEventListener("click", () => void pasteUrlFor(item));
   const retry = el("button", { class: "btn secondary", type: "button" }, "Try another");
@@ -294,14 +561,15 @@ function card(item: ReviewItem): HTMLElement {
 
   const via = viaLabel(item.via);
   const source = hit ? sourceLabel(hit.source) : "none";
-  return el(
+
+  const cardEl = el(
     "article",
     { class: `card ${item.confidence}` },
     check,
     thumb,
     el(
       "div",
-      {},
+      { class: "card-content" },
       el("div", { class: "name" }, item.contact.displayName),
       el(
         "div",
@@ -309,9 +577,34 @@ function card(item: ReviewItem): HTMLElement {
         `${item.confidence} · ${source}${via ? ` · ${via}` : ""}${item.flags.length ? ` · ${item.flags.join(", ")}` : ""}`,
       ),
       alts,
-      el("div", { class: "actions" }, retry, uploadBtn, pasteBtn, skip, upload),
+      el("div", { class: "actions" }, retry, cropBtn, uploadBtn, pasteBtn, skip, upload),
     ),
   );
+
+  // Drag-and-drop directly onto this contact card
+  cardEl.addEventListener("dragenter", (e) => {
+    e.preventDefault();
+    cardEl.classList.add("drag-over");
+  });
+  cardEl.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    cardEl.classList.add("drag-over");
+  });
+  cardEl.addEventListener("dragleave", (e) => {
+    if (!cardEl.contains(e.relatedTarget as Node)) {
+      cardEl.classList.remove("drag-over");
+    }
+  });
+  cardEl.addEventListener("drop", (e) => {
+    e.preventDefault();
+    cardEl.classList.remove("drag-over");
+    const file = e.dataTransfer?.files?.[0];
+    if (file && (file.type.startsWith("image/") || file.type === "image/svg+xml")) {
+      void uploadFor(item, file);
+    }
+  });
+
+  return cardEl;
 }
 
 function section(title: string, items: ReviewItem[]): HTMLElement {
@@ -495,5 +788,8 @@ export function render() {
     ),
   );
   root.append(app);
+  if (cropState.item) {
+    root.append(cropModal());
+  }
 }
 

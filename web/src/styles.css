@@ -143,3 +143,131 @@ button { cursor: pointer; }
   margin-top: 12px;
 }
 
+/* Drag-and-drop feedback on contact cards */
+.card.drag-over {
+  border-color: #2563eb;
+  background: #f0f7ff;
+  outline: 2px dashed #2563eb;
+  transform: scale(1.01);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.card-content {
+  min-width: 0;
+}
+
+.thumb, .noimg {
+  flex-shrink: 0;
+}
+
+.thumb.clickable {
+  cursor: pointer;
+  transition: transform 0.12s ease;
+}
+.thumb.clickable:hover {
+  transform: scale(1.05);
+}
+
+/* Crop & Adjust Modal */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  display: grid;
+  place-items: center;
+  z-index: 1000;
+  padding: 16px;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.crop-modal {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 24px;
+  max-width: 380px;
+  width: 100%;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.crop-header h3 {
+  margin: 0 0 4px;
+  font-size: 1.25rem;
+  text-align: center;
+}
+.crop-header p {
+  margin: 0;
+  font-size: 0.85rem;
+  text-align: center;
+  color: var(--muted);
+}
+
+.crop-canvas {
+  width: 280px;
+  height: 280px;
+  border-radius: 14px;
+  background: #f7f3ec;
+  border: 1px solid var(--line);
+  cursor: grab;
+  touch-action: none;
+}
+.crop-canvas:active {
+  cursor: grabbing;
+}
+
+.crop-controls {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.crop-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.9rem;
+}
+.zoom-slider {
+  flex: 1;
+}
+.zoom-val {
+  min-width: 42px;
+  text-align: right;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.crop-check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  color: var(--ink);
+  cursor: pointer;
+  user-select: none;
+}
+
+.crop-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.btn.small {
+  padding: 4px 10px;
+  font-size: 0.8rem;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
