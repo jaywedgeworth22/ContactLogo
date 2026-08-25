@@ -22,4 +22,6 @@ Optional Google Contacts: set `VITE_GOOGLE_CONTACTS_CLIENT_ID` or paste a
 client id in Settings.  Device picker appears on browsers that implement
 `navigator.contacts`.
 
-Production build: `npm run build`.
+Production build: `npm run build`.  Coolify host: `npm start` (serves `dist/`
+with `dd-trace`).  Production Datadog env vars are documented in
+[docs/DATADOG.md](../docs/DATADOG.md).  Values stay in Coolify / Infisical.
