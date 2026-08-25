@@ -1,8 +1,11 @@
-import { lookupCompanyDomain } from "./catalog.ts";
+import { lookupCompanyDomain, lookupCompanyTicker } from "./catalog.ts";
 
 export type LogoSourceName =
   | "preferred"
   | "simpleicons"
+  | "ticker"
+  | "brandfetch"
+  | "logodev"
   | "clearbit"
   | "google"
   | "favicon"
@@ -135,6 +138,24 @@ export function candidateUrls(domain: string): LogoHit[] {
       kind: "icon",
     });
   }
+  const ticker = lookupCompanyTicker(domain);
+  if (ticker) {
+    out.push({
+      src: `https://raw.githubusercontent.com/davidepalazzo/ticker-logos/main/ticker_icons/${encodeURIComponent(ticker)}.png`,
+      source: "ticker",
+      kind: "icon",
+    });
+  }
+  out.push({
+    src: `https://cdn.brandfetch.io/${encodeURIComponent(domain)}/w/512/h/512`,
+    source: "brandfetch",
+    kind: "icon",
+  });
+  out.push({
+    src: `https://img.logo.dev/${encodeURIComponent(domain)}?size=512`,
+    source: "logodev",
+    kind: "icon",
+  });
   out.push({
     src: `https://logo.clearbit.com/${encodeURIComponent(domain)}?size=512`,
     source: "clearbit",
@@ -164,6 +185,12 @@ export function sourceLabel(source: LogoSourceName): string {
       return "Iconic mark";
     case "simpleicons":
       return "Simple Icons";
+    case "ticker":
+      return "Stock Ticker Pack (HD)";
+    case "brandfetch":
+      return "Brandfetch (HD)";
+    case "logodev":
+      return "Logo.dev (HD)";
     case "clearbit":
       return "Clearbit (512px)";
     case "google":

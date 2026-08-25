@@ -163,6 +163,9 @@ test("source labels cover every logo source", async () => {
   const { sourceLabel } = await import("./logos.ts");
   assert.equal(sourceLabel("preferred"), "Iconic mark");
   assert.equal(sourceLabel("simpleicons"), "Simple Icons");
+  assert.equal(sourceLabel("ticker"), "Stock Ticker Pack (HD)");
+  assert.equal(sourceLabel("brandfetch"), "Brandfetch (HD)");
+  assert.equal(sourceLabel("logodev"), "Logo.dev (HD)");
   assert.equal(sourceLabel("clearbit"), "Clearbit (512px)");
   assert.equal(sourceLabel("google"), "Google (256px)");
   assert.equal(sourceLabel("favicon"), "Favicon");
@@ -171,15 +174,29 @@ test("source labels cover every logo source", async () => {
   assert.equal(sourceLabel("url"), "Pasted URL");
 });
 
+test("ticker lookup works for public companies", async () => {
+  const { lookupCompanyTicker } = await import("./catalog.ts");
+  assert.equal(lookupCompanyTicker("apple.com"), "AAPL");
+  assert.equal(lookupCompanyTicker("tesla.com"), "TSLA");
+  assert.equal(lookupCompanyTicker("schwab.com"), "SCHW");
+  assert.equal(lookupCompanyTicker("random-site.com"), undefined);
+});
+
 test("candidateUrls provides high-res sources and avoids unknown simpleicons", async () => {
   const { candidateUrls } = await import("./logos.ts");
   const known = candidateUrls("apple.com");
   assert.equal(known.some((c) => c.source === "simpleicons"), true);
+  assert.equal(known.some((c) => c.source === "ticker"), true);
+  assert.equal(known.some((c) => c.source === "brandfetch"), true);
+  assert.equal(known.some((c) => c.source === "logodev"), true);
   assert.equal(known.some((c) => c.source === "clearbit"), true);
   assert.equal(known.some((c) => c.source === "google"), true);
 
   const unknown = candidateUrls("random-local-bakery.com");
   assert.equal(unknown.some((c) => c.source === "simpleicons"), false);
+  assert.equal(unknown.some((c) => c.source === "ticker"), false);
+  assert.equal(unknown.some((c) => c.source === "brandfetch"), true);
+  assert.equal(unknown.some((c) => c.source === "logodev"), true);
   assert.equal(unknown.some((c) => c.source === "clearbit"), true);
   assert.equal(unknown.some((c) => c.source === "google"), true);
 });
