@@ -47,11 +47,14 @@ class ContactsRepository(private val context: Context) {
                 val emails = loadEmails(cr, id)
                 val org = loadOrganization(cr, id)
                 val urls = loadUrls(cr, id)
+                val structured = loadStructuredName(cr, id)
 
                 contacts.add(
                     ContactIdentity(
                         id = id,
                         displayName = name,
+                        givenName = structured.first,
+                        familyName = structured.second,
                         organization = org,
                         phoneNumbers = phones,
                         emailAddresses = emails,
@@ -63,6 +66,29 @@ class ContactsRepository(private val context: Context) {
             }
         }
         contacts
+    }
+
+    private fun loadStructuredName(cr: ContentResolver, contactId: String): Pair<String, String> {
+        val cursor = cr.query(
+            ContactsContract.Data.CONTENT_URI,
+            arrayOf(
+                ContactsContract.CommonDataKinds.StructuredName.GIVEN_NAME,
+                ContactsContract.CommonDataKinds.StructuredName.FAMILY_NAME
+            ),
+            ContactsContract.Data.CONTACT_ID + " = ? AND " + ContactsContract.Data.MIMETYPE + " = ?",
+            arrayOf(contactId, ContactsContract.CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE),
+            null
+        )
+        cursor?.use {
+            val givenIdx = it.getColumnIndex(ContactsContract.CommonDataKinds.StructuredName.GIVEN_NAME)
+            val familyIdx = it.getColumnIndex(ContactsContract.CommonDataKinds.StructuredName.FAMILY_NAME)
+            if (it.moveToFirst()) {
+                val given = if (givenIdx >= 0) it.getString(givenIdx).orEmpty().trim() else ""
+                val family = if (familyIdx >= 0) it.getString(familyIdx).orEmpty().trim() else ""
+                return given to family
+            }
+        }
+        return "" to ""
     }
 
     private fun loadPhones(cr: ContentResolver, contactId: String): List<String> {
