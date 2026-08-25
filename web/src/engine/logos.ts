@@ -174,6 +174,16 @@ export function candidateUrls(domain: string): LogoHit[] {
   return out;
 }
 
+/**
+ * Advance past a broken or tiny raster.  Never wrap: `(i+1)%n` plus `render()`
+ * livelocks review when every remaining source is a 16px favicon.
+ */
+export function nextCandidateIndex(current: number, count: number): number | undefined {
+  if (count <= 1) return undefined;
+  const next = current + 1;
+  return next < count ? next : undefined;
+}
+
 export function candidatesForName(name: string): LogoHit[] {
   const domain = lookupCompanyDomain(name);
   return domain ? candidateUrls(domain) : [];

@@ -182,6 +182,17 @@ test("ticker lookup works for public companies", async () => {
   assert.equal(lookupCompanyTicker("random-site.com"), undefined);
 });
 
+test("nextCandidateIndex never wraps past the last source", async () => {
+  const { nextCandidateIndex } = await import("./logos.ts");
+  assert.equal(nextCandidateIndex(0, 5), 1);
+  assert.equal(nextCandidateIndex(3, 5), 4);
+  assert.equal(nextCandidateIndex(4, 5), undefined);
+  assert.equal(nextCandidateIndex(0, 1), undefined);
+  assert.equal(nextCandidateIndex(0, 0), undefined);
+  // The #21 alt-thumb used `(i + 1) % n`, which returns 0 here and re-renders forever.
+  assert.notEqual((4 + 1) % 5, nextCandidateIndex(4, 5) ?? -1);
+});
+
 test("candidateUrls provides high-res sources and avoids unknown simpleicons", async () => {
   const { candidateUrls } = await import("./logos.ts");
   const known = candidateUrls("apple.com");
