@@ -5,8 +5,9 @@ import java.net.URI
 object MatchPipeline {
 
     fun match(contact: ContactIdentity): MatchResult {
-        // Skip if person with photo already present and not explicitly a business
-        if (contact.hasCustomPhoto && contact.organization.isBlank() && isPersonName(contact.displayName)) {
+        // People (including employees with an employer field) are never logo
+        // targets.  Web/iOS classify given+family as person and skip.
+        if (isPersonContact(contact)) {
             return MatchResult(contact, null, Confidence.SKIP)
         }
 
@@ -16,12 +17,17 @@ object MatchPipeline {
         }
 
         val candidates = generateCandidates(domain, contact.organization.ifBlank { contact.displayName })
-        val confidence = when {
+        var confidence = when {
             CompanyCatalog.domainForName(contact.organization) != null ||
             CompanyCatalog.domainForName(contact.displayName) != null -> Confidence.HIGH
             contact.phoneNumbers.any { PhoneDirectory.domainForPhone(it) != null } -> Confidence.HIGH
             candidates.isNotEmpty() -> Confidence.MEDIUM
             else -> Confidence.LOW
+        }
+        // Existing photos stay in review — never pre-checked.  Apply deletes
+        // the current photo first and Android has no undo.
+        if (contact.hasCustomPhoto && confidence == Confidence.HIGH) {
+            confidence = Confidence.MEDIUM
         }
 
         return MatchResult(
@@ -32,6 +38,19 @@ object MatchPipeline {
             selectedIndex = 0,
             approved = confidence == Confidence.HIGH
         )
+    }
+
+    /** Given+family, or a two-word person name whose org is a different employer. */
+    internal fun isPersonContact(contact: ContactIdentity): Boolean {
+        val given = contact.givenName.trim()
+        val family = contact.familyName.trim()
+        if (given.isNotEmpty() && family.isNotEmpty()) return true
+        if (!isPersonName(contact.displayName)) return false
+        val org = contact.organization.trim()
+        if (org.isNotEmpty() && !org.equals(contact.displayName, ignoreCase = true)) {
+            return true
+        }
+        return contact.hasCustomPhoto && org.isEmpty()
     }
 
     private fun resolveDomain(contact: ContactIdentity): String? {
