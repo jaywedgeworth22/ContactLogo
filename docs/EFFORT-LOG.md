@@ -17,8 +17,9 @@ Protocol: /Users/jay/apps/EFFORT-LOG-PROTOCOL.md (canonical). Live board: this f
 
 - **2026-08-22 — AG — COMPLETED — Xcode project (iOS & macOS), ContactLogo.com domain alignment, Android app build.**  Xcode project generation with iOS 17+ min deployment, document format 26 compatibility, bundle IDs `com.contactlogo` and `com.contactlogo.macos`, display name `ContactLogo`, category `utilities`, Dev Team `CC8UTF7ATG`, verified on iOS simulator with screenshot, domain aligned everywhere to `ContactLogo.com` / `https://contactlogo.com` (GitHub metadata, package.json, web, docs), and full native Android application in `Apps/ContactLogoAndroid` built and verified (`app-debug.apk`).  PR merged.
 
+- **2026-08-25 — AG — COMPLETED — High-res logo sources (Google 256px, Clearbit 512px), quality baseline filter, 404 error prevention, review-first safety refinement, direct card drag-drop upload, and interactive crop/zoom studio modal.**  Upgraded web candidate sources (Clearbit 512px, Google 256px, Preferred SVGs); prevented SimpleIcons 404 question mark SVGs via strict slug validation; kept email and guessed domains in review; added card-level image drag & drop; and added in-browser interactive circle-mask crop/zoom/pan modal.  PR #19 merged to `main`.
+
 ## In Progress
-- **2026-08-25 — AG — IN PROGRESS — High-res logo sources (Google 256px, Clearbit 512px), quality baseline filter, direct card drag-drop upload, and interactive crop/zoom studio modal.**  Upgraded candidate sources on web with resolution quality ranking; card-level image drag & drop; and in-browser interactive circle-mask crop/zoom/pan modal.  Branch `ag/high-res-logos-drag-drop-crop`.
 - **2026-08-22 — CURSOR — IN PROGRESS — Domain + CI leftovers (uncommitted).**  Official host `contactlogo.com`.  Added `.github/workflows/ci.yml` (web Node job + macOS `swift test`) and `AGENTS.md`.  Did not run `onboard-new-app.sh` (must be from a fleet worktree, not `~/Code`).  Cloudflare jay account has no `contactlogo.com` zone; no DNS invented.  Personal-Site project list now points at ContactLogo + contactlogo.com.
 
 ## Planned / Reserved
