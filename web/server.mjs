@@ -1,6 +1,7 @@
 /**
- * Coolify static host + APM.  Reuses fleet DD_* env vars.  Production
- * fails closed without DD_API_KEY.  Never put that key in the Vite bundle.
+ * Coolify static host + APM.  Reuses fleet DD_* env vars.  Missing
+ * DD_API_KEY leaves APM dark and still serves dist/.  Never put that
+ * key in the Vite bundle.
  */
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
@@ -15,7 +16,14 @@ const requireDatadog = env === "production" || process.env.DD_REQUIRE === "1";
 const apiKey = (process.env.DD_API_KEY || "").trim();
 
 if (requireDatadog && !apiKey) {
-  throw new Error("DD_API_KEY missing.  Refusing to start.");
+  process.stdout.write(
+    `${JSON.stringify({
+      status: "warn",
+      service: process.env.DD_SERVICE || "contactlogo-web",
+      env: env || "development",
+      message: "DD_API_KEY missing.  APM stays dark.",
+    })}\n`,
+  );
 }
 
 if (apiKey || process.env.DD_AGENT_HOST) {

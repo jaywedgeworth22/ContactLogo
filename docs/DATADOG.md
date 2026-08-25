@@ -23,9 +23,9 @@ Set these in Coolify / Infisical.  Never commit values.
 | `DD_CLIENT_TOKEN` | Web build | Existing RUM/logs client token (public) |
 | `DD_SITE` | Web + server | Default `us5.datadoghq.com` |
 | `DD_SERVICE` | Web + server | Default `contactlogo-web` |
-| `DD_ENV` | Web + server | `production` fail-closes without keys |
+| `DD_ENV` | Web + server | `production` warns and stays dark without keys |
 | `DD_VERSION` | Web + server | Optional release tag |
-| `DD_REQUIRE` | Web + server | `1` forces fail-closed on any host |
+| `DD_REQUIRE` | Web + server | `1` forces the stay-dark warning on any host |
 | `DD_API_KEY` | Server only | Existing account API key.  Never bundled into Vite. |
 | `DD_AGENT_HOST` | Server | Default `127.0.0.1` (host agent) |
 | `DD_TRACE_AGENT_PORT` | Server | Default `8126` |
@@ -37,14 +37,15 @@ RUM ids are baked in at `vite build`.  Coolify must pass `DD_APPLICATION_ID`
 and `DD_CLIENT_TOKEN` as build-time env (see `web/Dockerfile` `ARG`s), not
 only as runtime secrets.
 
-## Fail closed
+## Stay dark
 
-- `vite build` with `DD_ENV=production` (or `DD_REQUIRE=1`) throws if
-  `DD_APPLICATION_ID` or `DD_CLIENT_TOKEN` is missing.
-- Browser boot on `contactlogo.com` / `www.contactlogo.com` throws the same
-  way and paints the error in `#app` (errors are not swallowed).
-- `node server.mjs` with `DD_ENV=production` or `NODE_ENV=production` throws
-  if `DD_API_KEY` is missing.
+- `vite build` with `DD_ENV=production` (or `DD_REQUIRE=1`) warns if
+  `DD_APPLICATION_ID` or `DD_CLIENT_TOKEN` is missing and still emits
+  `dist/`.
+- Browser boot on `contactlogo.com` / `www.contactlogo.com` leaves RUM
+  dark and still renders the app.
+- `node server.mjs` with `DD_ENV=production` or `NODE_ENV=production`
+  leaves APM dark if `DD_API_KEY` is missing and still serves `dist/`.
 - Local `npm run dev`, CI `npm test`, and CI `npm run build` stay open so
   agents can work without production secrets.
 

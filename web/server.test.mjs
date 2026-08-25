@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const serverPath = fileURLToPath(new URL("./server.mjs", import.meta.url));
 
-function runServer(env) {
+function startServer(env) {
   return new Promise((resolvePromise, reject) => {
     const child = spawn(process.execPath, [serverPath], {
       env: { ...process.env, ...env },
@@ -15,33 +15,55 @@ function runServer(env) {
     let stdout = "";
     const timer = setTimeout(() => {
       child.kill("SIGTERM");
-      reject(new Error(`server did not exit: ${stderr || stdout}`));
+      reject(new Error(`server did not start: ${stderr || stdout}`));
     }, 8000);
+    const onData = (chunk) => {
+      stdout += String(chunk);
+      if (/listening on/.test(stdout)) {
+        clearTimeout(timer);
+        child.stdout.off("data", onData);
+        resolvePromise({ child, stderr, stdout });
+      }
+    };
     child.stderr.on("data", (chunk) => {
       stderr += String(chunk);
     });
-    child.stdout.on("data", (chunk) => {
-      stdout += String(chunk);
-    });
-    child.on("exit", (code) => {
-      clearTimeout(timer);
-      resolvePromise({ code, stderr, stdout });
-    });
+    child.stdout.on("data", onData);
     child.on("error", (error) => {
       clearTimeout(timer);
       reject(error);
     });
+    child.on("exit", (code) => {
+      if (code && code !== 0 && !/listening on/.test(stdout)) {
+        clearTimeout(timer);
+        reject(new Error(`server exited ${code}: ${stderr || stdout}`));
+      }
+    });
   });
 }
 
-test("Coolify host fails closed without DD_API_KEY in production", async () => {
-  const result = await runServer({
+function stopServer(child) {
+  return new Promise((resolvePromise) => {
+    child.on("exit", () => resolvePromise());
+    child.kill("SIGTERM");
+  });
+}
+
+test("Coolify host starts without DD_API_KEY in production", async () => {
+  const port = 18000 + Math.floor(Math.random() * 1000);
+  const { child, stdout } = await startServer({
     NODE_ENV: "production",
     DD_ENV: "production",
     DD_API_KEY: "",
     DD_AGENT_HOST: "",
-    PORT: "0",
+    PORT: String(port),
   });
-  assert.notEqual(result.code, 0);
-  assert.match(`${result.stderr}\n${result.stdout}`, /DD_API_KEY missing/);
+  try {
+    assert.match(stdout, /APM stays dark/);
+    const response = await fetch(`http://127.0.0.1:${port}/healthz`);
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), "ok");
+  } finally {
+    await stopServer(child);
+  }
 });

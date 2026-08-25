@@ -30,9 +30,9 @@ function hostname(): string {
 }
 
 /**
- * Start RUM + browser logs.  Production (contactlogo.com or DD_ENV=production)
- * fails closed when DD_APPLICATION_ID / DD_CLIENT_TOKEN are missing.
- * Session Replay stays off.  Contact payloads are never sent.
+ * Start RUM + browser logs.  Missing or partial public keys stay dark
+ * (including contactlogo.com).  Session Replay stays off.  Contact
+ * payloads are never sent.
  */
 export function startDatadog(): DatadogPublicConfig | null {
   if (started) return started;
