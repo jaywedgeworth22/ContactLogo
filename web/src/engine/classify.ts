@@ -19,6 +19,7 @@ export type BookContact = {
   hadExistingPhoto?: boolean;
   importSource?: "file" | "google" | "device";
   googleResourceName?: string;
+  rawVcard?: string;
 };
 
 const FREEMAIL = new Set([

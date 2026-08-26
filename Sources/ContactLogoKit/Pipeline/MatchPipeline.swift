@@ -84,8 +84,8 @@ public struct MatchPipeline: Sendable {
 
         var measured: [LogoCandidate] = []
         for var cand in raw {
-            if cand.pixelWidth == nil || cand.hasAlpha == nil,
-               let data = try? await fetchImage(cand.imageURL) {
+            if cand.pixelWidth == nil || cand.hasAlpha == nil {
+                guard let data = try? await fetchImage(cand.imageURL) else { continue }
                 if ImageFlags.isTooSmall(data) { continue }
                 if cand.pixelWidth == nil, let (w, h) = ImageDimensions.read(data) {
                     cand.pixelWidth = w; cand.pixelHeight = h
