@@ -143,6 +143,26 @@ test("vcard preserves all original properties during export", () => {
   assert.equal(exportedWithPhoto.includes("X-CUSTOM-FIELD:custom-value"), true);
 });
 
+test("vcard 4.0 preserves data URI photo format during export", () => {
+  const raw = [
+    "BEGIN:VCARD",
+    "VERSION:4.0",
+    "FN:Bob Jones",
+    "N:Jones;Bob;;;",
+    "NOTE:vCard 4 contact",
+    "END:VCARD",
+  ].join("\r\n");
+
+  const [contact] = parseVcard(raw);
+  assert.ok(contact);
+  contact.photoDataUrl = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+  const exportedWithPhoto = contactToVcard(contact);
+  assert.equal(exportedWithPhoto.includes("PHOTO:data:image/png;base64,"), true);
+  assert.equal(exportedWithPhoto.includes("PHOTO;ENCODING="), false);
+  assert.equal(exportedWithPhoto.includes("VERSION:4.0"), true);
+  assert.equal(exportedWithPhoto.includes("NOTE:vCard 4 contact"), true);
+});
+
 test("google csv import", () => {
   const csv = "Name,Given Name,Organization Name,E-mail 1 - Value\nFedEx,FedEx,FedEx,x@fedex.com\n";
   assert.equal(looksLikeContactCsv(csv), true);
