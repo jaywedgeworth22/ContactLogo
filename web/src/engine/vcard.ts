@@ -50,6 +50,7 @@ export function parseVcard(text: string): BookContact[] {
   const lines = unfold(text);
   const contacts: BookContact[] = [];
   let current: Partial<BookContact> & { showAsCompany?: boolean } | null = null;
+  let currentRawLines: string[] = [];
 
   const flush = () => {
     if (!current) return;
@@ -57,6 +58,7 @@ export function parseVcard(text: string): BookContact[] {
     const name = current.displayName || current.organization || assembled;
     if (!name) {
       current = null;
+      currentRawLines = [];
       return;
     }
     contacts.push({
@@ -70,8 +72,10 @@ export function parseVcard(text: string): BookContact[] {
       website: current.website,
       photoDataUrl: current.photoDataUrl,
       hadExistingPhoto: Boolean(current.hadExistingPhoto || current.photoDataUrl),
+      rawVcard: currentRawLines.join("\r\n") + "\r\n",
     });
     current = null;
+    currentRawLines = [];
   };
 
   for (const line of lines) {
@@ -79,13 +83,16 @@ export function parseVcard(text: string): BookContact[] {
     const upper = line.toUpperCase();
     if (upper === "BEGIN:VCARD") {
       current = {};
+      currentRawLines = [line];
       continue;
     }
     if (upper === "END:VCARD") {
+      if (currentRawLines.length) currentRawLines.push(line);
       flush();
       continue;
     }
     if (!current) continue;
+    currentRawLines.push(line);
     const colon = line.indexOf(":");
     if (colon < 0) continue;
     const left = line.slice(0, colon);
@@ -136,6 +143,30 @@ function photoBase64(dataUrl: string): { type: string; data: string } | null {
 }
 
 export function contactToVcard(contact: BookContact): string {
+  if (contact.rawVcard) {
+    const rawLines = unfold(contact.rawVcard);
+    const photo = contact.photoDataUrl ? photoBase64(contact.photoDataUrl) : null;
+    const outputLines: string[] = [];
+    for (const line of rawLines) {
+      if (!line) continue;
+      const upper = line.toUpperCase();
+      const colon = upper.indexOf(":");
+      const name = colon >= 0 ? upper.slice(0, colon).split(";")[0]?.replace(/^ITEM\d+\./i, "") ?? "" : "";
+      if (name === "PHOTO") {
+        continue;
+      }
+      if (upper === "END:VCARD") {
+        if (photo) {
+          outputLines.push(foldLine(`PHOTO;ENCODING=b;TYPE=${photo.type}:${photo.data}`));
+        }
+        outputLines.push(line);
+        continue;
+      }
+      outputLines.push(line);
+    }
+    return outputLines.join("\r\n") + "\r\n";
+  }
+
   const lines = ["BEGIN:VCARD", "VERSION:3.0"];
   lines.push(`FN:${escapeVcard(contact.displayName)}`);
   if (contact.givenName || contact.familyName) {

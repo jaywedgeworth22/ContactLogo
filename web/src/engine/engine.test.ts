@@ -106,6 +106,43 @@ test("vcard round-trip keeps org and photo", () => {
   assert.equal(parsed[0]?.hadExistingPhoto, true);
 });
 
+test("vcard preserves all original properties during export", () => {
+  const raw = [
+    "BEGIN:VCARD",
+    "VERSION:3.0",
+    "FN:Alice Smith",
+    "N:Smith;Alice;;;",
+    "EMAIL;TYPE=HOME:alice@home.com",
+    "EMAIL;TYPE=WORK:alice@work.com",
+    "TEL;TYPE=CELL:555-1234",
+    "ADR;TYPE=HOME:;;123 Main St;City;ST;12345;USA",
+    "NOTE:VIP Client",
+    "BDAY:1990-01-01",
+    "X-CUSTOM-FIELD:custom-value",
+    "END:VCARD",
+  ].join("\r\n");
+
+  const [contact] = parseVcard(raw);
+  assert.ok(contact);
+  assert.equal(contact.displayName, "Alice Smith");
+
+  // Export without new photo should preserve raw card exactly
+  const exportedRaw = contactToVcard(contact);
+  assert.equal(exportedRaw.includes("ADR;TYPE=HOME"), true);
+  assert.equal(exportedRaw.includes("NOTE:VIP Client"), true);
+  assert.equal(exportedRaw.includes("BDAY:1990-01-01"), true);
+  assert.equal(exportedRaw.includes("X-CUSTOM-FIELD:custom-value"), true);
+
+  // Export with new photo should inject PHOTO while keeping all existing fields
+  contact.photoDataUrl = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+  const exportedWithPhoto = contactToVcard(contact);
+  assert.equal(exportedWithPhoto.includes("PHOTO;ENCODING=b;TYPE=PNG:"), true);
+  assert.equal(exportedWithPhoto.includes("ADR;TYPE=HOME"), true);
+  assert.equal(exportedWithPhoto.includes("NOTE:VIP Client"), true);
+  assert.equal(exportedWithPhoto.includes("BDAY:1990-01-01"), true);
+  assert.equal(exportedWithPhoto.includes("X-CUSTOM-FIELD:custom-value"), true);
+});
+
 test("google csv import", () => {
   const csv = "Name,Given Name,Organization Name,E-mail 1 - Value\nFedEx,FedEx,FedEx,x@fedex.com\n";
   assert.equal(looksLikeContactCsv(csv), true);
