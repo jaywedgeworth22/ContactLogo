@@ -6,9 +6,10 @@ Scope: `Sources/ContactLogoKit`, `Apps/ContactLogo{iOS,Mac,Android}`, `web/`,
 
 Verified by execution: web typecheck, 28 unit tests, production build; a vCard
 round-trip test; a headless-Chromium session against the built app at 1280×900
-and 390×844; live HTTP probes of `server.mjs`.  Swift and Gradle builds were not
-run — no Swift toolchain or Android SDK in the evaluation environment — so all
-native findings are marked *code read* and should be confirmed on a Mac.
+and 390×844; live HTTP probes of `server.mjs` and of the live Vercel deployment.
+Swift and Gradle builds were not run — no Swift toolchain or Android SDK in the
+evaluation environment — so all native findings are marked *code read* and should
+be confirmed on a Mac.
 
 ## Verdict
 
@@ -35,7 +36,7 @@ stop the export path destroying address books.
 | iOS | Stubbed | Background matching is a no-op; no per-contact override |
 | macOS | Thin | None of the promised power features exist; undo is one level, in memory |
 | Android | Unsafe | No generic blocklist; auto-approves favicons as high confidence |
-| Node host | Bare | No security, cache, or compression headers |
+| Hosting | Undeclared | Live on Vercel with no `vercel.json`; the committed Docker/`server.mjs` host is unused |
 | Design / UX | Unshippable at scale | Review flow costs five clicks per contact and breaks past a few hundred |
 
 ## Critical
@@ -226,8 +227,10 @@ which requires Swift 5.10+.  The Xcode targets and the SwiftPM package
   called and sorts by random UUID, so it cannot order batches chronologically.
   Nothing prunes the log.
 
-### CL-21…22 — The host serves no security, cache, or compression headers
-`web/server.mjs` · **verified by live probe**
+### CL-21…22 — Header gaps on both hosting paths
+**verified by live probe** — see CL-29 first: production is Vercel, not `server.mjs`.
+
+Probing `server.mjs` locally (the Coolify/Docker path):
 
 ```
 GET /                     200  content-type only — no CSP, nosniff,
@@ -237,11 +240,32 @@ GET /%                    500  "URI malformed"
 GET /../../../etc/passwd  400  blocked (safeFile is sound)
 ```
 
-Content-hashed bundles are re-downloaded every visit and the 203 KB bundle ships
-uncompressed when 70 KB gzipped is available.  A malformed percent-escape throws
-`URIError` out of `decodeURIComponent` into the generic handler, which does
-`res.end(message)` and returns the raw internal error string; it should be a 400
-with a fixed body.
+A malformed percent-escape throws `URIError` out of `decodeURIComponent` into the
+generic handler, which does `res.end(message)` and returns the raw internal error
+string; it should be a 400 with a fixed body.  This is the one item here that is
+a genuine bug in `server.mjs` rather than a missing header.
+
+Probing the live Vercel deployment, which is what users actually hit:
+
+```
+GET /                     200  HSTS ✓, ETag ✓, cache-control: max-age=0,
+                               must-revalidate — no CSP, no nosniff,
+                               no X-Frame-Options / frame-ancestors
+GET /assets/index-*.js    200  content-encoding: br ✓, ETag ✓,
+                               cache-control: public, max-age=0, must-revalidate
+```
+
+So two of the three complaints do not apply in production: Vercel adds brotli and
+ETags automatically.  Two real problems remain:
+
+- **Security headers are absent on the live site too.**  Vercel supplies only
+  HSTS.  For a page that processes address books, no CSP and no `frame-ancestors`
+  is the notable gap, and there is no `vercel.json` to add them.
+- **Immutable assets are served as if they were volatile.**  Vite emits
+  content-hashed filenames precisely so they can carry
+  `max-age=31536000, immutable`.  Vercel's default gives them the same
+  `max-age=0, must-revalidate` as the HTML shell, so every visit revalidates
+  every asset.  A `headers` rule in `vercel.json` fixes it.
 
 ### CL-23 — Telemetry can carry contact identifiers off-device
 `web/src/observability/datadog.ts` · code read
@@ -284,6 +308,42 @@ Both sample rates are 100%.
   exist.  Meanwhile README, `package.json`, the manifest and the app footer all
   present contactlogo.com as live.  (Not reachable from the evaluation sandbox —
   egress is proxied — so this follows the repo's own log.)
+
+### CL-29 — The app is deployed on a platform no document mentions
+**verified by live probe**
+
+A Vercel bot comment on the evaluation PR pointed at a preview deployment.  It is
+real, it serves the built app, and it is not the hosting path any document
+describes:
+
+```
+GET /            200  server: Vercel   → /assets/index-BQ44O-Hp.js
+                                          (the built bundle, not web/src)
+GET /healthz     404  → server.mjs is not running
+vercel.json      absent from the repo
+```
+
+`AGENTS.md` states "Production hosting is Coolify + Cloudflare, not Render" and
+never mentions Vercel.  `EFFORT-LOG.md` records "Deployed: (none on
+Coolify/Cloudflare yet)."  Both are literally true and jointly misleading: the app
+*is* deployed, on a third platform, from an auto-detected build with no committed
+configuration.  Consequences:
+
+- **`web/Dockerfile`, `web/server.mjs` and `npm start` are dead weight** on this
+  path — or Vercel is, and one of the two should be deleted.  Right now the repo
+  maintains a container host that nothing runs.
+- **Server-side APM is dark in production.**  `server.mjs` is where `dd-trace` is
+  initialized and where the structured request logs are emitted.  It never runs,
+  so the `DD_API_KEY` / APM pipeline documented in `docs/DATADOG.md` and
+  `web/README.md` does not exist on the live site.  Only browser RUM and Logs are
+  active.
+- **The build is undeclared.**  With no `vercel.json`, the deployment works
+  because Vercel guessed correctly from the root `package.json` build script and
+  output directory.  An edit to either can break production silently, and there is
+  nowhere to put the security and cache headers from CL-21.
+
+Decide which host is real, delete or document the other, and commit a
+`vercel.json` if the answer is Vercel.
 
 Still open and gating both stores: `ROADMAP.md` flags **logo licensing** as
 unresolved.  Bulk-applying third-party trademarks fetched from Brandfetch,
@@ -393,6 +453,9 @@ Ordered by damage prevented per unit of effort.
 9. **Finish iOS background matching or remove the claim.**  Either wire up
    `UIBackgroundModes`, launch-time scheduling, a real handler and a notification,
    or take it out of ARCHITECTURE.md and VISION.md until it is real.  (CL-05)
-10. **Headers on the host, and a decision on logo licensing.**  The headers are an
-    afternoon.  The trademark question is not, and it gates both stores.
-    (CL-21, CL-28)
+10. **Settle the hosting story.**  Pick Vercel or Coolify, delete or document the
+    loser, commit a `vercel.json` with security headers and
+    `immutable` caching for `/assets/*` if it is Vercel, and either restore
+    server-side APM or correct `docs/DATADOG.md`.  (CL-21, CL-29)
+11. **Decide the logo-licensing question.**  Not an afternoon, and it gates both
+    stores.  (CL-28)
