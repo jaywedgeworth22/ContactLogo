@@ -337,10 +337,11 @@ configuration.  Consequences:
   so the `DD_API_KEY` / APM pipeline documented in `docs/DATADOG.md` and
   `web/README.md` does not exist on the live site.  Only browser RUM and Logs are
   active.
-- **The build is undeclared.**  With no `vercel.json`, the deployment works
-  because Vercel guessed correctly from the root `package.json` build script and
-  output directory.  An edit to either can break production silently, and there is
-  nowhere to put the security and cache headers from CL-21.
+- **The build config lives outside the repo.**  There is no `vercel.json`; the
+  deploy bot's payload reports `rootDirectory: "web"`, so the build is wired up in
+  the Vercel dashboard instead.  Nothing about how production is built is
+  reviewable in a pull request or reproducible from a clone, and there is nowhere
+  to put the security and cache headers from CL-21.
 
 Decide which host is real, delete or document the other, and commit a
 `vercel.json` if the answer is Vercel.
