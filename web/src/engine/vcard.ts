@@ -146,6 +146,13 @@ export function contactToVcard(contact: BookContact): string {
   if (contact.rawVcard) {
     const rawLines = unfold(contact.rawVcard);
     const photo = contact.photoDataUrl ? photoBase64(contact.photoDataUrl) : null;
+    let isVCard4 = false;
+    for (const line of rawLines) {
+      if (/^VERSION:\s*4(\.0)?/i.test(line.trim())) {
+        isVCard4 = true;
+        break;
+      }
+    }
     const outputLines: string[] = [];
     for (const line of rawLines) {
       if (!line) continue;
@@ -156,8 +163,12 @@ export function contactToVcard(contact: BookContact): string {
         continue;
       }
       if (upper === "END:VCARD") {
-        if (photo) {
-          outputLines.push(foldLine(`PHOTO;ENCODING=b;TYPE=${photo.type}:${photo.data}`));
+        if (contact.photoDataUrl) {
+          if (isVCard4) {
+            outputLines.push(foldLine(`PHOTO:${contact.photoDataUrl}`));
+          } else if (photo) {
+            outputLines.push(foldLine(`PHOTO;ENCODING=b;TYPE=${photo.type}:${photo.data}`));
+          }
         }
         outputLines.push(line);
         continue;
