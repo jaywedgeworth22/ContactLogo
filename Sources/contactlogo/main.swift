@@ -32,16 +32,13 @@ struct CLI {
         DefaultSources.makePipeline()
     }
 
-    /// Contact identifiers become file names, so they are reduced to a single
-    /// safe path component — no separators, no traversal.
+    /// Contact identifiers become file names.  The rules moved to
+    /// `CandidateFileName` in the kit so they could be unit-tested — an
+    /// executable target's internals are not reachable from the test target,
+    /// and the property that matters (two contacts never share a file) is not
+    /// one to leave unasserted.
     static func safeFileStem(_ raw: String) -> String {
-        let allowed = raw.map { character -> Character in
-            character.isLetter || character.isNumber || character == "-" || character == "_" || character == "." ? character : "-"
-        }
-        var stem = String(allowed)
-        while stem.hasPrefix(".") { stem.removeFirst() }
-        if stem.contains("..") { stem = stem.replacingOccurrences(of: "..", with: "-") }
-        return stem.isEmpty ? "contact" : String(stem.prefix(120))
+        CandidateFileName.stem(raw)
     }
 }
 
@@ -50,7 +47,7 @@ struct StoredResult: Codable {
     let displayName: String
     let confidence: String
     let flags: [String]
-    let candidateFile: String?     // downloaded image, candidates/<id>.png
+    let candidateFile: String?     // downloaded image, candidates/<stem>.<digest>.png
     let candidateCount: Int
 }
 
@@ -149,7 +146,7 @@ struct ContactLogoCLI {
                let raw = try? await DefaultSources.fetchImage(best.imageURL),
                // Same preparation the apply path uses: rasterized, padded, square.
                let prepared = try? ImagePreparer.squarePNG(from: raw) {
-                let name = "\(CLI.safeFileStem(c.id)).png"
+                let name = CandidateFileName.png(for: c.id)
                 do {
                     try prepared.data.write(to: candDir.appendingPathComponent(name))
                     file = name

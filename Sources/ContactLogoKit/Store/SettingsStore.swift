@@ -18,8 +18,21 @@ public final class SettingsStore: ObservableObject {
         static let skipExistingPhoto = "contactlogo.skipContactsWithExistingPhoto"
     }
 
+    private enum Credential {
+        static let service = "com.contactlogo.credentials"
+        static let brandfetchAPIKey = "brandfetch.apiKey"
+    }
+
     private let defaults: UserDefaults
     private var isLoading = true
+
+    /// True when the API key could not be written to the Keychain, so it is
+    /// live for this launch but will not survive it.
+    ///
+    /// It is deliberately **not** written to `UserDefaults` instead: falling
+    /// back would reinstate the plaintext exposure this replaced.  No shell
+    /// surfaces this yet; showing it in both settings screens is the follow-up.
+    @Published public private(set) var credentialStorageFailed = false
 
     @Published public var brandfetchClientID: String = "" { didSet { autosave() } }
     @Published public var brandfetchAPIKey: String = "" { didSet { autosave() } }
@@ -45,16 +58,50 @@ public final class SettingsStore: ObservableObject {
         let store = suiteName.flatMap { UserDefaults(suiteName: $0) } ?? UserDefaults.standard
         defaults = store
         brandfetchClientID = store.string(forKey: Key.clientID) ?? ""
-        brandfetchAPIKey = store.string(forKey: Key.apiKey) ?? ""
         skipContactsWithExistingPhoto = (store.object(forKey: Key.skipExistingPhoto) as? Bool) ?? false
+
+        #if canImport(Security)
+        if let stored = KeychainStore.read(account: Credential.brandfetchAPIKey, service: Credential.service) {
+            brandfetchAPIKey = stored
+        } else if let legacy = store.string(forKey: Key.apiKey), !legacy.isEmpty {
+            // An install that predates the move still has the key sitting in
+            // its preferences plist.  Carry it across and take it out of there
+            // — leaving the plaintext behind would make the fix cosmetic.
+            brandfetchAPIKey = legacy
+            if KeychainStore.write(legacy, account: Credential.brandfetchAPIKey, service: Credential.service) {
+                store.removeObject(forKey: Key.apiKey)
+            } else {
+                credentialStorageFailed = true
+            }
+        }
+        #else
+        brandfetchAPIKey = store.string(forKey: Key.apiKey) ?? ""
+        #endif
+
         isLoading = false
     }
 
     /// Idempotent; shells that batch edits can call it once at the end.
     public func save() {
         defaults.set(brandfetchClientID, forKey: Key.clientID)
-        defaults.set(brandfetchAPIKey, forKey: Key.apiKey)
         defaults.set(skipContactsWithExistingPhoto, forKey: Key.skipExistingPhoto)
+        #if canImport(Security)
+        // Assigned only on a real change: `save()` runs from `didSet` on the
+        // published properties, and republishing on every keystroke provokes
+        // SwiftUI's "publishing changes from within view updates" warning.
+        let stored = KeychainStore.write(
+            brandfetchAPIKey.trimmingCharacters(in: .whitespacesAndNewlines),
+            account: Credential.brandfetchAPIKey,
+            service: Credential.service
+        )
+        if credentialStorageFailed != !stored { credentialStorageFailed = !stored }
+        // Never `defaults.set(brandfetchAPIKey, …)` as a fallback: an
+        // unwritable Keychain is a worse reason to put a credential in the
+        // preferences plist than the one that put it there originally.
+        defaults.removeObject(forKey: Key.apiKey)
+        #else
+        defaults.set(brandfetchAPIKey, forKey: Key.apiKey)
+        #endif
     }
 
     /// Non-empty client id, or nil so the caller falls back to the environment.

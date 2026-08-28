@@ -301,7 +301,7 @@ public final class ReviewSession: ObservableObject {
             // what else might be newer.
             do {
                 try await log.restore(batchID: batchID, using: provider)
-                try? log.deleteBatch(batchID)
+                try log.deleteBatch(batchID)
             } catch {
                 lastError = .undoFailed(batchID: batchID, underlying: error.localizedDescription)
             }
@@ -317,7 +317,23 @@ public final class ReviewSession: ObservableObject {
                 refreshUndoHistory()
                 return
             }
-            try? log.deleteBatch(summary.id)
+            // A restore that cannot retire its own log is not a finished undo.
+            // The batch comes back in History looking as though it were still
+            // applied, and undoing it a second time replays its pre-change
+            // snapshot over the batches already unwound beneath it — putting
+            // back exactly what this call just removed.  Swallowing the error
+            // here would hide that, so stop and say so; everything not yet
+            // restored is still on disk.
+            do {
+                try log.deleteBatch(summary.id)
+            } catch {
+                lastError = .undoFailed(
+                    batchID: summary.id,
+                    underlying: "restored, but its undo log could not be removed: \(error.localizedDescription)"
+                )
+                refreshUndoHistory()
+                return
+            }
         }
         refreshUndoHistory()
         #endif

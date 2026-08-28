@@ -766,6 +766,78 @@ final class ImagePreparerTests: XCTestCase {
     }
 }
 
+/// The names `contactlogo match` writes into `.contactlogo/candidates/`.
+///
+/// Two contacts sharing a file means `apply` writes one contact's logo onto
+/// another — the failure VISION.md's first principle exists to prevent — and
+/// the stem alone did exactly that for identifiers differing only in
+/// punctuation or only past its length limit.
+final class CandidateFileNameTests: XCTestCase {
+
+    /// `apply` accepts a name only when `stem(name) == name`, so a name that
+    /// does not survive that round trip is silently dropped and the contact
+    /// keeps no logo at all.  The composed name must satisfy it by
+    /// construction, including for identifiers that end in a dot (which would
+    /// otherwise join into `..`, which `stem` rewrites) and ones long enough to
+    /// push the digest past the length limit.
+    func testEveryNameSurvivesTheGuardApplyUses() {
+        let identifiers = [
+            "ABC:ABPerson",
+            "1E2D3F4A-0000-4C2F-9A1E-0B7D5F2C8A11:ABPerson",
+            "trailing.",
+            ".leading",
+            "...",
+            "a..b",
+            "",
+            String(repeating: "x", count: 400),
+            String(repeating: "x", count: 99) + "." + String(repeating: "y", count: 40),
+            "同じ",
+            "../../etc/passwd",
+        ]
+        for id in identifiers {
+            let name = CandidateFileName.png(for: id)
+            XCTAssertEqual(CandidateFileName.stem(name), name, "not one safe component: \(name)")
+            XCTAssertLessThanOrEqual(name.count, CandidateFileName.maxLength, name)
+            XCTAssertTrue(name.hasSuffix(".png"), name)
+            XCTAssertFalse(name.contains("/"), name)
+            XCTAssertFalse(name.contains(".."), name)
+        }
+    }
+
+    /// The regression: identifiers that the stem folds together must not share
+    /// a file.  Both pairs below collide on the stem alone.
+    func testIdentifiersThatShareAStemDoNotShareAFile() {
+        for (left, right) in [
+            ("ABC:ABPerson", "ABC-ABPerson"),
+            (String(repeating: "a", count: 200) + "1", String(repeating: "a", count: 200) + "2"),
+        ] {
+            XCTAssertEqual(CandidateFileName.stem(left), CandidateFileName.stem(right),
+                           "test is not exercising a collision")
+            XCTAssertNotEqual(CandidateFileName.png(for: left), CandidateFileName.png(for: right))
+        }
+    }
+
+    /// `match` and `apply` are separate process invocations, so the digest has
+    /// to be stable — which is why it is FNV-1a and not `hashValue`.
+    func testTheDigestIsStableAndNotSwiftsSeededHash() {
+        XCTAssertEqual(CandidateFileName.digest("contact"), CandidateFileName.digest("contact"))
+        XCTAssertEqual(CandidateFileName.digest(""), "cbf29ce484222325", "FNV-1a offset basis")
+        XCTAssertEqual(CandidateFileName.digest("a"), "af63dc4c8601ec8c", "FNV-1a of \"a\"")
+        XCTAssertEqual(CandidateFileName.digest("x").count, 16)
+    }
+
+    /// The traversal guard the stem has always carried, kept under test now
+    /// that the rules live in the kit rather than in the executable target.
+    func testStemIsAlwaysOneSafeComponent() {
+        // `..-..-etc-passwd`, leading dots stripped to `-..-etc-passwd`, then
+        // the surviving `..` rewritten — three dashes, not two.
+        XCTAssertEqual(CandidateFileName.stem("../../etc/passwd"), "---etc-passwd")
+        XCTAssertEqual(CandidateFileName.stem(""), "contact")
+        XCTAssertEqual(CandidateFileName.stem("..."), "contact")
+        XCTAssertFalse(CandidateFileName.stem("/tmp/x").contains("/"))
+    }
+}
+
 @MainActor
 final class ManualCandidateTests: XCTestCase {
     /// VISION's unsure-queue promise: the user's own image becomes the top
