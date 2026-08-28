@@ -37,6 +37,11 @@ Picked as the working direction after first review.  Three cuts:
   the disc holds its shape on dark grounds.
 - `01-swap-small.svg` — simplified cut for 32 px and below: the person
   glyph drops and the spark grows, so the favicon stays crisp.
+- `01-swap-square.svg` / `01-swap-1024.png` — full-bleed square cut for
+  iOS app icons: no corner crop, since iOS applies its own squircle
+  mask.  Geometry matches the tile exactly, so the masked result equals
+  `01-swap.svg`.  The PNG is 1024×1024 RGB with no alpha, ready for the
+  App Store / Xcode single-size AppIcon slot.
 
 ### 02 — Card & Badge (`02-card.svg`, `02-card-icon.svg`)
 
