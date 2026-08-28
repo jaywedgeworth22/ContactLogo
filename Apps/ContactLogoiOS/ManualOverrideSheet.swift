@@ -61,7 +61,7 @@ struct ManualOverrideSheet: View {
                 }
             }
             .disabled(isWorking)
-            .onChange(of: photoItem) { newItem in
+            .onChange(of: photoItem) { _, newItem in
                 Task { await useSelectedPhoto(newItem) }
             }
         }

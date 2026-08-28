@@ -28,8 +28,12 @@ struct ContentView: View {
             .navigationTitle("ContactLogo")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                // Every element here must be ToolbarContent; a bare Button makes
+                // toolbar(content:) ambiguous against its View overload.
                 if model.stage == .idle || model.stage == .review {
-                    Button("Scan") { Task { await model.scanAndMatch() } }
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("Scan") { Task { await model.scanAndMatch() } }
+                    }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -142,7 +146,7 @@ struct ReviewQueueView: View {
         .sheet(item: $manualOverrideResult) { result in
             ManualOverrideSheet(contactID: result.contactID)
         }
-        .onChange(of: model.lastError) { newValue in
+        .onChange(of: model.lastError) { _, newValue in
             showError = newValue != nil
         }
         .alert("ContactLogo", isPresented: $showError, presenting: model.lastError) { _ in

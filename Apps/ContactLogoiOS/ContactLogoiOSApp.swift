@@ -7,8 +7,6 @@ import ContactLogoKit
 /// queue is the same three-bucket contract as macOS and the web app.
 @main
 struct ContactLogoiOSApp: App {
-    static let matchTaskIdentifier = "com.contactlogo.match"
-
     @StateObject private var settingsStore: SettingsStore
     @StateObject private var model: ReviewSession
     @Environment(\.scenePhase) private var scenePhase
@@ -20,7 +18,7 @@ struct ContactLogoiOSApp: App {
         _model = StateObject(wrappedValue: session)
 
         BGTaskScheduler.shared.register(
-            forTaskWithIdentifier: Self.matchTaskIdentifier,
+            forTaskWithIdentifier: MatchBackgroundTask.identifier,
             using: nil
         ) { task in
             guard let task = task as? BGProcessingTask else { return }
@@ -46,7 +44,7 @@ struct ContactLogoiOSApp: App {
                 .environmentObject(model)
                 .environmentObject(settingsStore)
         }
-        .onChange(of: scenePhase) { newPhase in
+        .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .background {
                 MatchBackgroundTask.schedule()
             }
@@ -55,8 +53,12 @@ struct ContactLogoiOSApp: App {
 }
 
 enum MatchBackgroundTask {
+    /// Lives here, not on the App: a SwiftUI `App` is @MainActor under Swift 6,
+    /// so a static on it cannot be read from this nonisolated enum.
+    static let identifier = "com.contactlogo.match"
+
     static func schedule() {
-        let request = BGProcessingTaskRequest(identifier: ContactLogoiOSApp.matchTaskIdentifier)
+        let request = BGProcessingTaskRequest(identifier: Self.identifier)
         request.requiresNetworkConnectivity = true
         request.requiresExternalPower = false
         try? BGTaskScheduler.shared.submit(request)

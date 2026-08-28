@@ -16,11 +16,11 @@ struct SettingsView: View {
                     SecureField("Client ID", text: $settings.brandfetchClientID)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                        .onChange(of: settings.brandfetchClientID) { _ in settings.save() }
+                        .onChange(of: settings.brandfetchClientID) { settings.save() }
                     SecureField("API Key", text: $settings.brandfetchAPIKey)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                        .onChange(of: settings.brandfetchAPIKey) { _ in settings.save() }
+                        .onChange(of: settings.brandfetchAPIKey) { settings.save() }
                 } header: {
                     Text("Brandfetch")
                 } footer: {
@@ -28,7 +28,7 @@ struct SettingsView: View {
                 }
                 Section {
                     Toggle("Skip contacts that already have a photo", isOn: $settings.skipContactsWithExistingPhoto)
-                        .onChange(of: settings.skipContactsWithExistingPhoto) { _ in settings.save() }
+                        .onChange(of: settings.skipContactsWithExistingPhoto) { settings.save() }
                 } footer: {
                     Text("On by default, per MATCHING-ENGINE's photo-protection policy. Turn this off to let ContactLogo replace existing contact photos too.")
                 }

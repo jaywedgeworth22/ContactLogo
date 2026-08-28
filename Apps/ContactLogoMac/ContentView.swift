@@ -107,7 +107,7 @@ struct ReviewQueueView: View {
         .sheet(item: $manualOverrideResult) { result in
             ManualOverrideSheet(contactID: result.contactID)
         }
-        .onChange(of: model.lastError) { newValue in
+        .onChange(of: model.lastError) { _, newValue in
             showError = newValue != nil
         }
         .alert("ContactLogo", isPresented: $showError, presenting: model.lastError) { _ in
