@@ -311,14 +311,38 @@ final class StaticMatchTests: XCTestCase {
                         phoneNumbers: phones, hasImage: hasImage)
     }
 
-    func testRule8ReclassifiesAPersonWithABrandTail() {
+    /// CL-15 found §5 rule 8 dead in all three engines and the remediation
+    /// implemented it, which made this card a business card carrying Root
+    /// Insurance's logo.  The owner reversed that on 2026-08-28: individuals do
+    /// not get company logos.  §1 already said so — "Person: has given or family
+    /// name.  Never a logo target.  Employees are not the company." — and
+    /// outranks rule 8, which is now scoped to cards with no name fields.
+    ///
+    /// This demands *less* logo application than before, which is the safe
+    /// direction for a product whose first principle is that a wrong logo is
+    /// worse than none.
+    func testNamedContactIsNeverALogoTargetEvenWithABrandTail() {
         let byron = contact("Byron Goode Jr - Root Insurance", given: "Byron", family: "Goode")
         let match = pipeline.staticMatch(byron)
+        XCTAssertEqual(match.contactClass, .person)
+        XCTAssertNil(match.query)
+        XCTAssertNil(match.domain)
+        XCTAssertEqual(match.maxConfidence, .skip)
+        XCTAssertFalse(match.flags.contains("brand-tail"))
+
+        // The "X At Y" form is the plainest case: Chris works at NTB.
+        let chris = pipeline.staticMatch(contact("Chris At NTB", given: "Chris"))
+        XCTAssertEqual(chris.contactClass, .person)
+        XCTAssertNil(chris.domain)
+    }
+
+    /// Rule 8 survives for the case it was written for: a card with no name
+    /// fields whose display name carries a brand tail.  Nothing here claims to
+    /// be a person, so nothing is mislabelled.
+    func testRule8StillFiresWhenTheCardHasNoNameFields() {
+        let match = pipeline.staticMatch(contact("Front Office - Root Insurance"))
         XCTAssertEqual(match.contactClass, .businessCard)
         XCTAssertEqual(match.query, "Root Insurance")
-        XCTAssertEqual(match.domain, "rootinsurance.com")
-        XCTAssertEqual(match.via, .guess)
-        XCTAssertEqual(match.maxConfidence, .medium)
         XCTAssertTrue(match.flags.contains("brand-tail"))
     }
 

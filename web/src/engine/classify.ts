@@ -292,11 +292,19 @@ export function analyzeContact(c: BookContact): ContactAnalysis {
     const display = cleanName(c.displayName);
     const seg = splitSegments(display);
     const tail = seg && isKnownBrandTail(seg.tail) ? cleanName(seg.tail) : undefined;
-    if (tail) {
-      // R7.3.a/b — the brand tail wins unless the contact works there.
-      if (!worksAt(c, tail)) return businessCard({ query: tail, flag: "brand-tail" });
-      return person(c, tail);
-    }
+    // §1 — "Person: has given or family name. Never a logo target. Employees are
+    // not the company."  A known brand tail identifies who this person is
+    // affiliated with, not a business to badge: "Dana At Costco" is Dana, and
+    // putting Costco's mark on her card is exactly the wrong-logo outcome the
+    // product exists to avoid.  The tail is still passed to `person` so the
+    // `employee` flag can be derived from it.
+    //
+    // §5 rule 8 survives for the case it was written for — a card with NO name
+    // fields whose display name carries a brand tail — which is handled by the
+    // business-card path below, and for a company misfiled into a name field,
+    // which `inferCompanyFromLoneName` catches (it requires the name not look
+    // like a person's).
+    if (tail) return person(c, tail);
     const lone = inferCompanyFromLoneName(c); // R7.3.c
     if (lone) return businessCard(selectSegment(cleanName(lone)), "lone-firm-name");
     return person(c, brandSource); // R7.3.d

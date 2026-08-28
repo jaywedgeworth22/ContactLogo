@@ -1452,19 +1452,17 @@
         "hasImage": false
       },
       "expect": {
-        "class": "businessCard",
-        "query": "Root Insurance",
-        "domain": "rootinsurance.com",
-        "via": "guess",
-        "maxConfidence": "medium",
+        "class": "person",
+        "query": null,
+        "domain": null,
+        "via": null,
+        "maxConfidence": "skip",
         "flags": [
-          "brand-tail",
-          "via-guess",
-          "guessed-domain"
+          "person"
         ]
       },
-      "rule": "MATCHING-ENGINE §5 rule 8; ENGINE-CONTRACT R6.2 + R7.3 (CL-15)",
-      "why": "The rulebook's own example. The tail carries an ORG_SIGNAL word, so the brand is the tail and the person name does not win; brand-tail always caps at medium."
+      "rule": "MATCHING-ENGINE section 1 (Person: never a logo target); section 5 rule 8 as scoped to org-only cards",
+      "why": "The rulebook's own rule-8 example, and it has givenName Byron / familyName Goode. Section 1 outranks it: this is a person who sells insurance, not Root Insurance. MATCHING-ENGINE section 1: a contact with a given or family name is a Person, 'never a logo target — employees are not the company'. The display name's brand tail says who this person is affiliated with, not that the card is that business. Section 5 rule 8 applies only to a card with no name fields."
     },
     {
       "id": "rule8-chris-at-ntb",
@@ -1479,20 +1477,17 @@
         "hasImage": false
       },
       "expect": {
-        "class": "businessCard",
-        "query": "NTB",
-        "domain": "ntb.com",
-        "via": "guess",
-        "maxConfidence": "medium",
+        "class": "person",
+        "query": null,
+        "domain": null,
+        "via": null,
+        "maxConfidence": "skip",
         "flags": [
-          "brand-tail",
-          "brand-redirect-risk",
-          "via-guess",
-          "guessed-domain"
+          "person"
         ]
       },
-      "rule": "MATCHING-ENGINE §5 rule 8 + §4 domain redirect; ENGINE-CONTRACT R6.2 + R10.5 (CL-15)",
-      "why": "The 'X at Y' form with an acronym tail. ntb.com is on MERGED_DOMAINS (it now redirects to Mavis), so it also carries brand-redirect-risk."
+      "rule": "MATCHING-ENGINE section 1 (Person: never a logo target); section 5 rule 8 as scoped to org-only cards",
+      "why": "The 'X At Y' form says plainly that Chris works at NTB. Section 5 rule 7 calls that an employee contact; section 1 says employees are not the company. MATCHING-ENGINE section 1: a contact with a given or family name is a Person, 'never a logo target — employees are not the company'. The display name's brand tail says who this person is affiliated with, not that the card is that business. Section 5 rule 8 applies only to a card with no name fields."
     },
     {
       "id": "rule8-catalog-tail-at-form",
@@ -1507,19 +1502,17 @@
         "hasImage": false
       },
       "expect": {
-        "class": "businessCard",
-        "query": "Costco",
-        "domain": "costco.com",
-        "via": "catalog",
-        "maxConfidence": "medium",
+        "class": "person",
+        "query": null,
+        "domain": null,
+        "via": null,
+        "maxConfidence": "skip",
         "flags": [
-          "brand-tail",
-          "via-catalog"
-        ],
-        "simpleIconsSlug": "costco"
+          "person"
+        ]
       },
-      "rule": "MATCHING-ENGINE §5 rule 8; ENGINE-CONTRACT R10.3",
-      "why": "Even with a catalog-perfect tail, a rule-8 reclassification is a heuristic override of the person rule and must be reviewed, never pre-checked."
+      "rule": "MATCHING-ENGINE section 1 (Person: never a logo target); section 5 rule 8 as scoped to org-only cards",
+      "why": "Same 'X At Y' form with a catalog brand. Dana is a person; Costco's mark on her card is the wrong-logo outcome the product exists to prevent. MATCHING-ENGINE section 1: a contact with a given or family name is a Person, 'never a logo target — employees are not the company'. The display name's brand tail says who this person is affiliated with, not that the card is that business. Section 5 rule 8 applies only to a card with no name fields."
     },
     {
       "id": "rule8-employee-guard",
@@ -2426,19 +2419,17 @@
         "hasImage": false
       },
       "expect": {
-        "class": "businessCard",
-        "query": "Costco",
-        "domain": "consulting.com",
-        "via": "email",
-        "maxConfidence": "medium",
+        "class": "person",
+        "query": null,
+        "domain": null,
+        "via": null,
+        "maxConfidence": "skip",
         "flags": [
-          "brand-tail",
-          "email-domain-unrelated",
-          "via-email"
+          "person"
         ]
       },
-      "rule": "MATCHING-ENGINE section 5 rule 8; ENGINE-CONTRACT R7.3.b employee guard",
-      "why": "The employee guard asks whether this person's email says they work at the brand on the card. Kotlin derived the brand's domain by walking the contact's own emails, so the check compared the email with itself and every rule-8 card carrying an unrelated work email was filed as an employee and dropped from review."
+      "rule": "MATCHING-ENGINE section 1 (Person: never a logo target); section 5 rule 8 as scoped to org-only cards",
+      "why": "An unrelated work email does not turn a named person into a business. The employee guard's own mechanism was wrong (it compared the email with itself), but the outcome it produced here was right. MATCHING-ENGINE section 1: a contact with a given or family name is a Person, 'never a logo target — employees are not the company'. The display name's brand tail says who this person is affiliated with, not that the card is that business. Section 5 rule 8 applies only to a card with no name fields."
     },
     {
       "id": "rule8-tail-employee-email",
@@ -2481,18 +2472,17 @@
         "hasImage": false
       },
       "expect": {
-        "class": "businessCard",
-        "query": "Costco",
-        "domain": "costco.com",
-        "via": "catalog",
-        "maxConfidence": "medium",
+        "class": "person",
+        "query": null,
+        "domain": null,
+        "via": null,
+        "maxConfidence": "skip",
         "flags": [
-          "brand-tail",
-          "via-catalog"
+          "person"
         ]
       },
-      "rule": "MATCHING-ENGINE section 5 rule 8; ENGINE-CONTRACT R8.3",
-      "why": "With no email at all the guard cannot fire, so this is the baseline the other two are measured against."
+      "rule": "MATCHING-ENGINE section 1 (Person: never a logo target); section 5 rule 8 as scoped to org-only cards",
+      "why": "No email at all, and still a person: the classification comes from the name fields, not from what contact details happen to exist. MATCHING-ENGINE section 1: a contact with a given or family name is a Person, 'never a logo target — employees are not the company'. The display name's brand tail says who this person is affiliated with, not that the card is that business. Section 5 rule 8 applies only to a card with no name fields."
     }
   ]
 }

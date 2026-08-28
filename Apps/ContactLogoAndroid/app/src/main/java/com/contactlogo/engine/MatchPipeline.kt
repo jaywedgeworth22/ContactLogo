@@ -59,8 +59,8 @@ object MatchPipeline {
             val brandTailFired = "brand-tail" in dispSegment.flags
 
             // Employee guard candidates: the organization's own catalog identity, and
-            // (if a brand-tail fired) the tail's resolved identity (R8 applied to the
-            // tail alone). Either beats rule 8 / promotes to businessCard.
+            // (if a brand-tail fired) the domain the tail names.  Used only to set the
+            // `employee` flag now that a named contact is a person either way.
             val candidateDomains = mutableSetOf<String>()
             if (organization.isNotEmpty()) {
                 CompanyCatalog.domainForName(organization)?.let { candidateDomains.add(it) }
@@ -82,17 +82,21 @@ object MatchPipeline {
                 return EngineResult(ContactClass.PERSON, null, null, null, personFlags, Confidence.SKIP)
             }
 
-            if (brandTailFired) {
-                query = dispSegment.query
-                flags += dispSegment.flags
+            // MATCHING-ENGINE section 1: "Person: has given or family name. Never a
+            // logo target. Employees are not the company."  That outranks section 5
+            // rule 8: a known brand tail names who this person is affiliated with,
+            // not a business to badge.  "Dana At Costco" is Dana.
+            //
+            // Rule 8 still applies to a card with no name fields — that path never
+            // enters this branch — and `inferLoneFirmName` still catches a company
+            // misfiled into a name field, because it requires the name not to look
+            // like a person's.
+            val lone = inferLoneFirmName(contact)
+            if (lone != null) {
+                flags.add("lone-firm-name")
             } else {
-                val lone = inferLoneFirmName(contact)
-                if (lone != null) {
-                    flags.add("lone-firm-name")
-                } else {
-                    val personFlags = setOf(if (contact.hasCustomPhoto) "photo-protected" else "person")
-                    return EngineResult(ContactClass.PERSON, null, null, null, personFlags, Confidence.SKIP)
-                }
+                val personFlags = setOf(if (contact.hasCustomPhoto) "photo-protected" else "person")
+                return EngineResult(ContactClass.PERSON, null, null, null, personFlags, Confidence.SKIP)
             }
         }
         // Every path that falls through to here is a businessCard: either there was

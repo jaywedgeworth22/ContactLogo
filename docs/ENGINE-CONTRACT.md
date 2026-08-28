@@ -278,10 +278,20 @@ sides. If `head` has 0 or >4 words, or `tail` has >5 words → R6.5.
 
 Then `query = clean(tail)`.
 
-This is the rule the audit found dead in all three engines (CL-15).
-`Byron Goode Jr - Root Insurance` fires on signal 2; `Chris At NTB` on signal 3.
-A `brand-tail` query is always capped at medium (R10.3) — it is a heuristic
-override of the person rule, so it is reviewed, never pre-checked.
+`Front Office - Root Insurance` fires on signal 2; an org-only `… At NTB` on
+signal 3.  A `brand-tail` query is always capped at medium (R10.3).
+
+**Scope (owner decision, 2026-08-28).**  `isKnownBrandTail` is consulted only
+when the contact has **no** given or family name.  A named contact is a Person
+under MATCHING-ENGINE §1 — "never a logo target; employees are not the company"
+— and no brand tail overrides that.
+
+The audit found this rule dead in all three engines (CL-15) and the remediation
+implemented it, which is how `Byron Goode Jr - Root Insurance` and `Chris At NTB`
+came to be business cards wearing a brand's logo.  CL-15 is therefore **not**
+resolved as originally written: rule 8 is live, but only for org-only cards.
+The tail is still computed for a named contact, because R7.3.b runs the employee
+check against it.
 
 ### R6.3 Tail is decoration — flag `decoration-stripped`
 
@@ -791,7 +801,7 @@ Each line is a contract violation in shipping code, with the audit id.
 | Kotlin | Simple Icons slug derived by stripping the TLD | R13.2 (CL-04) |
 | Kotlin | identity order is website → catalog → phone → email | R8 |
 | Kotlin | `passesSimilarity` has no token-overlap branch | R9.1 |
-| all three | §5 rule 8 never reclassifies; `brandTail` is dead code | R6.2, R7.3 (CL-15) |
+| all three | §5 rule 8 never reclassifies; `brandTail` is dead code | R6.2, R7.3 (CL-15) — fixed, then deliberately re-scoped to org-only cards on 2026-08-28; see R6.2 |
 | all three | fallback-tile detection is `data.count < 80` | R11.5 (CL-18) |
 | Swift | `BrandfetchSource` 429 is swallowed by `try?`; no backoff anywhere | R11.6 (CL-17) |
 | Swift | raw source bytes written to Contacts; no rasterize/pad | R11.4 (CL-06) |

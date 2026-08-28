@@ -131,23 +131,45 @@ test("R6.1 splits on the first separator only", () => {
   assert.equal(isRoleOrPlace("Root Insurance"), false);
 });
 
-test("CL-15 a person-in-name business reaches the review queue", () => {
+/**
+ * CL-15 found MATCHING-ENGINE §5 rule 8 dead in all three engines, and the
+ * remediation implemented it — which made "Byron Goode Jr - Root Insurance" and
+ * "Chris At NTB" business cards carrying the brand's logo.
+ *
+ * The owner reversed that on 2026-08-28: individuals do not get company logos.
+ * §1 already said so — "Person: has given or family name. Never a logo target.
+ * Employees are not the company." — and outranks rule 8, which is now scoped to
+ * cards with no name fields at all.
+ *
+ * These assertions are the reversal, not a weakened test: they demand *less*
+ * logo application than before, which is the safe direction for a product whose
+ * first principle is that a wrong logo is worse than none.
+ */
+test("§1 — a named contact is never a logo target, even with a known brand tail", () => {
   const byron = analyzeContact(card({ displayName: "Byron Goode Jr - Root Insurance", givenName: "Byron", familyName: "Goode" }));
-  assert.equal(byron.contactClass, "businessCard");
-  assert.equal(byron.query, "Root Insurance");
-  assert.equal(byron.flags.includes("brand-tail"), true);
+  assert.equal(byron.contactClass, "person");
+  assert.equal(byron.query, "");
+  assert.equal(byron.flags.includes("brand-tail"), false);
 
+  // The "X At Y" form is the plainest case: Chris works at NTB.
   const chris = matchContact(card({ displayName: "Chris At NTB", givenName: "Chris" }));
-  assert.equal(chris.contactClass, "businessCard");
-  assert.equal(chris.query, "NTB");
-  assert.equal(chris.domain, "ntb.com");
-  assert.equal(chris.confidence, "medium"); // R10.3 + R10.5 — reviewed, never pre-checked
+  assert.equal(chris.contactClass, "person");
+  assert.equal(chris.domain, undefined);
+  assert.equal(chris.confidence, "skip");
   assert.equal(chris.selected, false);
 
   const dana = matchContact(card({ displayName: "Dana At Costco", givenName: "Dana" }));
-  assert.equal(dana.domain, "costco.com");
-  assert.equal(dana.via, "catalog");
-  assert.equal(dana.confidence, "medium");
+  assert.equal(dana.contactClass, "person");
+  assert.equal(dana.domain, undefined);
+});
+
+test("§5 rule 8 still fires when the card has no name fields", () => {
+  // The case rule 8 was written for: an org-only card whose display name carries
+  // a brand tail. Nothing here claims to be a person, so nothing is mislabelled.
+  const orgOnly = analyzeContact(card({ displayName: "Front Office - Root Insurance" }));
+  assert.equal(orgOnly.contactClass, "businessCard");
+  assert.equal(orgOnly.query, "Root Insurance");
+  assert.equal(orgOnly.flags.includes("brand-tail"), true);
 });
 
 test("R7.3.b an employee of the tail brand stays a person", () => {
@@ -155,9 +177,12 @@ test("R7.3.b an employee of the tail brand stays a person", () => {
   assert.equal(maya.contactClass, "person");
   assert.deepEqual(maya.flags, ["person", "employee"]);
 
+  // Previously this became a business card, on the reasoning that a freemail
+  // address meant the person did not work at the tail brand. Under §1 the email
+  // is irrelevant: the name fields already settle it.
   const stranger = analyzeContact(card({ displayName: "Maya Chen - Apple", givenName: "Maya", familyName: "Chen", email: "maya@gmail.com" }));
-  assert.equal(stranger.contactClass, "businessCard");
-  assert.equal(stranger.query, "Apple");
+  assert.equal(stranger.contactClass, "person");
+  assert.equal(stranger.query, "");
 });
 
 test("R6.2 does not fire on a role tail", () => {

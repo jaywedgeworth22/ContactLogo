@@ -101,9 +101,21 @@ is a business card, not a person. People who *work at* a company stay people.
    the winner — the review UI offers them when the user taps "unsure".
 7. **Employee contacts** (person name + corporate email domain): lowest
    priority; only logo when user opts into that class explicitly.
-8. **Person-in-name businesses** ("Byron Goode Jr - Root Insurance",
-   "Chris At NTB"): if the display name contains a known-brand tail, match the
-   brand tail, not the person.
+8. **Person-in-name businesses** — **only on a card with no given or family
+   name.**  If such a card's display name carries a known-brand tail
+   ("Front Office - Root Insurance"), match the brand tail.
+
+   This never overrides §1.  A contact with a name field is a Person and is
+   never a logo target, even when the display name reads "Byron Goode Jr - Root
+   Insurance" or "Chris At NTB" — those are people, and the tail says who they
+   are affiliated with, not that the card is that business.  The "X At Y" form
+   is the plainest case and is squarely rule 7's employee contact.
+
+   *(Owner decision, 2026-08-28.  This rule was found dead in all three engines
+   by the 2026-08 audit (CL-15) and implemented during the remediation, which
+   put company logos on named individuals.  Scoping it to org-only cards is the
+   correction: a wrong logo is worse than none, and a person badged with their
+   employer's mark is a wrong logo.)*
 
 ## 6. Confidence tiers
 

@@ -57,16 +57,25 @@ public struct MatchPipeline: Sendable {
             // R7.3.a — §5 rule 8 is stated in terms of the display name, so
             // role junk in `organization` cannot reclassify a person.
             let segment = NameNormalizer.segment(c.displayName)
-            if segment.isBrandTail {
-                // R7.3.b employee guard: §5 rule 7 beats §5 rule 8.
-                if isEmployee(c, of: segment.query) { return Self.person(c, employee: true) }
-                flags.append("brand-tail")
-                query = segment.query
-            } else if let lone = inferCompanyFromLoneName(c) {
+            // §1 — "Person: has given or family name.  Never a logo target.
+            // Employees are not the company."  That outranks §5 rule 8: a known
+            // brand tail names who this person is affiliated with, not a business
+            // to badge.  "Dana At Costco" is Dana, and Costco's mark on her card
+            // is the wrong-logo outcome the product exists to prevent.
+            //
+            // Rule 8 still applies to a card with no name fields (the `else`
+            // branch below), and `inferCompanyFromLoneName` still catches a
+            // company misfiled into a name field — it requires the candidate not
+            // to look like a person's name.
+            //
+            // The tail is still what the employee check is run against, so a
+            // contact who genuinely works at the tail brand is flagged as such.
+            if let lone = inferCompanyFromLoneName(c) {
                 flags.append("lone-firm-name")
                 query = NameNormalizer.clean(lone)
             } else {
-                return Self.person(c, employee: isEmployee(c, of: name))
+                let affiliation = segment.isBrandTail ? segment.query : name
+                return Self.person(c, employee: isEmployee(c, of: affiliation))
             }
         } else {
             let segment = NameNormalizer.segment(name)
