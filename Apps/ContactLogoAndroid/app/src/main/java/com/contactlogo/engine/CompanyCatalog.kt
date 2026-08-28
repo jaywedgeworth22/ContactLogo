@@ -87,7 +87,7 @@ object CompanyCatalog {
             val head = words.subList(0, i).joinToString(" ")
             val tailWords = words.subList(i, words.size)
             val dom = domains[head] ?: domains[head.replace(" ", "")]
-            if (dom != null && tailWords.all { isTailOkWord(it) }) return dom
+            if (dom != null && tailWords.any { isTailOkWord(it) }) return dom
         }
         return null
     }

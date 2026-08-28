@@ -137,8 +137,85 @@ const DOMAINS: Record<string, string> = {
   raise: "raise.com",
 };
 
-const LOCATIONISH =
-  /\b(rd|road|st|street|blvd|ave|avenue|dr|drive|ln|lane|hwy|fwy|pkwy|suite|ste|unit|store|shop|plaza|center|centre|mall|near|at|in|#\d*|\d{2,5}|cypress|houston|dallas|austin|tx|texas|usa)\b/i;
+/** R8.3 CATALOG_TAIL_OK = GEO_WORDS ∪ SUBBRAND_TAIL.  Any matching token is enough
+ *  ("Walgreens Mason Rd" via `rd`, "H-E-B Pharmacy" via `pharmacy`). */
+const SUBBRAND_TAIL = new Set([
+  "pharmacy",
+  "deli",
+  "bakery",
+  "fuel",
+  "gas",
+  "market",
+  "marketplace",
+  "optical",
+  "photo",
+  "curbside",
+  "drive",
+  "thru",
+  "corporate",
+  "hq",
+  "distribution",
+  "warehouse",
+]);
+
+const GEO_TAIL = new Set([
+  "rd",
+  "road",
+  "st",
+  "street",
+  "blvd",
+  "ave",
+  "avenue",
+  "dr",
+  "drive",
+  "ln",
+  "lane",
+  "hwy",
+  "fwy",
+  "pkwy",
+  "suite",
+  "ste",
+  "unit",
+  "store",
+  "shop",
+  "plaza",
+  "center",
+  "centre",
+  "mall",
+  "near",
+  "at",
+  "in",
+  "cypress",
+  "houston",
+  "dallas",
+  "austin",
+  "katy",
+  "spring",
+  "tomball",
+  "tx",
+  "texas",
+  "usa",
+  "us",
+  "australia",
+  "canada",
+  "mexico",
+  "uk",
+  "north",
+  "south",
+  "east",
+  "west",
+  "downtown",
+  "midtown",
+  "uptown",
+]);
+
+function isCatalogTailOK(tail: string): boolean {
+  return tail.split(" ").filter(Boolean).some((word) => {
+    const token = word.toLowerCase();
+    if (SUBBRAND_TAIL.has(token) || GEO_TAIL.has(token)) return true;
+    return /^#\d*$/.test(token) || /^\d{2,5}$/.test(token);
+  });
+}
 
 const DOMAIN_TO_TICKER: Record<string, string> = {
   "apple.com": "AAPL",
@@ -241,7 +318,7 @@ export function lookupCompanyDomain(name: string): string | undefined {
     const head = words.slice(0, i).join(" ");
     const tail = words.slice(i).join(" ");
     const domain = DOMAINS[head] ?? DOMAINS[head.replace(/\s+/g, "")];
-    if (domain && LOCATIONISH.test(tail)) return domain;
+    if (domain && isCatalogTailOK(tail)) return domain;
   }
   return undefined;
 }

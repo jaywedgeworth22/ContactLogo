@@ -236,10 +236,15 @@ struct LogoThumb: View {
         // constructing it inside the detached task and returning it is a Swift 6
         // concurrency error.  The base64 decode is the expensive part and still
         // happens off the main actor.
+        let payload = url
         let raw = await Task.detached(priority: .utility) { () -> Data? in
-            try? Data(contentsOf: url)
+            try? Data(contentsOf: payload)
         }.value
-        decodedDataImage = raw.flatMap(NSImage.init(data:))
+        if let raw {
+            decodedDataImage = NSImage(data: raw)
+        } else {
+            decodedDataImage = nil
+        }
     }
 
     private var placeholder: some View {
