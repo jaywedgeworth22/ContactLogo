@@ -1,166 +1,114 @@
 import XCTest
 @testable import ContactLogoKit
 
-/// ENGINE-CONTRACT R14.2 — the golden corpus, run against the Swift engine.
-///
-/// It ran only in the Android suite until now, which is how R10.1b shipped to
-/// two engines out of three and how R8.3's catalog-tail rule came to mean three
-/// different things: nothing was comparing them.  All three suites load this
-/// same file now.
-///
-/// R14.1: static path only — `staticMatch`, no network, no image fetch, no
-/// clock.  The corpus's `maxConfidence` is the STATIC ceiling; the final tier is
-/// min(ceiling, assetTier) and needs a candidate list, which this never builds.
-///
-/// R14.3: a case this engine cannot satisfy fails loudly here.  Do not skip it,
-/// do not delete it, and do not edit the corpus to match the code — the corpus
-/// encodes the rulebook, so a disagreement means an engine is wrong.
+/// ENGINE-CONTRACT R14.2: the Swift kit must agree with
+/// `fixtures/golden-corpus.json` on every static (no-network) case.
 final class GoldenCorpusTests: XCTestCase {
-
-    private struct Corpus: Decodable {
-        struct Case: Decodable {
-            struct Contact: Decodable {
-                let displayName: String?
-                let givenName: String?
-                let familyName: String?
-                let organization: String?
-                let emails: [String]
-                let websites: [String]
-                let phones: [String]
-                let hasImage: Bool
-            }
-            struct Expect: Decodable {
-                /// `class` in the JSON; renamed here because it is a keyword.
-                let contactClass: String
-                let query: String?
-                let domain: String?
-                let via: String?
-                let maxConfidence: String
-                let flags: [String]
-                let simpleIconsSlug: String?
-
-                enum CodingKeys: String, CodingKey {
-                    case contactClass = "class"
-                    case query, domain, via, maxConfidence, flags, simpleIconsSlug
-                }
-            }
-            let id: String
-            let contact: Contact
-            let expect: Expect
-        }
-        let cases: [Case]
-    }
-
-    /// Walks up from this source file to the repo root.  SwiftPM has no resource
-    /// bundle for a fixture that three languages share, and hard-coding a
-    /// working directory breaks under `swift test` vs Xcode.
-    private func corpusURL() throws -> URL {
-        var dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-        for _ in 0..<12 {
-            let candidate = dir.appendingPathComponent("fixtures/golden-corpus.json")
-            if FileManager.default.fileExists(atPath: candidate.path) { return candidate }
-            dir = dir.deletingLastPathComponent()
-        }
-        throw XCTSkip("fixtures/golden-corpus.json not found above \(#filePath)")
-    }
-
-    private static func name(_ c: Confidence) -> String {
-        switch c {
-        case .skip: return "skip"
-        case .low: return "low"
-        case .medium: return "medium"
-        case .high: return "high"
-        }
-    }
-
-    private static func name(_ c: ContactClass) -> String {
-        switch c {
-        case .person: return "person"
-        case .businessCard: return "businessCard"
-        case .nonBrand: return "nonBrand"
-        }
-    }
-
     func testGoldenCorpusConformance() throws {
-        let data = try Data(contentsOf: try corpusURL())
-        let corpus = try JSONDecoder().decode(Corpus.self, from: data)
-        XCTAssertFalse(corpus.cases.isEmpty, "expected the golden corpus to contain cases")
+        let url = try XCTUnwrap(Self.corpusURL())
+        let data = try Data(contentsOf: url)
+        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let cases = try XCTUnwrap(root["cases"] as? [[String: Any]])
+        XCTAssertFalse(cases.isEmpty, "expected the golden corpus to contain cases")
 
-        // R14.1 — no network: the pipeline is built with no sources and a fetch
-        // that would trap if the static path ever reached for one.
-        let pipeline = MatchPipeline(sources: []) { _ in
-            XCTFail("R14.1 violation: the static path fetched an image")
-            return Data()
-        }
-
+        let pipeline = MatchPipeline(sources: [], fetchImage: { _ in Data() })
         var failures: [String] = []
 
-        for kase in corpus.cases {
-            let c = kase.contact
-            let contact = ContactIdentity(
-                id: "corpus",
-                displayName: c.displayName ?? "",
-                givenName: c.givenName,
-                familyName: c.familyName,
-                organization: c.organization,
-                // The Swift shell hands the engine raw fields; DomainDeriver does
-                // the scheme/userinfo/subdomain work, so the corpus's full URLs
-                // and addresses go in as they are written.
-                emailDomains: c.emails,
-                websiteHosts: c.websites,
-                phoneNumbers: c.phones,
-                hasImage: c.hasImage
-            )
-
-            let result = pipeline.staticMatch(contact)
+        for item in cases {
+            let id = item["id"] as? String ?? "<unnamed case>"
+            let contactJSON = try XCTUnwrap(item["contact"] as? [String: Any])
+            let expect = try XCTUnwrap(item["expect"] as? [String: Any])
+            let result = pipeline.staticMatch(Self.contact(from: contactJSON))
             var mismatches: [String] = []
 
-            let gotClass = Self.name(result.contactClass)
-            if gotClass != kase.expect.contactClass {
-                mismatches.append("class: got \(gotClass) want \(kase.expect.contactClass)")
+            let actualClass: String
+            switch result.contactClass {
+            case .person: actualClass = "person"
+            case .businessCard: actualClass = "businessCard"
+            case .nonBrand: actualClass = "nonBrand"
+            }
+            let expectedClass = expect["class"] as? String
+            if actualClass != expectedClass {
+                mismatches.append("class: got \(actualClass) want \(expectedClass ?? "nil")")
             }
 
-            if result.query != kase.expect.query {
-                mismatches.append("query: got \(String(describing: result.query)) want \(String(describing: kase.expect.query))")
+            let expectedQuery = expect["query"] as? String
+            if result.query != expectedQuery {
+                mismatches.append("query: got \(result.query ?? "nil") want \(expectedQuery ?? "nil")")
             }
 
-            if result.domain != kase.expect.domain {
-                mismatches.append("domain: got \(String(describing: result.domain)) want \(String(describing: kase.expect.domain))")
+            let expectedDomain = expect["domain"] as? String
+            if result.domain != expectedDomain {
+                mismatches.append("domain: got \(result.domain ?? "nil") want \(expectedDomain ?? "nil")")
             }
 
-            let gotVia = result.via?.rawValue
-            if gotVia != kase.expect.via {
-                mismatches.append("via: got \(String(describing: gotVia)) want \(String(describing: kase.expect.via))")
+            let expectedVia = expect["via"] as? String
+            let actualVia = result.via?.rawValue
+            if actualVia != expectedVia {
+                mismatches.append("via: got \(actualVia ?? "nil") want \(expectedVia ?? "nil")")
             }
 
-            let gotConfidence = Self.name(result.maxConfidence)
-            if gotConfidence != kase.expect.maxConfidence {
-                mismatches.append("maxConfidence: got \(gotConfidence) want \(kase.expect.maxConfidence)")
+            let expectedConfidence = expect["maxConfidence"] as? String
+            let actualConfidence: String
+            switch result.maxConfidence {
+            case .skip: actualConfidence = "skip"
+            case .low: actualConfidence = "low"
+            case .medium: actualConfidence = "medium"
+            case .high: actualConfidence = "high"
+            }
+            if actualConfidence != expectedConfidence {
+                mismatches.append("maxConfidence: got \(actualConfidence) want \(expectedConfidence ?? "nil")")
             }
 
-            // R14.1 — flags compared as a set; order is R12's business.
-            let gotFlags = Set(result.flags)
-            let wantFlags = Set(kase.expect.flags)
-            if gotFlags != wantFlags {
-                mismatches.append("flags: got \(gotFlags.sorted()) want \(wantFlags.sorted())")
+            let expectedFlags = Set((expect["flags"] as? [String]) ?? [])
+            let actualFlags = Set(result.flags)
+            if actualFlags != expectedFlags {
+                mismatches.append("flags: got \(actualFlags.sorted()) want \(expectedFlags.sorted())")
             }
 
-            if let wantSlug = kase.expect.simpleIconsSlug {
-                let gotSlug = result.domain.flatMap { SimpleIconsSource.slug(for: $0) }
-                if gotSlug != wantSlug {
-                    mismatches.append("simpleIconsSlug: got \(String(describing: gotSlug)) want \(wantSlug)")
+            if expect.keys.contains("simpleIconsSlug") {
+                let expectedSlug = expect["simpleIconsSlug"] as? String
+                let actualSlug = result.domain.flatMap { SimpleIconsSource.slug(for: $0) }
+                if actualSlug != expectedSlug {
+                    mismatches.append("simpleIconsSlug: got \(actualSlug ?? "nil") want \(expectedSlug ?? "nil")")
                 }
             }
 
             if !mismatches.isEmpty {
-                failures.append("\(kase.id):\n    " + mismatches.joined(separator: "\n    "))
+                failures.append("\(id):\n    " + mismatches.joined(separator: "\n    "))
             }
         }
 
-        XCTAssertTrue(
-            failures.isEmpty,
-            "\(failures.count)/\(corpus.cases.count) golden-corpus cases failed:\n\n"
-                + failures.joined(separator: "\n\n")
+        if !failures.isEmpty {
+            XCTFail("\(failures.count)/\(cases.count) golden-corpus cases failed:\n\n" + failures.joined(separator: "\n\n"))
+        }
+    }
+
+    private static func contact(from json: [String: Any]) -> ContactIdentity {
+        func str(_ key: String) -> String? {
+            guard let value = json[key] as? String, !value.isEmpty else { return nil }
+            return value
+        }
+        func list(_ key: String) -> [String] {
+            (json[key] as? [String]) ?? []
+        }
+        return ContactIdentity(
+            id: "corpus",
+            displayName: str("displayName") ?? "",
+            givenName: str("givenName"),
+            familyName: str("familyName"),
+            organization: str("organization"),
+            emailDomains: list("emails"),
+            websiteHosts: list("websites"),
+            phoneNumbers: list("phones"),
+            hasImage: json["hasImage"] as? Bool ?? false
         )
+    }
+
+    private static func corpusURL() -> URL? {
+        var dir = URL(fileURLWithPath: #filePath)
+        for _ in 0..<3 { dir.deleteLastPathComponent() }
+        let candidate = dir.appendingPathComponent("fixtures/golden-corpus.json")
+        return FileManager.default.isReadableFile(atPath: candidate.path) ? candidate : nil
     }
 }

@@ -127,6 +127,7 @@ const PREFERRED: Record<string, string> = {
 };
 
 export function simpleIconsSlug(domain: string): string | undefined {
+  if (SKIP_SIMPLE.has(domain)) return undefined;
   return SIMPLE_SLUGS[domain];
 }
 

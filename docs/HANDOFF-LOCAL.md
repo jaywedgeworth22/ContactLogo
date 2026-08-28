@@ -1,5 +1,21 @@
 # Handoff — what has to be finished on the local Mac
 
+## Local Mac status (2026-08-27, Grok)
+
+Picked up this note on `~/apps/contactlogo-grok-eval` @ `claude/full-app-evaluation-wwwwk1` (PR #24).  Monet's later commits already merged `origin/main` and dropped the duplicate root `vercel.json`.  This Mac then compiled every toolchain the cloud session lacked:
+
+- `swift test` — 72/72, including `fixtures/golden-corpus.json`
+- `xcodegen generate` + iOS Simulator and macOS `xcodebuild` — both **BUILD SUCCEEDED**
+- `./gradlew assembleDebug testDebugUnitTest` — **BUILD SUCCESSFUL**, including the Android golden-corpus test
+- Web typecheck / 138 tests / production build
+
+Verified on the built iOS app: `UIBackgroundModes = processing` and `BGTaskSchedulerPermittedIdentifiers = com.contactlogo.match` are actually in Info.plist.  `INFOPLIST_KEY_UIBackgroundModes` did not merge on Xcode 26, so those array keys now live in `Apps/ContactLogoiOS/Info.plist`.
+
+Still owner-blocked (unchanged): pick one host; logo-licensing gate; Brandfetch / Logo.dev credentials; Datadog live RUM PII check; signing on the machine with the certificates; apply→undo on a real address book.
+
+---
+
+
 Branch: `claude/full-app-evaluation-wwwwk1` · PR #24 · audit of record: `docs/EVALUATION-2026-08.md`
 
 A remote Claude Code session audited every surface (29 findings) and then ran an agent team to fix

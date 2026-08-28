@@ -126,7 +126,7 @@ public enum WordLists {
     public static func isCatalogTailOK(_ tail: String) -> Bool {
         let words = tokens(tail)
         guard !words.isEmpty else { return false }
-        let marked = tail.contains("#") || words.contains(where: isTailOkWord)
+        let marked = tail.contains(where: { $0 == "#" }) || words.contains(where: isTailOkWord)
         guard marked else { return false }
         return words.allSatisfy { isTailOkWord($0) || !orgSignal.contains($0) }
     }

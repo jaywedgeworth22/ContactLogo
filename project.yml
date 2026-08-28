@@ -75,16 +75,13 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2"
         INFOPLIST_KEY_CFBundleDisplayName: "ContactLogo"
         INFOPLIST_KEY_NSContactsUsageDescription: "ContactLogo scans your contacts to find company logos for businesses in your address book."
-        INFOPLIST_KEY_BGTaskSchedulerPermittedIdentifiers: "com.contactlogo.match"
         INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.utilities"
         GENERATE_INFOPLIST_FILE: YES
+        # Array keys (UIBackgroundModes, BGTaskSchedulerPermittedIdentifiers)
+        # do not merge from INFOPLIST_KEY_* on Xcode 26.  Apps/ContactLogoiOS/Info.plist
+        # holds them; GENERATE_INFOPLIST_FILE still fills the scalar keys.  CL-05.
+        INFOPLIST_FILE: Apps/ContactLogoiOS/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        # Required for BGTaskScheduler.submit() to succeed — see CL-05.
-        # Xcode's INFOPLIST_KEY_ mechanism does cover array-valued keys: the
-        # value is a space-separated list.  A target-level `info:` block would
-        # need its own `path:` and would turn off GENERATE_INFOPLIST_FILE, which
-        # every other key in this file depends on.
-        INFOPLIST_KEY_UIBackgroundModes: processing
 
   ContactLogoMac:
     type: application
