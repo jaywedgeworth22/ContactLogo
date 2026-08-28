@@ -383,11 +383,14 @@ struct LogoThumb: View {
             if decodedDataImage != nil { decodedDataImage = nil }
             return
         }
-        let image = await Task.detached(priority: .utility) { () -> UIImage? in
-            guard let raw = try? Data(contentsOf: url) else { return nil }
-            return UIImage(data: raw)
+        // Only `Data` crosses the actor boundary — UIImage is not Sendable, so
+        // constructing it inside the detached task and returning it is a Swift 6
+        // concurrency error.  The base64 decode is the expensive part and still
+        // happens off the main actor.
+        let raw = await Task.detached(priority: .utility) { () -> Data? in
+            try? Data(contentsOf: url)
         }.value
-        decodedDataImage = image
+        decodedDataImage = raw.flatMap(UIImage.init(data:))
     }
 
     private var placeholder: some View {

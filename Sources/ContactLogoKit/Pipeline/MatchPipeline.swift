@@ -97,6 +97,14 @@ public struct MatchPipeline: Sendable {
         var ceiling = Confidence.high
         let contactOwned: Set<IdentityVia> = [.website, .email, .phone]
         if identity.via == .guess { ceiling = min(ceiling, .medium) }
+        // R10.1b — an email domain is the contact's own data but routinely not the
+        // brand's (subsidiaries, resellers, consultants on a client domain).  Cap
+        // when it shares no token with the query; let an evident one through.
+        if identity.via == .email,
+           !NameNormalizer.passesSimilarity(query: query, brandName: Self.domainLabel(identity.domain)) {
+            flags.append("email-domain-unrelated")
+            ceiling = min(ceiling, .medium)
+        }
         if homonym, !contactOwned.contains(identity.via) { ceiling = min(ceiling, .medium) }
         if flags.contains("brand-tail") { ceiling = min(ceiling, .medium) }
         if c.hasImage { ceiling = min(ceiling, .medium) }
@@ -104,6 +112,13 @@ public struct MatchPipeline: Sendable {
 
         return StaticMatch(contactClass: .businessCard, query: query, identity: identity,
                            maxConfidence: ceiling, flags: flags)
+    }
+
+    /// R10.1b — the registrable domain minus its final label, for the relatedness
+    /// check ("bluebonnetdental.com" -> "bluebonnetdental").
+    static func domainLabel(_ domain: String) -> String {
+        guard let dot = domain.lastIndex(of: ".") else { return domain }
+        return String(domain[domain.startIndex..<dot])
     }
 
     private static func nonBrand() -> StaticMatch {

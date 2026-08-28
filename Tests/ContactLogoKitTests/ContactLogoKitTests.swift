@@ -395,9 +395,21 @@ final class StaticMatchTests: XCTestCase {
     }
 
     func testWorkEmailMayReachHigh() {
+        // R10.1b — the domain names the business, so it is evidence, not a guess.
         let match = pipeline.staticMatch(contact("Bluebonnet Dental", emails: ["office@bluebonnetdental.com"]))
         XCTAssertEqual(match.via, .email)
         XCTAssertEqual(match.maxConfidence, .high)
+    }
+
+    func testUnrelatedWorkEmailDomainStaysInReview() {
+        // R10.1b — "Jay's Receipts" shares no token with "mycustomdomain", so the
+        // email identifies the contact without pre-checking a logo for it.  A
+        // needless review costs one click; a wrong logo written into an address
+        // book costs trust.
+        let match = pipeline.staticMatch(contact("Jay's Receipts", emails: ["receipts@mycustomdomain.com"]))
+        XCTAssertEqual(match.via, .email)
+        XCTAssertEqual(match.maxConfidence, .medium)
+        XCTAssertTrue(match.flags.contains("email-domain-unrelated"))
     }
 }
 

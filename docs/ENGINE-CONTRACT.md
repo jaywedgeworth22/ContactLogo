@@ -532,15 +532,30 @@ Two readings of "domain agrees" are deliberately kept apart:
 - **R11.3's promotion uses resolved evidence** (`via != guess`), matching §6's
   "Catalog **or** contact-owned domain + square asset may also promote to HIGH".
 
-`via == email` is capped at `medium` (R10.1b).  An earlier draft of this contract
-removed the cap on the grounds that §2b ranks a work email second only to a
-website.  That was reversed: a work email domain identifies the contact but is
-routinely not the brand's own domain — subsidiaries, regional domains, resellers
-and consultants on a client domain all resolve to something the display name
-never names — and VISION.md's first principle is that a wrong logo is worse than
-none.  The Swift kit currently treats email as domain agreement and so may reach
-high; that engine is the one to TIGHTEN to this rule, not the reverse.  The
-committed test `email and guessed domains stay in review` asserts the cap.
+R10.1b — `via == email` is capped at `medium` **when the email's registrable
+domain shares no token with the query** (flag `email-domain-unrelated`).
+
+This went through two drafts.  The first let email reach high unconditionally,
+because §2b ranks a work email second only to a website.  The second capped email
+unconditionally, because a work email domain is routinely not the brand's own —
+subsidiaries, regional domains, resellers and consultants on a client domain all
+resolve to something the display name never names.  Both were wrong: the risk is
+not *email*, it is an email domain unrelated to the name on the card.
+
+Gating on relatedness separates them, and the corpus shows it doing so:
+
+| Card | Email domain | Tier |
+| --- | --- | --- |
+| Bluebonnet Dental | bluebonnetdental.com | `high` |
+| Mercury | mercury.com | `high` |
+| IBC Bank | ibc.com | `high` |
+| UT Austin Registrar | utexas.edu | `medium` — acronym, not machine-evident |
+| Jay's Receipts | mycustomdomain.com | `medium` |
+
+The last row is the committed test `email and guessed domains stay in review`.
+Errors here are asymmetric: a needless review costs one click, a wrong logo
+written into an address book costs trust, so an unrelated domain identifies but
+never pre-checks.  All three engines implement the gate.
 
 ---
 

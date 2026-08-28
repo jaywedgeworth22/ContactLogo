@@ -200,10 +200,10 @@ test("R10 the static ceiling caps what evidence cannot support", () => {
   const at = (flags: string[], via: "website" | "email" | "catalog" | "phone" | "guess") =>
     staticCeiling({ contactClass: "businessCard", via, flags });
   assert.equal(at([], "website"), "high");
-  // R10.1b — email identifies but does not pre-check.  A work email domain is
-  // routinely not the brand's (subsidiaries, resellers, consultants on a client
-  // domain), and a wrong logo is worse than none.
-  assert.equal(at([], "email"), "medium");
+  // R10.1b — an email domain that names the business may reach high; one that
+  // does not is capped, whatever the source quality.
+  assert.equal(at([], "email"), "high");
+  assert.equal(at(["email-domain-unrelated"], "email"), "medium");
   assert.equal(at(["replace-existing"], "email"), "medium");
   assert.equal(at([], "guess"), "medium");
   assert.equal(at(["homonym-risk"], "catalog"), "medium"); // name-derived cannot resolve a homonym
