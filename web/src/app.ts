@@ -360,6 +360,49 @@ function downloadBackup() {
   downloadText(backupFilename(), contactsToVcard(state.contacts), "text/vcard;charset=utf-8");
 }
 
+/**
+ * CL-11 — embed the logos for an export and report the ones that could not be
+ * embedded.  `embedSrc` falls back to returning the remote URL, and
+ * `contactToVcard` serializes only `data:image/...` photos, so a failure here
+ * silently drops the logo from the file.  The callback existed for this and was
+ * wired into the tests but not into either download path, so the export still
+ * announced an unqualified success.
+ *
+ * The contact is still exported — its other fields are fine and a missing logo
+ * is not a reason to withhold them — but its name comes back so the notice can
+ * say what did not make it.
+ */
+async function embedLogosForExport(
+  contacts: BookContact[],
+  shouldEmbed: (contact: BookContact) => boolean,
+): Promise<string[]> {
+  const skipped: string[] = [];
+  for (const contact of contacts) {
+    if (!contact.photoDataUrl || !shouldEmbed(contact)) continue;
+    let failure: string | undefined;
+    const embedded = await embedSrc(contact.photoDataUrl, (reason, detail) => {
+      failure = detail ? `${reason}: ${detail}` : reason;
+    });
+    if (failure !== undefined) {
+      skipped.push(contact.displayName);
+      reportClientError(new Error(`logo embed failed (${failure})`), {
+        operation: "export-embed-logo",
+      });
+      continue;
+    }
+    contact.photoDataUrl = await padAndSquareImage(embedded);
+  }
+  return skipped;
+}
+
+/** The tail of an export notice naming the logos that did not make it. */
+export function skippedNotice(skipped: string[]): string {
+  if (skipped.length === 0) return "";
+  const shown = skipped.slice(0, 3).join(", ");
+  const rest = skipped.length > 3 ? ` and ${skipped.length - 3} more` : "";
+  return ` ${skipped.length} logo${skipped.length === 1 ? "" : "s"} could not be embedded and ${skipped.length === 1 ? "is" : "are"} missing from the file: ${shown}${rest}.`;
+}
+
 async function downloadApproved() {
   const count = selectedCount();
   if (count === 0) {
@@ -370,14 +413,9 @@ async function downloadApproved() {
   state.notice = `Embedding and formatting ${count} approved logo${count === 1 ? "" : "s"}…`;
   render();
   const updated = applySelected(true);
-  for (const contact of updated) {
-    if (contact.photoDataUrl) {
-      const embedded = await embedSrc(contact.photoDataUrl);
-      contact.photoDataUrl = await padAndSquareImage(embedded);
-    }
-  }
+  const skipped = await embedLogosForExport(updated, () => true);
   downloadText("contactlogo-approved-updates.vcf", contactsToVcard(updated), "text/vcard;charset=utf-8");
-  state.notice = `Downloaded ${updated.length} updated contact${updated.length === 1 ? "" : "s"}. Import this file into Contacts to safely update only these cards.`;
+  state.notice = `Downloaded ${updated.length} updated contact${updated.length === 1 ? "" : "s"}. Import this file into Contacts to safely update only these cards.${skippedNotice(skipped)}`;
   render();
 }
 
@@ -385,14 +423,10 @@ async function downloadFull() {
   state.notice = "Embedding approved logos into full address book…";
   render();
   const updated = applySelected(false);
-  for (const contact of updated) {
-    if (contact.photoDataUrl && state.items.some((i) => i.selected && i.contact.id === contact.id)) {
-      const embedded = await embedSrc(contact.photoDataUrl);
-      contact.photoDataUrl = await padAndSquareImage(embedded);
-    }
-  }
+  const skipped = await embedLogosForExport(updated, (contact) =>
+    state.items.some((i) => i.selected && i.contact.id === contact.id));
   downloadText("contactlogo-full-addressbook.vcf", contactsToVcard(updated), "text/vcard;charset=utf-8");
-  state.notice = `Downloaded full address book (${updated.length} contacts).`;
+  state.notice = `Downloaded full address book (${updated.length} contacts).${skippedNotice(skipped)}`;
   render();
 }
 
@@ -1005,12 +1039,48 @@ function buildCard(item: ReviewItem): CardView {
   return { node, update };
 }
 
+/**
+ * CL-09 — bound the card-view cache instead of letting it grow to the whole
+ * address book.
+ *
+ * `cardViews` only ever grew: a card built once was kept for the life of the
+ * session with its article, listeners, thumbnail and every alternate-image
+ * element, so scrolling a long queue walked memory and loaded-image count toward
+ * the full contact count — the scale problem the virtualizer exists to avoid.
+ *
+ * A cap rather than "evict everything not mounted", because reuse is the other
+ * half of CL-09: re-rendering must not rebuild visible cards and re-request
+ * their logos. Strict eviction breaks that whenever the mounted window comes
+ * back empty — a zero-height viewport during first layout, a hidden grid, a
+ * filter that matches nothing — by clearing the cache on every paint. Mounted
+ * views are never evicted; beyond them the least-recently-used go first, which
+ * `cardFor` maintains by re-inserting on a hit.
+ */
+export function trimViewCache<K, V>(cache: Map<K, V>, mounted: readonly K[], cap: number): number {
+  const live = new Set(mounted);
+  let evicted = 0;
+  for (const key of [...cache.keys()]) {
+    if (cache.size <= cap) break;
+    if (live.has(key)) continue;
+    cache.delete(key);
+    evicted += 1;
+  }
+  return evicted;
+}
+
+/** Enough to survive a degenerate measurement without holding a whole book. */
+const MIN_CACHED_VIEWS = 60;
+
 function cardFor(item: ReviewItem): HTMLElement {
   let view = cardViews.get(item);
   if (!view) {
     view = buildCard(item);
-    cardViews.set(item, view);
+  } else {
+    // Re-insert so Map order is least-recently-used first, which is what
+    // `trimViewCache` evicts by.
+    cardViews.delete(item);
   }
+  cardViews.set(item, view);
   view.update();
   return view.node;
 }
@@ -1082,8 +1152,10 @@ function buildSection(title: string, key: SectionKey): SectionView {
 
     const slice = visibleSlice(items.length, columns, rowHeight, viewport.scrollTop, height, OVERSCAN_ROWS);
     grid.style.transform = `translateY(${slice.offsetY}px)`;
-    const mounted = items.slice(slice.start, slice.end).map(cardFor);
+    const mountedItems = items.slice(slice.start, slice.end);
+    const mounted = mountedItems.map(cardFor);
     if (!sameChildren(grid, mounted)) grid.replaceChildren(...mounted);
+    trimViewCache(cardViews, mountedItems, Math.max(MIN_CACHED_VIEWS, mountedItems.length * 3));
 
     if (!remeasuring && measureRowHeight(grid)) {
       remeasuring = true;

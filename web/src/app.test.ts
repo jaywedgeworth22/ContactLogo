@@ -14,7 +14,9 @@ import {
   itemMatchesQuery,
   metaLine,
   partitionSections,
+  trimViewCache,
   removeCandidate,
+  skippedNotice,
   visibleSlice,
 } from "./app.ts";
 
@@ -186,4 +188,47 @@ test("virtualization degrades safely at the edges", () => {
   const single = visibleSlice(2, 0, 0, -50, -10, 0);
   assert.equal(single.start, 0);
   assert.equal(single.end, 1);
+});
+
+/**
+ * CL-11 — the export notice must not claim an unqualified success when a logo
+ * could not be embedded.  `embedSrc` falls back to the remote URL and
+ * `contactToVcard` writes only `data:` photos, so the logo is silently absent
+ * from the downloaded file.
+ */
+test("skippedNotice names the logos missing from an export", () => {
+  assert.equal(skippedNotice([]), "");
+  assert.match(skippedNotice(["Acme"]), /1 logo could not be embedded and is missing from the file: Acme\./);
+  assert.match(skippedNotice(["A", "B"]), /2 logos .* are missing from the file: A, B\./);
+  // Long lists are truncated so one bad network run cannot produce an
+  // unreadable notice, but the count stays honest.
+  const many = ["A", "B", "C", "D", "E"];
+  assert.match(skippedNotice(many), /5 logos/);
+  assert.match(skippedNotice(many), /A, B, C and 2 more\./);
+});
+
+/**
+ * CL-09 — the view cache has to shrink as well as grow, or scrolling a long
+ * queue retains every card and its images.  It must not shrink so eagerly that
+ * it stops reusing visible cards, which is the same finding's other half.
+ */
+test("trimViewCache bounds the cache without evicting mounted views", () => {
+  const keys = Array.from({ length: 10 }, (_, i) => ({ i }));
+  const cache = new Map(keys.map((k) => [k, `v${k.i}`] as const));
+
+  // Under the cap: nothing is touched, so a re-render reuses every card.
+  assert.equal(trimViewCache(cache, keys.slice(0, 3), 20), 0);
+  assert.equal(cache.size, 10);
+
+  // Over the cap: least-recently-used first, mounted views exempt.
+  const mounted = [keys[0], keys[1]];
+  assert.equal(trimViewCache(cache, mounted, 4), 6);
+  assert.equal(cache.size, 4);
+  assert.ok(cache.has(keys[0]) && cache.has(keys[1]), "a mounted view was evicted");
+
+  // An empty window — a zero-height viewport, or a filter matching nothing —
+  // must not clear the cache, or every paint rebuilds every card.
+  const before = cache.size;
+  assert.equal(trimViewCache(cache, [], before + 5), 0);
+  assert.equal(cache.size, before);
 });

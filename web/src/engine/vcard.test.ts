@@ -291,3 +291,56 @@ test("synthesized cards still round-trip org and photo", () => {
   assert.equal(parsed[0]?.organization, "FedEx");
   assert.equal(parsed[0]?.hadExistingPhoto, true);
 });
+
+/**
+ * vCard 2.1 QUOTED-PRINTABLE soft line breaks (§2.1.3).  A continuation has no
+ * leading whitespace and no property colon, so it looked like a malformed line
+ * and was dropped: "Download backup" truncated the property and left the `=`
+ * behind, which is malformed QP as well as lost data — the CL-01 failure mode
+ * in a shape the original fix did not cover.
+ */
+const qpCard = (...body: string[]) =>
+  ["BEGIN:VCARD", "VERSION:2.1", "FN:X", ...body, "END:VCARD"].join("\r\n") + "\r\n";
+
+test("a quoted-printable soft line break round-trips", () => {
+  const out = contactsToVcard(parseVcard(qpCard(
+    "NOTE;ENCODING=QUOTED-PRINTABLE:First half=",
+    "and the second half",
+  )));
+  assert.match(out, /First halfand the second half/);
+  // Emitted whole: RFC 6350 whitespace folding is not how 2.1 continues a QP
+  // value, so folding it would splice spaces into the content.
+  assert.ok(!/\r\n[ \t]/.test(out), "a QP value must not be whitespace-folded");
+});
+
+test("consecutive soft line breaks all join", () => {
+  const out = contactsToVcard(parseVcard(qpCard(
+    "NOTE;ENCODING=QUOTED-PRINTABLE:one=", "two=", "three",
+  )));
+  assert.match(out, /onetwothree/);
+});
+
+test("a leading space in a quoted-printable continuation is content, not a fold", () => {
+  const out = contactsToVcard(parseVcard(qpCard("NOTE;ENCODING=QUOTED-PRINTABLE:a=", " b")));
+  assert.match(out, /a b/);
+});
+
+test("base64 padding is not mistaken for a soft line break", () => {
+  // The reason the join is gated on ENCODING=QUOTED-PRINTABLE rather than on a
+  // trailing "=": base64 padding ends with one, and joining on the character
+  // alone splices the next property into the photo.
+  const out = contactsToVcard(parseVcard(qpCard(
+    "PHOTO;ENCODING=BASE64:iVBORw0KGgoAAAANSUhEUg==",
+    "TEL:+15125550100",
+  )));
+  assert.match(out, /\+15125550100/);
+  assert.match(out, /iVBORw0KGgoAAAANSUhEUg==/);
+});
+
+test("a dangling = before END:VCARD does not swallow the card boundary", () => {
+  // Exactly what the old truncating export produced, so the parser has to
+  // survive reading its own bad output.
+  const out = contactsToVcard(parseVcard(qpCard("NOTE;ENCODING=QUOTED-PRINTABLE:dangling=")));
+  assert.match(out, /END:VCARD/);
+  assert.equal(out.split("BEGIN:VCARD").length, 2);
+});

@@ -76,15 +76,47 @@ function splitComponents(value: string): string[] {
   return parts;
 }
 
+/**
+ * vCard 2.1 §2.1.3 — a QUOTED-PRINTABLE value continues on the next *physical*
+ * line when the current one ends in a bare `=`, with no leading whitespace and
+ * no property colon.  Such a line therefore has no prefix, `splitLine` rejects
+ * it, and the parse loop dropped it: "Download backup" truncated the property
+ * and left the `=` behind, exporting malformed QP as well as losing data.
+ *
+ * Gated on the property actually declaring QUOTED-PRINTABLE.  A bare trailing
+ * `=` is not rare — base64 padding ends with one — so joining on the character
+ * alone would splice the line after a PHOTO into the photo itself.
+ */
+// Matches a full property line ("NOTE;ENCODING=QUOTED-PRINTABLE:...") and a
+// bare prefix ("NOTE;ENCODING=QUOTED-PRINTABLE"), which is what the serializer
+// has in hand.
+const QUOTED_PRINTABLE = /(^|;)ENCODING=QUOTED-PRINTABLE(;|:|$)/i;
+const CARD_BOUNDARY = /^(BEGIN|END):VCARD$/i;
+
 function unfold(text: string): string[] {
   const raw = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
   const lines: string[] = [];
   for (const line of raw) {
+    const prev = lines.length ? lines[lines.length - 1] : undefined;
+
+    // Checked before RFC 6350 folding: in QUOTED-PRINTABLE a leading space is
+    // content, so the continuation is taken whole rather than losing a space to
+    // the unfold.  The boundary guard stops a card whose last QP line ends in a
+    // stray `=` — which is exactly what the old export produced — from
+    // swallowing its own END:VCARD.
+    if (prev !== undefined && prev.endsWith("=") && QUOTED_PRINTABLE.test(prev)
+        && !CARD_BOUNDARY.test(line.trim())) {
+      lines[lines.length - 1] = prev.slice(0, -1) + line;
+      continue;
+    }
+
+    // RFC 6350 §3.2 folding.
     if ((line.startsWith(" ") || line.startsWith("\t")) && lines.length) {
       lines[lines.length - 1] += line.slice(1);
-    } else {
-      lines.push(line);
+      continue;
     }
+
+    lines.push(line);
   }
   return lines;
 }
@@ -430,7 +462,14 @@ export function contactToVcard(contact: VcardContact): string {
   const properties = record ? rewriteProperties(record, contact) : synthesizeProperties(contact);
   const lines = ["BEGIN:VCARD"];
   if (!properties.some((p) => p.name === "VERSION")) lines.push(`VERSION:${record?.version ?? "3.0"}`);
-  for (const p of properties) lines.push(foldLine(`${p.prefix}:${p.value}`));
+  for (const p of properties) {
+    const line = `${p.prefix}:${p.value}`;
+    // A rejoined QUOTED-PRINTABLE value is long by construction — being long is
+    // why it was soft-broken.  RFC 6350 whitespace folding is not how vCard 2.1
+    // continues a QP value, so folding here would hand a 2.1 consumer a value
+    // with spaces spliced into it.  Emit it whole.
+    lines.push(QUOTED_PRINTABLE.test(p.prefix) ? line : foldLine(line));
+  }
   lines.push("END:VCARD");
   return lines.join("\r\n") + "\r\n";
 }
