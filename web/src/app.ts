@@ -391,7 +391,24 @@ async function embedLogosForExport(
       });
       continue;
     }
-    contact.photoDataUrl = await padAndSquareImage(embedded);
+    // Padding fails the same silent way embedding did: `padAndSquareImage`
+    // resolves to the *unpadded* source on `decode-failed` or `canvas-tainted`.
+    // Bytes that a 200 delivered but no decoder accepts get that far, so without
+    // the collector the export writes an unpadded — possibly corrupt — PHOTO and
+    // the notice still reports an unqualified success.
+    const padded = await padAndSquareImage(embedded, {
+      onFallback: (reason, detail) => {
+        failure = detail ? `${reason}: ${detail}` : reason;
+      },
+    });
+    if (failure !== undefined) {
+      skipped.push(contact.displayName);
+      reportClientError(new Error(`logo padding failed (${failure})`), {
+        operation: "export-pad-logo",
+      });
+      continue; // leave the candidate URL in place; the writer refuses to emit it
+    }
+    contact.photoDataUrl = padded;
   }
   return skipped;
 }
@@ -470,7 +487,16 @@ async function syncToGoogleContacts() {
         if (failure !== undefined) {
           throw new Error(`logo could not be embedded (${failure})`);
         }
-        const squared = await padAndSquareImage(embedded);
+        // Same for padding: a fallback here would push unpadded, undecodable
+        // bytes into someone's real address book and count it as a success.
+        const squared = await padAndSquareImage(embedded, {
+          onFallback: (reason, detail) => {
+            failure = detail ? `${reason}: ${detail}` : reason;
+          },
+        });
+        if (failure !== undefined) {
+          throw new Error(`logo could not be prepared (${failure})`);
+        }
         await updateGoogleContactPhoto(item.contact.googleResourceName, squared, token);
         item.contact.hadExistingPhoto = true;
         done += 1;
@@ -588,13 +614,24 @@ async function applyCrop() {
   if (!cropState.item || !cropState.imgSrc) return;
   const item = cropState.item;
   try {
+    // `crop` is a high-tier source, so the result of this call goes in at index
+    // 0, pre-checked, labelled as a crop the user made.  Without the collector a
+    // failed render resolves to the *uncropped* original and gets all of that
+    // anyway — the one outcome a review-first app must not produce.
+    let failure: string | undefined;
     const croppedSrc = await padAndSquareImage(cropState.imgSrc, {
       zoom: cropState.zoom,
       panX: cropState.panX,
       panY: cropState.panY,
       addBadgeForDarkAlpha: cropState.addBadge,
       backgroundColor: cropState.bgColor,
+      onFallback: (reason, detail) => {
+        failure = detail ? `${reason}: ${detail}` : reason;
+      },
     });
+    if (failure !== undefined) {
+      throw new Error(`crop could not be rendered (${failure})`);
+    }
     item.candidates = [{ src: croppedSrc, source: "crop", kind: "icon" }, ...item.candidates];
     item.chosenIndex = 0;
     item.selected = true;
@@ -605,6 +642,7 @@ async function applyCrop() {
   } catch (err) {
     reportClientError(err, { operation: "apply-crop" });
     cropState.item = null;
+    state.notice = `Could not render the crop for ${item.contact.displayName}. The contact is unchanged.`;
     render();
   }
 }

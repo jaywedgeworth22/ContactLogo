@@ -676,6 +676,36 @@ may be silent.
   though the search were complete; those contacts belong in a retryable state,
   not in "not found".
 
+**R11.7 Apply-time image preparation**
+
+Every engine writes the same picture. A mark is drawn, aspect ratio preserved,
+centred on a transparent **512x512** canvas inside a content box inset by
+**15% of the canvas on each edge** — Contacts crops photos to a circle, and a
+mark that reaches the edge loses its corners. `ImagePreparer.paddingFraction`
+(Swift), `padAndSquareImage`'s `paddingFraction` default (web) and
+`PhotoGeometry.PADDING_FRACTION` (Kotlin) are the same number and move together.
+
+Scaling against the full canvas is **not** an implementation detail: it is a
+no-op for a square source, and every Simple Icons mark is square, so an engine
+that forgets the inset writes an edge-to-edge photo while its own preview looks
+correct. Kotlin did exactly that until 2026-08-28.
+
+Preparation is also the last place a bad asset can be caught, so it must not
+fail quietly. A step that cannot decode, cannot render, or cannot read the
+canvas back MUST report that to its caller; a caller that writes the result
+somewhere the user can see — a downloaded vCard, a Contacts record, a Google
+sync, a candidate added to the review list — MUST treat the failure as a
+failure. Falling back to the unprepared source is how an unpadded or corrupt
+photo ships under a success notice. Swift's `squarePNG` throws, which is the
+model; web's `embedSrc` and `padAndSquareImage` resolve to their input and
+report only through `onFallback`, so every call site has to pass one.
+
+*Open divergence:* Swift and Kotlin scale a small mark **up** to fill the
+content box; web caps `baseScale` at `1.0` and leaves it small. Neither is
+obviously right — an upscaled 64px favicon is blurry, a centred one is tiny —
+and it is a product call, not a bug, so it is recorded here rather than
+silently resolved.
+
 ---
 
 ## R12. Flags
@@ -811,6 +841,10 @@ Each line is a contract violation in shipping code, with the audit id.
 | all three | fallback-tile detection is `data.count < 80` | R11.5 (CL-18) |
 | Swift | `BrandfetchSource` 429 is swallowed by `try?`; no backoff anywhere | R11.6 (CL-17) |
 | Swift | raw source bytes written to Contacts; no rasterize/pad | R11.4 (CL-06) |
+| Swift | root `<svg fill=...>` not inherited, so every bare Simple Icons glyph rasterized black while its preview showed the brand colour | R11.4 — fixed 2026-08-28 |
+| Kotlin | `square()` scaled against the full canvas, so a square mark reached all four edges and Contacts clipped its corners | R11.7 — fixed 2026-08-28 |
+| TypeScript | `padAndSquareImage` called without `onFallback` on the export, Google-sync and manual-crop paths; a failed render shipped the unprepared source as a success | R11.7 — fixed 2026-08-28 |
+| Swift, Kotlin vs TypeScript | a source smaller than the content box is upscaled by Swift and Kotlin, left small by web | R11.7 — open, product call |
 | Swift, TypeScript | legal-suffix regex has no leading separator, so `Costco` → `cost`, `Cisco` → `cis`, `Medico` → `medi`, `TRICO` → `tri` | R5.2 (new — found while writing the corpus) |
 | Kotlin | legal-suffix regex is unanchored, so it strips `Co`/`Group`/`Services` mid-string, not only as a trailing token | R5.2 |
 

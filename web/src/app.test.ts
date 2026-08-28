@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { BookContact } from "./engine/classify.ts";
 import type { LogoHit } from "./engine/logos.ts";
 import type { ReviewItem } from "./engine/match.ts";
@@ -231,4 +234,41 @@ test("trimViewCache bounds the cache without evicting mounted views", () => {
   const before = cache.size;
   assert.equal(trimViewCache(cache, [], before + 5), 0);
   assert.equal(cache.size, before);
+});
+
+/**
+ * Both silent-fallback helpers in `logos.ts` resolve to their *input* when they
+ * give up — `embedSrc` to the remote URL, `padAndSquareImage` to the unpadded
+ * source — and report why only if handed a callback.  Every call that then
+ * writes the result somewhere the user can see (a downloaded vCard, someone's
+ * Google Contacts) therefore has to pass one; a call that forgets looks
+ * completely healthy and ships a corrupt or unpadded PHOTO under a success
+ * notice.  Two of these three call sites shipped without a callback, at
+ * different times, so this is a wiring assertion rather than a style rule.
+ *
+ * The behavioural path is unreachable from Node: `padAndSquareImage` returns
+ * early when there is no `document`, so no stub short of a canvas would drive
+ * `onFallback`.  Scanning the source is what is left, in the same spirit as
+ * `csp.test.ts`.
+ */
+test("every export and sync path collects embed and padding failures", () => {
+  const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "app.ts"), "utf8");
+  const calls = [...source.matchAll(/\b(embedSrc|padAndSquareImage)\s*\(/g)];
+  assert.ok(calls.length >= 4, `expected the export and sync call sites, found ${calls.length}`);
+  for (const call of calls) {
+    // The argument list runs to the matching close paren; nested parens in the
+    // callback body mean a naive `indexOf(")")` would stop far too early.
+    let depth = 1;
+    let i = call.index! + call[0].length;
+    for (; i < source.length && depth > 0; i += 1) {
+      if (source[i] === "(") depth += 1;
+      else if (source[i] === ")") depth -= 1;
+    }
+    const args = source.slice(call.index! + call[0].length, i - 1);
+    const line = source.slice(0, call.index).split("\n").length;
+    assert.ok(
+      /onFallback|\(reason,\s*detail\)/.test(args),
+      `${call[1]} at app.ts:${line} drops its failure reason on the floor`,
+    );
+  }
 });

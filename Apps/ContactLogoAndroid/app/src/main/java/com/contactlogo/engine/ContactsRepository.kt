@@ -33,7 +33,7 @@ class ContactsRepository(private val context: Context) {
     private companion object {
         /** Contacts renders small; 512 matches the Swift kit and stays under the
          *  ~1 MB the provider will accept for a full-size photo. */
-        const val PHOTO_PX = 512
+        const val PHOTO_PX = PhotoGeometry.SIZE_PX
     }
 
     suspend fun loadContacts(): List<ContactIdentity> = withContext(Dispatchers.IO) {
@@ -276,23 +276,22 @@ class ContactsRepository(private val context: Context) {
         }
     }
 
-    /** Pads to a centred PHOTO_PX square, matching the Swift kit's apply path. */
+    /**
+     * Pads to a centred PHOTO_PX square inside the 15% safe margin the Swift kit
+     * and the web canvas both use (ENGINE-CONTRACT R11.7).
+     *
+     * The margin is the whole point, and it was missing: scaling against the
+     * full canvas is a no-op for a square source, and every Simple Icons mark is
+     * square, so the applied photo reached all four edges and Contacts' circular
+     * crop cut its corners off.  The preview, drawn by Compose, was inset and
+     * looked correct.
+     */
     private fun square(source: Bitmap): ByteArray? {
         return try {
-            val scale = minOf(
-                PHOTO_PX.toFloat() / source.width,
-                PHOTO_PX.toFloat() / source.height
-            )
-            val w = maxOf(1, (source.width * scale).toInt())
-            val h = maxOf(1, (source.height * scale).toInt())
+            val at = PhotoGeometry.place(source.width, source.height, PHOTO_PX) ?: return null
             val canvasBitmap = Bitmap.createBitmap(PHOTO_PX, PHOTO_PX, Bitmap.Config.ARGB_8888)
-            val scaled = Bitmap.createScaledBitmap(source, w, h, true)
-            Canvas(canvasBitmap).drawBitmap(
-                scaled,
-                ((PHOTO_PX - w) / 2).toFloat(),
-                ((PHOTO_PX - h) / 2).toFloat(),
-                null
-            )
+            val scaled = Bitmap.createScaledBitmap(source, at.width, at.height, true)
+            Canvas(canvasBitmap).drawBitmap(scaled, at.left.toFloat(), at.top.toFloat(), null)
             ByteArrayOutputStream().use { out ->
                 canvasBitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
                 out.toByteArray()
