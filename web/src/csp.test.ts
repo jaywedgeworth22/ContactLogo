@@ -58,28 +58,41 @@ test("every logo source the engine can reach is allowed by img-src and connect-s
       `img-src is missing ${origin} — the review list would show a broken thumbnail`,
     );
     assert.ok(
-      // `https:` covers it too; see the paste-URL test below.
-      connect.includes(origin) || connect.includes("https:"),
+      connect.includes(origin),
       `connect-src is missing ${origin} — embedSrc() fetches it, so export would fail`,
     );
   }
 });
 
-test("connect-src permits the arbitrary hosts the Paste URL action needs", () => {
-  const connect = directives().get("connect-src") ?? [];
-  // `composeFromUrl` fetches whatever HTTPS URL the user pastes into a card.
-  // No host allowlist can express "any host the user names", so this needs the
-  // `https:` scheme source.  Removing it silently breaks that action in
-  // production only — it works locally, where no CSP is applied.
+/**
+ * "Paste URL" takes whatever HTTPS host the user names, and no allowlist can
+ * express that.  The first fix was `connect-src ... https:`, which works and is
+ * a real loosening: connect-src stops being an exfiltration barrier for an app
+ * holding the whole address book in memory.  `composeFromUrl` now loads through
+ * `<img>` and a canvas instead, which needs only `img-src https:` — an image
+ * can leak a URL but cannot read a response.
+ *
+ * Verified in a browser under exactly this shape of policy (`img-src 'self'
+ * data: blob: https:`, `connect-src 'self'` and nothing else): the image loads,
+ * the canvas reads back and encodes, and `fetch` to the same URL is refused.
+ * These two assertions are what keep that trade in place — put `https:` back on
+ * connect-src and the app still works, so nothing else would notice.
+ */
+test("the Paste URL action is carried by img-src, not connect-src", () => {
+  const csp = directives();
   assert.ok(
-    connect.includes("https:"),
-    "connect-src must allow https: or the per-card Paste URL action fails in production",
+    (csp.get("img-src") ?? []).includes("https:"),
+    "img-src must allow https: or the per-card Paste URL action fails in production",
+  );
+  assert.ok(
+    !(csp.get("connect-src") ?? []).includes("https:"),
+    "connect-src must not carry https: — composeFromUrl no longer fetches, so nothing needs it",
   );
 });
 
 test("the directives that keep the CSP worth having are still strict", () => {
   const csp = directives();
-  // connect-src is deliberately wide (above), so these carry the weight.
+  // img-src is deliberately wide (above), so these carry the weight.
   assert.deepEqual(csp.get("default-src"), ["'none'"]);
   assert.deepEqual(csp.get("object-src"), ["'none'"]);
   assert.deepEqual(csp.get("base-uri"), ["'none'"]);

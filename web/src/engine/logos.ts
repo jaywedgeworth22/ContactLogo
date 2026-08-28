@@ -349,7 +349,16 @@ function loadImageElement(src: string): Promise<HTMLImageElement> {
 
 async function pixelFallbackTileTest(blob: Blob): Promise<FallbackTileVerdict> {
   const dataUrl = await readAsDataUrl(blob);
-  const img = await loadImageElement(dataUrl);
+  return fallbackTileFromImage(await loadImageElement(dataUrl));
+}
+
+/**
+ * R11.5 step 3 on an image that is already decoded.  `composeFromUrl` loads the
+ * pasted URL through `<img>` rather than `fetch` (#34) and so never holds a
+ * Blob; splitting the test here lets both callers share one implementation
+ * instead of the paste path growing a second, drifting copy.
+ */
+function fallbackTileFromImage(img: HTMLImageElement): FallbackTileVerdict {
   const w = Math.max(1, Math.min(64, img.naturalWidth || img.width || 64));
   const h = Math.max(1, Math.min(64, img.naturalHeight || img.height || 64));
   const canvas = document.createElement("canvas");
@@ -472,27 +481,88 @@ export async function composeFromFile(file: File): Promise<string> {
   return readAsDataUrl(file);
 }
 
+/** Largest canvas a pasted image is rasterized into; the old cap was 3 MB of bytes. */
+const PASTE_MAX_EDGE = 2048;
+/** Below this a mark is a favicon, not a logo — the floor `isTooSmall` already uses. */
+const PASTE_MIN_EDGE = 48;
+
+/**
+ * Load a pasted logo URL through `<img>` and a canvas rather than `fetch`.
+ *
+ * The point is the Content-Security-Policy (#34).  `fetch` against a host the
+ * user names cannot be expressed as an allowlist, so the policy had to carry
+ * `connect-src ... https:` — which stops connect-src being an exfiltration
+ * barrier for an app that holds the whole address book in memory.  An image
+ * needs only `img-src https:`, and an image can leak a URL but cannot read a
+ * response, so it is strictly the weaker capability.  Verified in a browser
+ * under `img-src 'self' data: blob: https:` with `connect-src 'self'` and
+ * nothing else: the image path loads, reads back and encodes; `fetch` to the
+ * same URL is refused by the policy.
+ *
+ * The same set of hosts works as before.  `crossOrigin = "anonymous"` means a
+ * host with no `Access-Control-Allow-Origin` fails at load rather than tainting
+ * the canvas, which is the same set `fetch(mode: "cors")` already rejected —
+ * only the wording of the failure changes.
+ *
+ * Two things genuinely change, both stated rather than smoothed over:
+ *
+ * - **No byte floor.** R11.5 step 2 needs the payload size, and an `<img>` never
+ *   exposes it.  Step 3's pixel test still runs and is the stronger check, and
+ *   the dimension floor below catches the case the byte floor was really for.
+ * - **An SVG comes back as PNG**, because a canvas has no other output.  It is
+ *   drawn at its natural size and never upscaled, so this is not a visible
+ *   change: `padAndSquareImage` caps `baseScale` at 1.0, so a pasted SVG was
+ *   already composited at the size the browser gave it.
+ */
 export async function composeFromUrl(raw: string): Promise<string> {
   const trimmed = raw.trim();
   if (!/^https?:\/\//i.test(trimmed)) throw new Error("Paste an http(s) image URL");
-  let res: Response;
+  if (typeof document === "undefined" || typeof Image === "undefined") {
+    throw new Error("Pasting an image URL needs a browser");
+  }
+
+  let img: HTMLImageElement;
   try {
-    res = await fetch(trimmed, { mode: "cors" });
-  } catch (err) {
-    const detail = err instanceof Error ? err.message : String(err);
-    throw new Error(`Could not reach that URL (network error or the host blocks cross-origin requests): ${detail}`);
+    img = await loadImageElement(trimmed);
+  } catch {
+    throw new Error(
+      "Could not load that URL as an image — it may not be an image, the host may be unreachable, or the host may not allow cross-origin use.",
+    );
   }
-  if (!res.ok) throw new Error(`Could not fetch that image (HTTP ${res.status})`);
-  const blob = await res.blob();
-  if (!blob.type.startsWith("image/") && blob.type !== "image/svg+xml") {
-    throw new Error("That URL is not an image");
+
+  const naturalW = img.naturalWidth || img.width;
+  const naturalH = img.naturalHeight || img.height;
+  if (!naturalW || !naturalH) throw new Error("That URL is not an image");
+  if (naturalW < PASTE_MIN_EDGE || naturalH < PASTE_MIN_EDGE) {
+    throw new Error(
+      `That image is ${naturalW}x${naturalH} — too small to be a logo. Paste one at least ${PASTE_MIN_EDGE}px on each side.`,
+    );
   }
-  if (blob.size > 3_000_000) throw new Error("Keep images under 3 MB");
-  const tile = await isFallbackTile(blob);
-  if (tile.isTile) {
+
+  // Never upscale: a blown-up favicon is a worse logo than a small one, and the
+  // apply path re-renders from this data URL anyway.
+  const scale = Math.min(1, PASTE_MAX_EDGE / Math.max(naturalW, naturalH));
+  const width = Math.max(1, Math.round(naturalW * scale));
+  const height = Math.max(1, Math.round(naturalH * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("This browser could not render that image");
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(img, 0, 0, width, height);
+
+  if (fallbackTileFromImage(img).isTile) {
     throw new Error("That URL looks like a placeholder tile, not a real logo — try another source.");
   }
-  return readAsDataUrl(blob);
+
+  try {
+    return canvas.toDataURL("image/png");
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(`That host does not allow its images to be reused: ${detail}`);
+  }
 }
 
 /**

@@ -233,23 +233,137 @@ test("CL-11: padAndSquareImage falls back unchanged outside a DOM (documented No
   assert.deepEqual(reasons, []);
 });
 
-test("CL-11: composeFromUrl throws with a specific reason instead of silently degrading", async () => {
+/**
+ * `composeFromUrl` loads through `<img>` and a canvas rather than `fetch` (#34),
+ * so the CSP needs only `img-src https:` instead of `connect-src https:`.  That
+ * means the failures worth pinning are no longer HTTP statuses but image ones:
+ * a URL that will not decode, one too small to be a logo, a provider's
+ * placeholder tile, and a host whose canvas cannot be read back.
+ *
+ * Enough of a DOM to drive the real code path, installed and removed per call —
+ * this file's `padAndSquareImage` test asserts the *absence* of `document`, and
+ * a global stub would quietly turn that into a different test.
+ */
+type StubPixels = { width: number; height: number; fill?: (x: number, y: number) => [number, number, number] };
+
+async function withStubCanvas<T>(
+  image: { width: number; height: number; fails?: boolean } | null,
+  pixels: StubPixels | "tainted",
+  fn: () => Promise<T>,
+): Promise<T> {
+  const g = globalThis as Record<string, unknown>;
+  const hadDoc = "document" in g;
+  const hadImage = "Image" in g;
+  const priorDoc = g.document;
+  const priorImage = g.Image;
+
+  g.Image = class {
+    crossOrigin = "";
+    naturalWidth = image?.width ?? 0;
+    naturalHeight = image?.height ?? 0;
+    width = image?.width ?? 0;
+    height = image?.height ?? 0;
+    onload: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    set src(_value: string) {
+      queueMicrotask(() => (image && !image.fails ? this.onload?.() : this.onerror?.()));
+    }
+  };
+  g.document = {
+    createElement: () => ({
+      width: 0,
+      height: 0,
+      getContext: () => ({
+        imageSmoothingEnabled: false,
+        imageSmoothingQuality: "low",
+        drawImage: () => {},
+        getImageData: (_x: number, _y: number, w: number, h: number) => {
+          if (pixels === "tainted") throw new Error("SecurityError: tainted canvas");
+          const data = new Uint8ClampedArray(w * h * 4);
+          for (let y = 0; y < h; y += 1) {
+            for (let x = 0; x < w; x += 1) {
+              const [r, gr, b] = pixels.fill ? pixels.fill(x, y) : [255, 255, 255];
+              const i = (y * w + x) * 4;
+              data[i] = r;
+              data[i + 1] = gr;
+              data[i + 2] = b;
+              data[i + 3] = 255;
+            }
+          }
+          return { data };
+        },
+      }),
+      toDataURL: () => {
+        if (pixels === "tainted") throw new Error("SecurityError: tainted canvas");
+        return "data:image/png;base64,STUB";
+      },
+    }),
+  };
+
+  try {
+    return await fn();
+  } finally {
+    if (hadDoc) g.document = priorDoc;
+    else delete g.document;
+    if (hadImage) g.Image = priorImage;
+    else delete g.Image;
+  }
+}
+
+/** A provider's letter tile: one small centred glyph on a flat field. */
+const LETTER_TILE: StubPixels = {
+  width: 64,
+  height: 64,
+  fill: (x, y) => (x >= 26 && x < 38 && y >= 26 && y < 38 ? [20, 20, 20] : [230, 120, 90]),
+};
+
+/** A real mark: ink spread wide enough that the tile test rejects it. */
+const REAL_MARK: StubPixels = {
+  width: 64,
+  height: 64,
+  fill: (x, y) => (x >= 6 && x < 58 && y >= 6 && y < 58 ? [10, 40, 200] : [255, 255, 255]),
+};
+
+test("CL-11 / #34: composeFromUrl throws with a specific reason instead of silently degrading", async () => {
+  await assert.rejects(() => composeFromUrl("ftp://logos.example/a.png"), /http\(s\) image URL/);
+
+  await withStubCanvas({ width: 0, height: 0, fails: true }, REAL_MARK, () =>
+    assert.rejects(() => composeFromUrl("https://logos.example/a.png"), /Could not load that URL as an image/),
+  );
+
+  await withStubCanvas({ width: 16, height: 16 }, REAL_MARK, () =>
+    assert.rejects(() => composeFromUrl("https://logos.example/favicon.ico"), /16x16 — too small to be a logo/),
+  );
+
+  await withStubCanvas({ width: 256, height: 256 }, LETTER_TILE, () =>
+    assert.rejects(() => composeFromUrl("https://logos.example/a.png"), /placeholder tile/),
+  );
+
+  await withStubCanvas({ width: 256, height: 256 }, "tainted", () =>
+    assert.rejects(() => composeFromUrl("https://logos.example/a.png"), /does not allow its images to be reused/),
+  );
+});
+
+test("#34: a real pasted mark comes back as a data URL, never as the remote URL", async () => {
+  const out = await withStubCanvas({ width: 256, height: 256 }, REAL_MARK, () =>
+    composeFromUrl("  https://logos.example/mark.svg  "),
+  );
+  assert.ok(out.startsWith("data:image/png;base64,"), `expected a data URL, got ${out.slice(0, 40)}`);
+});
+
+test("#34: composeFromUrl never calls fetch, so connect-src does not have to allow the host", async () => {
+  let fetched = 0;
   await withMockFetch(
     (async () => {
-      throw new TypeError("Failed to fetch");
+      fetched += 1;
+      throw new Error("composeFromUrl must not reach the network through fetch");
     }) as typeof fetch,
-    () => assert.rejects(() => composeFromUrl("https://logos.example/a.png"), /Could not reach that URL/),
+    () =>
+      withStubCanvas({ width: 256, height: 256 }, REAL_MARK, async () => {
+        await composeFromUrl("https://anything.example/mark.png");
+      }),
   );
-
-  await withMockFetch(
-    (async () => new Response("nope", { status: 500 })) as typeof fetch,
-    () => assert.rejects(() => composeFromUrl("https://logos.example/a.png"), /HTTP 500/),
-  );
-
-  await withMockFetch(
-    (async () => new Response(new Uint8Array(200), { status: 200, headers: { "content-type": "image/png" } })) as typeof fetch,
-    () => assert.rejects(() => composeFromUrl("https://logos.example/a.png"), /placeholder tile/),
-  );
+  assert.equal(fetched, 0, "composeFromUrl used fetch — the CSP loosening it was meant to remove is still needed");
 });
 
 // ---------------------------------------------------------------------------
