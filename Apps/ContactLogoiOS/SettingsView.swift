@@ -30,7 +30,7 @@ struct SettingsView: View {
                     Toggle("Skip contacts that already have a photo", isOn: $settings.skipContactsWithExistingPhoto)
                         .onChange(of: settings.skipContactsWithExistingPhoto) { settings.save() }
                 } footer: {
-                    Text("On by default, per MATCHING-ENGINE's photo-protection policy. Turn this off to let ContactLogo replace existing contact photos too.")
+                    Text("Off by default. A business card that already has a photo stays in Needs review, flagged \"replace existing\", and is never applied automatically. Turn this on to leave those cards out of the scan entirely.")
                 }
             }
             .navigationTitle("Settings")

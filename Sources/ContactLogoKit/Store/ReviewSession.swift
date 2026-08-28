@@ -171,11 +171,21 @@ public final class ReviewSession: ObservableObject {
             stage = .matching(done: 0, total: targets.count)
             var out: [MatchResult] = []
             for (i, contact) in targets.enumerated() {
-                if cancelRequested {
+                if cancelRequested || Task.isCancelled {
                     stage = .idle
                     return false
                 }
                 out.append(await pipeline.match(contact))
+                // Re-checked *after* the await, not only before it.  A
+                // BGProcessingTask can expire while this contact is matching —
+                // including the last one, or the only one — and MatchPipeline
+                // absorbs cancellation as source failures and returns normally.
+                // Without this the loop would fall through, publish, and report
+                // success for an expired task, posting "your queue is ready".
+                if cancelRequested || Task.isCancelled {
+                    stage = .idle
+                    return false
+                }
                 stage = .matching(done: i + 1, total: targets.count)
             }
             results = out
