@@ -71,6 +71,27 @@ object CompanyCatalog {
     }
 
     /**
+     * R8.3 — may this tail be dropped, leaving the head brand?
+     *
+     * Two conditions, and both are needed.  Requiring only that *some* word be
+     * tail-ok reduced "Delta Dental Center" to delta.com on the strength of
+     * `center` alone — an airline's logo on a dental practice.  Requiring that
+     * *every* word be tail-ok instead rejected "Walgreens Mason Rd", because a
+     * street name is not on any list and never can be.
+     *
+     * So: something must positively mark the tail as a place or department, and
+     * nothing in it may name a different trade.  An unrecognised word ("mason")
+     * is tolerated as part of an address; an ORG_SIGNAL word ("dental") is not,
+     * since it makes the tail a business of its own.  SUBBRAND_TAIL wins where
+     * the two lists overlap — "pharmacy" and "bakery" are H-E-B departments.
+     */
+    fun isCatalogTailOK(tail: List<String>): Boolean {
+        if (tail.isEmpty()) return false
+        if (tail.none { isTailOkWord(it) }) return false
+        return tail.all { isTailOkWord(it) || !Normalize.isOrgSignalWord(it) }
+    }
+
+    /**
      * R8.3: `DOMAINS[companyKey(raw)]`, else the space-collapsed key, else the
      * longest-head / sub-brand-tail reduction, else null.
      */
@@ -87,7 +108,7 @@ object CompanyCatalog {
             val head = words.subList(0, i).joinToString(" ")
             val tailWords = words.subList(i, words.size)
             val dom = domains[head] ?: domains[head.replace(" ", "")]
-            if (dom != null && tailWords.all { isTailOkWord(it) }) return dom
+            if (dom != null && isCatalogTailOK(tailWords)) return dom
         }
         return null
     }

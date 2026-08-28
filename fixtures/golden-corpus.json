@@ -7,19 +7,19 @@
       "givenName": "string | null",
       "familyName": "string | null",
       "organization": "string | null",
-      "emails": "string[] \u2014 full addresses, in contact order",
-      "websites": "string[] \u2014 raw URL field values, in contact order, any scheme",
-      "phones": "string[] \u2014 raw phone strings, in contact order",
-      "hasImage": "boolean \u2014 the contact already has a photo"
+      "emails": "string[] — full addresses, in contact order",
+      "websites": "string[] — raw URL field values, in contact order, any scheme",
+      "phones": "string[] — raw phone strings, in contact order",
+      "hasImage": "boolean — the contact already has a photo"
     },
     "expect": {
       "class": "person | businessCard | nonBrand",
-      "query": "string | null \u2014 the brand query. null for person and nonBrand: no lookup is performed (ENGINE-CONTRACT R7.6)",
-      "domain": "string | null \u2014 resolved registrable domain. null when class is not businessCard, or when no identity resolved",
+      "query": "string | null — the brand query. null for person and nonBrand: no lookup is performed (ENGINE-CONTRACT R7.6)",
+      "domain": "string | null — resolved registrable domain. null when class is not businessCard, or when no identity resolved",
       "via": "website | email | catalog | phone | guess | null",
-      "maxConfidence": "skip | low | medium | high \u2014 the STATIC CEILING (ENGINE-CONTRACT R10). The final tier is min(staticCeiling, assetTier); an engine must never exceed this value for this contact, whatever assets come back",
-      "flags": "string[] \u2014 the complete set of STATIC flags (ENGINE-CONTRACT R12.1). Compare as a set, order-insensitive. Asset-time flags (favicon-fallback, fallback-tile, domain-match, non-square, aggregator-source, name-mismatch) are never asserted here",
-      "simpleIconsSlug": "OPTIONAL string | null \u2014 the Simple Icons slug for expect.domain (ENGINE-CONTRACT R13). null means no Simple Icons candidate may be emitted. Absent means the case does not assert it"
+      "maxConfidence": "skip | low | medium | high — the STATIC CEILING (ENGINE-CONTRACT R10). The final tier is min(staticCeiling, assetTier); an engine must never exceed this value for this contact, whatever assets come back",
+      "flags": "string[] — the complete set of STATIC flags (ENGINE-CONTRACT R12.1). Compare as a set, order-insensitive. Asset-time flags (favicon-fallback, fallback-tile, domain-match, non-square, aggregator-source, name-mismatch) are never asserted here",
+      "simpleIconsSlug": "OPTIONAL string | null — the Simple Icons slug for expect.domain (ENGINE-CONTRACT R13). null means no Simple Icons candidate may be emitted. Absent means the case does not assert it"
     }
   },
   "cases": [
@@ -45,7 +45,7 @@
           "non-brand"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a71 non-brand, \u00a74 generic nouns; ENGINE-CONTRACT R7.1",
+      "rule": "MATCHING-ENGINE §1 non-brand, §4 generic nouns; ENGINE-CONTRACT R7.1",
       "why": "A generic noun on the exact blocklist; a red-cross clip-art is worse than no logo."
     },
     {
@@ -70,8 +70,8 @@
           "non-brand"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a71; ENGINE-CONTRACT R7.1",
-      "why": "GENERIC exact match \u2014 never a brand, never in the not-found bucket."
+      "rule": "MATCHING-ENGINE §1; ENGINE-CONTRACT R7.1",
+      "why": "GENERIC exact match — never a brand, never in the not-found bucket."
     },
     {
       "id": "nonbrand-manager",
@@ -95,7 +95,7 @@
           "non-brand"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a71; ENGINE-CONTRACT R7.1",
+      "rule": "MATCHING-ENGINE §1; ENGINE-CONTRACT R7.1",
       "why": "A role, not an organization."
     },
     {
@@ -122,7 +122,7 @@
           "non-brand"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a74 devices & services; ENGINE-CONTRACT R7.1",
+      "rule": "MATCHING-ENGINE §4 devices & services; ENGINE-CONTRACT R7.1",
       "why": "Parenthetical is stripped first, then NON_BRAND /\\bverification\\b/ matches; a Twilio logo here would be wrong."
     },
     {
@@ -147,7 +147,7 @@
           "non-brand"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a74 devices & services; ENGINE-CONTRACT R7.1",
+      "rule": "MATCHING-ENGINE §4 devices & services; ENGINE-CONTRACT R7.1",
       "why": "NON_BRAND is tested before any ' at ' brand-tail split, so this never becomes a query for 'Farm'."
     },
     {
@@ -172,8 +172,8 @@
           "non-brand"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a74 devices & services; ENGINE-CONTRACT R4.4",
-      "why": "NON_BRAND pattern /\\bpassword\\b/ \u2014 a service SMS sender, not a brand."
+      "rule": "MATCHING-ENGINE §4 devices & services; ENGINE-CONTRACT R4.4",
+      "why": "NON_BRAND pattern /\\bpassword\\b/ — a service SMS sender, not a brand."
     },
     {
       "id": "nonbrand-medico",
@@ -197,8 +197,8 @@
           "non-brand"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a74 generic nouns; ENGINE-CONTRACT R4.3",
-      "why": "From the battle-test blocklist \u2014 matched unrelated medical clip-art."
+      "rule": "MATCHING-ENGINE §4 generic nouns; ENGINE-CONTRACT R4.3",
+      "why": "From the battle-test blocklist — matched unrelated medical clip-art."
     },
     {
       "id": "nonbrand-jerry-generic-beats-homonym",
@@ -222,7 +222,7 @@
           "non-brand"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a74; ENGINE-CONTRACT R7.1 precedence",
+      "rule": "MATCHING-ENGINE §4; ENGINE-CONTRACT R7.1 precedence",
       "why": "'jerry' is in both GENERIC and HOMONYM. GENERIC is tested first, so the contact is skipped, not matched at medium."
     },
     {
@@ -247,7 +247,7 @@
           "non-brand"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a74 generic nouns; ENGINE-CONTRACT R7.1 precedence",
+      "rule": "MATCHING-ENGINE §4 generic nouns; ENGINE-CONTRACT R7.1 precedence",
       "why": "Same GENERIC-before-HOMONYM precedence as 'Jerry'."
     },
     {
@@ -274,7 +274,7 @@
           "non-brand"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a71 non-brand; ENGINE-CONTRACT R4.3",
+      "rule": "MATCHING-ENGINE §1 non-brand; ENGINE-CONTRACT R4.3",
       "why": "Carrier-generated label, not an organization."
     },
     {
@@ -299,7 +299,7 @@
           "non-brand"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a71, \u00a72 rule 2; ENGINE-CONTRACT R6.4 + R7.5",
+      "rule": "MATCHING-ENGINE §1, §2 rule 2; ENGINE-CONTRACT R6.4 + R7.5",
       "why": "Role head is dropped, leaving 'Hospital', which the post-segment GENERIC re-check catches."
     },
     {
@@ -324,8 +324,8 @@
           "person"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a71 person; ENGINE-CONTRACT R7.3",
-      "why": "Given/family present and no brand tail \u2014 never a logo target."
+      "rule": "MATCHING-ENGINE §1 person; ENGINE-CONTRACT R7.3",
+      "why": "Given/family present and no brand tail — never a logo target."
     },
     {
       "id": "person-employee-corporate-email",
@@ -352,7 +352,7 @@
           "employee"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a71 'Employees are not the company', \u00a75 rule 7; ENGINE-CONTRACT R7.3",
+      "rule": "MATCHING-ENGINE §1 'Employees are not the company', §5 rule 7; ENGINE-CONTRACT R7.3",
       "why": "A person with a corporate email is an employee; the Apple logo must not land on her card."
     },
     {
@@ -379,8 +379,8 @@
           "person"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a71; ENGINE-CONTRACT R7.3",
-      "why": "Display name is a person and the only email is freemail \u2014 organization alone never promotes a person."
+      "rule": "MATCHING-ENGINE §1; ENGINE-CONTRACT R7.3",
+      "why": "Display name is a person and the only email is freemail — organization alone never promotes a person."
     },
     {
       "id": "person-with-existing-photo",
@@ -404,7 +404,7 @@
           "photo-protected"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a71 'Existing photos stay'; ENGINE-CONTRACT R12.1",
+      "rule": "MATCHING-ENGINE §1 'Existing photos stay'; ENGINE-CONTRACT R12.1",
       "why": "Role junk in `organization` is irrelevant: a person with a photo is photo-protected, not 'not found'."
     },
     {
@@ -429,7 +429,7 @@
           "person"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a71; ENGINE-CONTRACT R7.3",
+      "rule": "MATCHING-ENGINE §1; ENGINE-CONTRACT R7.3",
       "why": "Control for the rule-8 case below: without a brand tail this is just a person."
     },
     {
@@ -454,7 +454,7 @@
           "person"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a72 rule 2, \u00a75 rule 8; ENGINE-CONTRACT R6.3",
+      "rule": "MATCHING-ENGINE §2 rule 2, §5 rule 8; ENGINE-CONTRACT R6.3",
       "why": "The tail is a role, so rule 8 does not fire and the contact stays a person."
     },
     {
@@ -481,8 +481,8 @@
           "person"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a72b 'no personal email'; ENGINE-CONTRACT R7.4",
-      "why": "The lone-firm-name promotion is blocked by a consumer email address \u2014 this is a human who happens to be filed oddly."
+      "rule": "MATCHING-ENGINE §2b 'no personal email'; ENGINE-CONTRACT R7.4",
+      "why": "The lone-firm-name promotion is blocked by a consumer email address — this is a human who happens to be filed oddly."
     },
     {
       "id": "businesscard-fedex",
@@ -507,7 +507,7 @@
         ],
         "simpleIconsSlug": "fedex"
       },
-      "rule": "MATCHING-ENGINE \u00a71 business card, \u00a72b step 3; ENGINE-CONTRACT R8.3",
+      "rule": "MATCHING-ENGINE §1 business card, §2b step 3; ENGINE-CONTRACT R8.3",
       "why": "The canonical easy case: no person name, unambiguous catalog brand, iconic mark available."
     },
     {
@@ -533,7 +533,7 @@
         ],
         "simpleIconsSlug": "walgreens"
       },
-      "rule": "MATCHING-ENGINE \u00a72 rule 1; ENGINE-CONTRACT R5.1",
+      "rule": "MATCHING-ENGINE §2 rule 1; ENGINE-CONTRACT R5.1",
       "why": "Store-location parentheticals are stripped before any lookup."
     },
     {
@@ -558,7 +558,7 @@
           "via-catalog"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a71 business-card example; ENGINE-CONTRACT R8.3 CATALOG_TAIL_OK",
+      "rule": "MATCHING-ENGINE §1 business-card example; ENGINE-CONTRACT R8.3 CATALOG_TAIL_OK",
       "why": "The rulebook's own business-card example: a catalog head plus a department tail resolves to the parent brand."
     },
     {
@@ -583,7 +583,7 @@
           "via-catalog"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a72b step 3; ENGINE-CONTRACT R8.3 CATALOG_TAIL_OK",
+      "rule": "MATCHING-ENGINE §2b step 3; ENGINE-CONTRACT R8.3 CATALOG_TAIL_OK",
       "why": "Catalog head match with a locationish tail; the query keeps the full name, only the domain reduces."
     },
     {
@@ -610,7 +610,7 @@
         ],
         "simpleIconsSlug": "walgreens"
       },
-      "rule": "MATCHING-ENGINE \u00a72b 'A lone given or family name that is a catalog firm'; ENGINE-CONTRACT R7.4",
+      "rule": "MATCHING-ENGINE §2b 'A lone given or family name that is a catalog firm'; ENGINE-CONTRACT R7.4",
       "why": "A catalog firm parked in the given-name field is a business card, not a person."
     },
     {
@@ -638,7 +638,7 @@
         ],
         "simpleIconsSlug": null
       },
-      "rule": "MATCHING-ENGINE \u00a72b step 1, \u00a76; ENGINE-CONTRACT R8.1",
+      "rule": "MATCHING-ENGINE §2b step 1, §6; ENGINE-CONTRACT R8.1",
       "why": "A contact-owned website is the strongest identity evidence and can reach high; no Simple Icons slug exists, so none may be invented."
     },
     {
@@ -665,7 +665,7 @@
           "via-email"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a72b step 2; ENGINE-CONTRACT R8.2",
+      "rule": "MATCHING-ENGINE §2b step 2; ENGINE-CONTRACT R8.2",
       "why": "A non-freemail work address is contact-owned evidence and may reach high."
     },
     {
@@ -693,7 +693,7 @@
         ],
         "simpleIconsSlug": "southwestairlines"
       },
-      "rule": "MATCHING-ENGINE \u00a72b step 4; ENGINE-CONTRACT R8.4",
+      "rule": "MATCHING-ENGINE §2b step 4; ENGINE-CONTRACT R8.4",
       "why": "'Reservations' is not a catalog tail, so resolution falls through to the published customer-service number."
     },
     {
@@ -720,7 +720,7 @@
         ],
         "simpleIconsSlug": "costco"
       },
-      "rule": "MATCHING-ENGINE \u00a71 'replace-existing caps at medium', \u00a76; ENGINE-CONTRACT R10.4",
+      "rule": "MATCHING-ENGINE §1 'replace-existing caps at medium', §6; ENGINE-CONTRACT R10.4",
       "why": "Overwriting an existing photo always goes through review, never pre-checked."
     },
     {
@@ -745,7 +745,7 @@
           "via-catalog"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a71 notes; ENGINE-CONTRACT R7.2",
+      "rule": "MATCHING-ENGINE §1 notes; ENGINE-CONTRACT R7.2",
       "why": "When `organization` is present it is the brand source, so a generic display name does not blocklist the card."
     },
     {
@@ -774,7 +774,7 @@
         ],
         "simpleIconsSlug": "walgreens"
       },
-      "rule": "MATCHING-ENGINE \u00a74 junk domains; ENGINE-CONTRACT R1 (CL-13)",
+      "rule": "MATCHING-ENGINE §4 junk domains; ENGINE-CONTRACT R1 (CL-13)",
       "why": "shop.walgreens.com must reduce to walgreens.com, or the catalog entry and the Simple Icons glyph are both missed."
     },
     {
@@ -833,7 +833,7 @@
         ]
       },
       "rule": "ENGINE-CONTRACT R1.10 multi-part ccTLD list (CL-13)",
-      "why": "co.uk is a two-label public suffix, so three labels are kept \u2014 reducing to co.uk would be catastrophic."
+      "why": "co.uk is a two-label public suffix, so three labels are kept — reducing to co.uk would be catastrophic."
     },
     {
       "id": "subdomain-deep-path",
@@ -915,7 +915,7 @@
           "via-website"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a74 junk domains ('doug@texasdescon.com as URL'); ENGINE-CONTRACT R1.4",
+      "rule": "MATCHING-ENGINE §4 junk domains ('doug@texasdescon.com as URL'); ENGINE-CONTRACT R1.4",
       "why": "An email address typed into the URL field still carries the right domain once userinfo is stripped."
     },
     {
@@ -943,7 +943,7 @@
           "guessed-domain"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a74 junk domains ('only http(s) URLs'); ENGINE-CONTRACT R1.2",
+      "rule": "MATCHING-ENGINE §4 junk domains ('only http(s) URLs'); ENGINE-CONTRACT R1.2",
       "why": "A non-web scheme yields no identity, so resolution falls through to the capped guess."
     },
     {
@@ -972,7 +972,7 @@
           "guessed-domain"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a74 junk domains ('strip social/profile domains'); ENGINE-CONTRACT R3 (CL-03)",
+      "rule": "MATCHING-ENGINE §4 junk domains ('strip social/profile domains'); ENGINE-CONTRACT R3 (CL-03)",
       "why": "The audit's exact reproduction: a LinkedIn company page must never resolve to linkedin.com or produce the LinkedIn glyph pre-checked."
     },
     {
@@ -1001,7 +1001,7 @@
           "guessed-domain"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a74; ENGINE-CONTRACT R3 (CL-03)",
+      "rule": "MATCHING-ENGINE §4; ENGINE-CONTRACT R3 (CL-03)",
       "why": "Small businesses whose only web presence is a Facebook page are the common case for this trap."
     },
     {
@@ -1030,7 +1030,7 @@
           "guessed-domain"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a74; ENGINE-CONTRACT R3 (CL-03)",
+      "rule": "MATCHING-ENGINE §4; ENGINE-CONTRACT R3 (CL-03)",
       "why": "Yelp is on the canonical SOCIAL set; the web engine currently has no social set at all."
     },
     {
@@ -1059,7 +1059,7 @@
           "via-website"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a72b step 1; ENGINE-CONTRACT R8.1",
+      "rule": "MATCHING-ENGINE §2b step 1; ENGINE-CONTRACT R8.1",
       "why": "Social hosts are skipped, not fatal: the next website in contact order is used and can still reach high."
     },
     {
@@ -1117,8 +1117,8 @@
           "guessed-domain"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a74 junk domains; ENGINE-CONTRACT R3.3",
-      "why": "wixsite.com serves the Wix favicon for every tenant \u2014 the same failure class as CL-03."
+      "rule": "MATCHING-ENGINE §4 junk domains; ENGINE-CONTRACT R3.3",
+      "why": "wixsite.com serves the Wix favicon for every tenant — the same failure class as CL-03."
     },
     {
       "id": "platform-host-sites-google",
@@ -1174,7 +1174,7 @@
           "guessed-domain"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a72b step 2 'never freemail'; ENGINE-CONTRACT R2",
+      "rule": "MATCHING-ENGINE §2b step 2 'never freemail'; ENGINE-CONTRACT R2",
       "why": "gmail.com must never become a logo domain."
     },
     {
@@ -1202,7 +1202,7 @@
           "guessed-domain"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a74 junk domains ('gnail.com typos'); ENGINE-CONTRACT R2",
+      "rule": "MATCHING-ENGINE §4 junk domains ('gnail.com typos'); ENGINE-CONTRACT R2",
       "why": "Freemail typo-squats are on the canonical FREEMAIL set so they never resolve as a brand."
     },
     {
@@ -1228,7 +1228,7 @@
           "guessed-domain"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a72b step 5; ENGINE-CONTRACT R8.5 (CL-14)",
+      "rule": "MATCHING-ENGINE §2b step 5; ENGINE-CONTRACT R8.5 (CL-14)",
       "why": "The guess path must use companyKey(): with 'LLC' left on, the slug is 27 chars, trips the 24-char cap and the contact vanishes."
     },
     {
@@ -1307,7 +1307,7 @@
         ],
         "simpleIconsSlug": "apple"
       },
-      "rule": "MATCHING-ENGINE \u00a74 homonyms; ENGINE-CONTRACT R4.5 (HOMONYM is keyed on companyKey)",
+      "rule": "MATCHING-ENGINE §4 homonyms; ENGINE-CONTRACT R4.5 (HOMONYM is keyed on companyKey)",
       "why": "Homonym lookup must use companyKey, or 'Apple Inc' escapes the cap that 'Apple' gets."
     },
     {
@@ -1463,7 +1463,7 @@
           "guessed-domain"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a75 rule 8; ENGINE-CONTRACT R6.2 + R7.3 (CL-15)",
+      "rule": "MATCHING-ENGINE §5 rule 8; ENGINE-CONTRACT R6.2 + R7.3 (CL-15)",
       "why": "The rulebook's own example. The tail carries an ORG_SIGNAL word, so the brand is the tail and the person name does not win; brand-tail always caps at medium."
     },
     {
@@ -1491,7 +1491,7 @@
           "guessed-domain"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a75 rule 8 + \u00a74 domain redirect; ENGINE-CONTRACT R6.2 + R10.5 (CL-15)",
+      "rule": "MATCHING-ENGINE §5 rule 8 + §4 domain redirect; ENGINE-CONTRACT R6.2 + R10.5 (CL-15)",
       "why": "The 'X at Y' form with an acronym tail. ntb.com is on MERGED_DOMAINS (it now redirects to Mavis), so it also carries brand-redirect-risk."
     },
     {
@@ -1518,7 +1518,7 @@
         ],
         "simpleIconsSlug": "costco"
       },
-      "rule": "MATCHING-ENGINE \u00a75 rule 8; ENGINE-CONTRACT R10.3",
+      "rule": "MATCHING-ENGINE §5 rule 8; ENGINE-CONTRACT R10.3",
       "why": "Even with a catalog-perfect tail, a rule-8 reclassification is a heuristic override of the person rule and must be reviewed, never pre-checked."
     },
     {
@@ -1546,8 +1546,8 @@
           "employee"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a75 rule 7 beats rule 8; ENGINE-CONTRACT R7.3.b",
-      "why": "When the contact's own email domain equals the tail's resolved domain, the person works there \u2014 rule 8 must not fire."
+      "rule": "MATCHING-ENGINE §5 rule 7 beats rule 8; ENGINE-CONTRACT R7.3.b",
+      "why": "When the contact's own email domain equals the tail's resolved domain, the person works there — rule 8 must not fire."
     },
     {
       "id": "rule8-org-signal-no-person-head",
@@ -1573,7 +1573,7 @@
           "guessed-domain"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a75 rule 8; ENGINE-CONTRACT R6.2",
+      "rule": "MATCHING-ENGINE §5 rule 8; ENGINE-CONTRACT R6.2",
       "why": "Rule 8 is not limited to person heads: a franchise-style 'local name - brand' entry queries the brand tail, capped at medium."
     },
     {
@@ -1601,7 +1601,7 @@
         ],
         "simpleIconsSlug": "apple"
       },
-      "rule": "MATCHING-ENGINE \u00a74 decorated queries; ENGINE-CONTRACT R6.3",
+      "rule": "MATCHING-ENGINE §4 decorated queries; ENGINE-CONTRACT R6.3",
       "why": "The rulebook's own trap: the undecorated query is the parent brand, and 'Apple' is a homonym with no contact-owned domain, so it stays at medium."
     },
     {
@@ -1628,7 +1628,7 @@
         ],
         "simpleIconsSlug": "walgreens"
       },
-      "rule": "MATCHING-ENGINE \u00a72 rule 2; ENGINE-CONTRACT R6.3",
+      "rule": "MATCHING-ENGINE §2 rule 2; ENGINE-CONTRACT R6.3",
       "why": "A locationish tail after ' - ' is decoration, not a brand tail."
     },
     {
@@ -1655,7 +1655,7 @@
           "guessed-domain"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a71 notes ('organization often contains role junk'); ENGINE-CONTRACT R6.3",
+      "rule": "MATCHING-ENGINE §1 notes ('organization often contains role junk'); ENGINE-CONTRACT R6.3",
       "why": "The rulebook's own role-junk example; the role tail is removed before lookup."
     },
     {
@@ -1682,7 +1682,7 @@
           "guessed-domain"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a71 notes; ENGINE-CONTRACT R6.3",
+      "rule": "MATCHING-ENGINE §1 notes; ENGINE-CONTRACT R6.3",
       "why": "Second role-junk example from the rulebook, reached through the same ROLE_WORDS list."
     },
     {
@@ -1709,7 +1709,7 @@
           "guessed-domain"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a72 rule 2; ENGINE-CONTRACT R6.3",
+      "rule": "MATCHING-ENGINE §2 rule 2; ENGINE-CONTRACT R6.3",
       "why": "A generic word in the tail is decoration on a real business, not a reason to blocklist the whole card."
     },
     {
@@ -1736,8 +1736,8 @@
           "guessed-domain"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a74 homonyms; ENGINE-CONTRACT R10.2",
-      "why": "Bank, car marque or planet \u2014 with no contact context this can never auto-apply. Its only likely asset is a favicon, which is itself capped at medium."
+      "rule": "MATCHING-ENGINE §4 homonyms; ENGINE-CONTRACT R10.2",
+      "why": "Bank, car marque or planet — with no contact context this can never auto-apply. Its only likely asset is a favicon, which is itself capped at medium."
     },
     {
       "id": "homonym-mercury-with-work-email",
@@ -1764,7 +1764,7 @@
           "via-email"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a74 ('use contact context as a category signal'); ENGINE-CONTRACT R10.2",
+      "rule": "MATCHING-ENGINE §4 ('use contact context as a category signal'); ENGINE-CONTRACT R10.2",
       "why": "Contact-owned evidence resolves the homonym, so the cap lifts while the flag stays for the review UI."
     },
     {
@@ -1791,7 +1791,7 @@
         ],
         "simpleIconsSlug": null
       },
-      "rule": "MATCHING-ENGINE \u00a74 homonyms, \u00a73 source 1; ENGINE-CONTRACT R10.2 + R13.3",
+      "rule": "MATCHING-ENGINE §4 homonyms, §3 source 1; ENGINE-CONTRACT R10.2 + R13.3",
       "why": "A catalog hit is name-derived, not contact context, so it does not resolve a homonym. simpleIconsSlug is null: delta.com is on the Simple Icons SKIP set because the 'delta' slug is the software company, and slugs must never be derived from the domain."
     },
     {
@@ -1820,7 +1820,7 @@
         ],
         "simpleIconsSlug": null
       },
-      "rule": "MATCHING-ENGINE \u00a74 homonyms; ENGINE-CONTRACT R10.2",
+      "rule": "MATCHING-ENGINE §4 homonyms; ENGINE-CONTRACT R10.2",
       "why": "Same contact name, contact-owned domain: the cap lifts, but the Simple Icons skip still applies."
     },
     {
@@ -1849,8 +1849,8 @@
         ],
         "simpleIconsSlug": null
       },
-      "rule": "MATCHING-ENGINE \u00a72b ordering; ENGINE-CONTRACT R8.3 before R8.4",
-      "why": "Catalog is step 3 and phone is step 4, so the catalog wins the `via` label even though the phone agrees \u2014 ordering must be identical in all three engines."
+      "rule": "MATCHING-ENGINE §2b ordering; ENGINE-CONTRACT R8.3 before R8.4",
+      "why": "Catalog is step 3 and phone is step 4, so the catalog wins the `via` label even though the phone agrees — ordering must be identical in all three engines."
     },
     {
       "id": "homonym-ibc-alone",
@@ -1876,7 +1876,7 @@
           "guessed-domain"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a74 homonyms ('IBC = International Bank of Commerce \u2260 IBC Root Beer')",
+      "rule": "MATCHING-ENGINE §4 homonyms ('IBC = International Bank of Commerce ≠ IBC Root Beer')",
       "why": "The rulebook's headline homonym; a guessed domain plus homonym risk is doubly capped."
     },
     {
@@ -1903,7 +1903,7 @@
           "via-email"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a74 homonyms; ENGINE-CONTRACT R4.5",
+      "rule": "MATCHING-ENGINE §4 homonyms; ENGINE-CONTRACT R4.5",
       "why": "The qualifier changes the companyKey to 'ibc bank', which is not a homonym, and the work email is contact-owned."
     },
     {
@@ -1930,8 +1930,8 @@
         ],
         "simpleIconsSlug": "unitedairlines"
       },
-      "rule": "MATCHING-ENGINE \u00a74 homonyms; ENGINE-CONTRACT R10.2",
-      "why": "United Airlines, United Rentals, United Way \u2014 the catalog answer is a guess dressed up, so it stays in review."
+      "rule": "MATCHING-ENGINE §4 homonyms; ENGINE-CONTRACT R10.2",
+      "why": "United Airlines, United Rentals, United Way — the catalog answer is a guess dressed up, so it stays in review."
     },
     {
       "id": "homonym-apple-with-website",
@@ -1959,7 +1959,7 @@
         ],
         "simpleIconsSlug": "apple"
       },
-      "rule": "MATCHING-ENGINE \u00a74 homonyms; ENGINE-CONTRACT R10.2",
+      "rule": "MATCHING-ENGINE §4 homonyms; ENGINE-CONTRACT R10.2",
       "why": "Contact-owned domain lifts the homonym cap; the flag remains so the review UI can explain the risk."
     },
     {
@@ -1987,7 +1987,7 @@
         ],
         "simpleIconsSlug": "amazon"
       },
-      "rule": "MATCHING-ENGINE \u00a74 + \u00a76; ENGINE-CONTRACT R10",
+      "rule": "MATCHING-ENGINE §4 + §6; ENGINE-CONTRACT R10",
       "why": "Two independent caps land on the same contact; the result is still exactly medium, not low."
     },
     {
@@ -2013,7 +2013,7 @@
         ],
         "simpleIconsSlug": null
       },
-      "rule": "MATCHING-ENGINE \u00a74 brand vs parent; ENGINE-CONTRACT R8.3",
+      "rule": "MATCHING-ENGINE §4 brand vs parent; ENGINE-CONTRACT R8.3",
       "why": "The consumer-facing fuel brand keeps its own catalog entry and must not be folded into the corporate parent."
     },
     {
@@ -2039,7 +2039,7 @@
         ],
         "simpleIconsSlug": null
       },
-      "rule": "MATCHING-ENGINE \u00a74 brand vs parent; ENGINE-CONTRACT R8.3",
+      "rule": "MATCHING-ENGINE §4 brand vs parent; ENGINE-CONTRACT R8.3",
       "why": "Paired with 'Exxon': the two names must not collapse onto one domain."
     },
     {
@@ -2068,7 +2068,7 @@
         ],
         "simpleIconsSlug": null
       },
-      "rule": "MATCHING-ENGINE \u00a74 domain redirect after merger; ENGINE-CONTRACT R10.5",
+      "rule": "MATCHING-ENGINE §4 domain redirect after merger; ENGINE-CONTRACT R10.5",
       "why": "ntb.com now serves Mavis Tire, so even a contact-owned domain is capped at medium; the domain-derived logo may be the successor brand."
     },
     {
@@ -2093,7 +2093,7 @@
           "via-catalog"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a72 rule 4 alias map; ENGINE-CONTRACT R8.3",
+      "rule": "MATCHING-ENGINE §2 rule 4 alias map; ENGINE-CONTRACT R8.3",
       "why": "Alias entries live in the catalog, so a three-letter abbreviation resolves without a guess."
     },
     {
@@ -2118,7 +2118,7 @@
           "via-catalog"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a72 rule 4 alias map; ENGINE-CONTRACT R8.3",
+      "rule": "MATCHING-ENGINE §2 rule 4 alias map; ENGINE-CONTRACT R8.3",
       "why": "The second rulebook alias; without the catalog this would guess gcx.com and be wrong."
     },
     {
@@ -2144,7 +2144,7 @@
           "guessed-domain"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a74 fallback tiles, \u00a76; ENGINE-CONTRACT R8.5 + R11.4 (CL-18)",
+      "rule": "MATCHING-ENGINE §4 fallback tiles, §6; ENGINE-CONTRACT R8.5 + R11.4 (CL-18)",
       "why": "The audit's invented brand. A guessed domain is capped at medium, and any letter-tile asset returned for it must be rejected by isFallbackTile before it can be offered at all."
     },
     {
@@ -2169,7 +2169,7 @@
           "no-identity"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a72b step 5; ENGINE-CONTRACT R8.5 (3\u201324 character cap)",
+      "rule": "MATCHING-ENGINE §2b step 5; ENGINE-CONTRACT R8.5 (3–24 character cap)",
       "why": "Long descriptive names produce absurd guesses; the engine refuses rather than inventing a domain."
     },
     {
@@ -2194,7 +2194,7 @@
           "no-identity"
         ]
       },
-      "rule": "ENGINE-CONTRACT R8.5 (3\u201324 character cap)",
+      "rule": "ENGINE-CONTRACT R8.5 (3–24 character cap)",
       "why": "Two-character names are almost never a resolvable brand; skip rather than guess."
     },
     {
@@ -2252,7 +2252,7 @@
           "guessed-domain"
         ]
       },
-      "rule": "MATCHING-ENGINE \u00a74 homonyms; ENGINE-CONTRACT R8.3 (CATALOG_TAIL_OK excludes trade words)",
+      "rule": "MATCHING-ENGINE §4 homonyms; ENGINE-CONTRACT R8.3 (CATALOG_TAIL_OK excludes trade words)",
       "why": "'Dental' is not a location or sub-brand tail, so the catalog must NOT fold this onto delta.com and hand it the airline logo."
     },
     {
@@ -2278,7 +2278,7 @@
         ],
         "simpleIconsSlug": "jpmorgan"
       },
-      "rule": "MATCHING-ENGINE \u00a73 source 2; ENGINE-CONTRACT R13 (CL-04)",
+      "rule": "MATCHING-ENGINE §3 source 2; ENGINE-CONTRACT R13 (CL-04)",
       "why": "The slug is not the domain label: deriving 'chase' from chase.com yields no icon at all."
     },
     {
@@ -2334,6 +2334,82 @@
       },
       "rule": "ENGINE-CONTRACT R13.2 (slugs are never derived)",
       "why": "An unmapped domain yields no Simple Icons candidate; deriving one requests a 404 or, worse, an unrelated brand's mark."
+    },
+    {
+      "id": "catalog-tail-street-name",
+      "contact": {
+        "displayName": "Walgreens Mason Rd",
+        "givenName": null,
+        "familyName": null,
+        "organization": null,
+        "emails": [],
+        "websites": [],
+        "phones": [],
+        "hasImage": false
+      },
+      "expect": {
+        "class": "businessCard",
+        "query": "Walgreens Mason Rd",
+        "domain": "walgreens.com",
+        "via": "catalog",
+        "maxConfidence": "high",
+        "flags": [
+          "via-catalog"
+        ]
+      },
+      "rule": "ENGINE-CONTRACT R8.3 CATALOG_TAIL_OK",
+      "why": "A street name is not on any word list and never will be. The tail is marked as an address by 'rd'; 'mason' is simply unrecognised, which is not a reason to refuse the parent brand."
+    },
+    {
+      "id": "catalog-tail-trade-word-blocked",
+      "contact": {
+        "displayName": "Delta Dental Center",
+        "givenName": null,
+        "familyName": null,
+        "organization": null,
+        "emails": [],
+        "websites": [],
+        "phones": [],
+        "hasImage": false
+      },
+      "expect": {
+        "class": "businessCard",
+        "query": "Delta Dental Center",
+        "domain": "deltadentalcenter.com",
+        "via": "guess",
+        "maxConfidence": "medium",
+        "flags": [
+          "guessed-domain",
+          "via-guess"
+        ]
+      },
+      "rule": "ENGINE-CONTRACT R8.3 CATALOG_TAIL_OK; MATCHING-ENGINE section 4 disambiguation",
+      "why": "The trap one word from the contract's own 'Delta Dental' example. 'center' is a place word, so any-word matching handed a dental practice Delta Air Lines' logo. A trade word in the tail makes it a different business, so the head brand must not be reduced to."
+    },
+    {
+      "id": "catalog-tail-subbrand-beats-trade",
+      "contact": {
+        "displayName": "H-E-B Bakery",
+        "givenName": null,
+        "familyName": null,
+        "organization": null,
+        "emails": [],
+        "websites": [],
+        "phones": [],
+        "hasImage": false
+      },
+      "expect": {
+        "class": "businessCard",
+        "query": "H-E-B Bakery",
+        "domain": "heb.com",
+        "via": "catalog",
+        "maxConfidence": "high",
+        "flags": [
+          "via-catalog"
+        ]
+      },
+      "rule": "ENGINE-CONTRACT R8.3 CATALOG_TAIL_OK",
+      "why": "'bakery' is on both SUBBRAND_TAIL and ORG_SIGNAL. The department list wins: an H-E-B bakery counter is H-E-B."
     }
   ]
 }

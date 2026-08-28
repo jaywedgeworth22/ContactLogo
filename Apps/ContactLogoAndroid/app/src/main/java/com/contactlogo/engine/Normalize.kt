@@ -168,6 +168,13 @@ object Normalize {
         "industries", "systems", "technologies", "labs", "works"
     )
 
+    /**
+     * R8.3 — one word, tested whole, against the trade-word list.  The phrase
+     * form searches anywhere in a segment; the catalog-tail test needs a
+     * per-word answer.
+     */
+    fun isOrgSignalWord(word: String): Boolean = word.lowercase() in ORG_SIGNAL
+
     val ROLE_WORDS: List<String> = listOf(
         "manager", "mgr", "gm", "asst", "assistant", "treasurer", "president", "vp", "director", "owner",
         "coordinator", "secretary", "chair", "chairman", "board", "rep", "representative", "agent", "sales",

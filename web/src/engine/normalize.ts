@@ -19,7 +19,18 @@ const ORG_SIGNAL =
 const ROLE_WORDS =
   /\b(front desk|customer service|after hours|on call|manager|mgr|gm|asst|assistant|treasurer|president|vp|director|owner|coordinator|secretary|chairman|chair|board|representative|rep|agent|sales|support|services|service|office|cell|mobile|home|work|fax|main|desk|billing|hr|admin|dispatch|scheduler|emergency|voicemail|reception|ext)\b/i;
 
-/** R6.6 — the catalog's location alternation plus places. */
+/**
+ * R6.6 — the catalog's location alternation plus places.  Exported as a word
+ * list too: R8.3's catalog-tail test is word-by-word, not a substring search,
+ * so it needs the members rather than the alternation.
+ */
+export const GEO_WORDS_LITERAL: ReadonlySet<string> = new Set([
+  "rd", "road", "st", "street", "blvd", "ave", "avenue", "dr", "drive", "ln", "lane", "hwy", "fwy", "pkwy",
+  "suite", "ste", "unit", "store", "shop", "plaza", "center", "centre", "mall", "near", "at", "in",
+  "cypress", "houston", "dallas", "austin", "katy", "spring", "tomball", "tx", "texas", "usa", "us",
+  "australia", "canada", "mexico", "uk", "north", "south", "east", "west", "downtown", "midtown", "uptown",
+]);
+
 const GEO_WORDS =
   /#\d*|\b(rd|road|st|street|blvd|ave|avenue|dr|drive|ln|lane|hwy|fwy|pkwy|suite|ste|unit|store|shop|plaza|center|centre|mall|near|at|in|\d{2,5}|cypress|houston|dallas|austin|katy|spring|tomball|tx|texas|usa|us|australia|canada|mexico|uk|north|south|east|west|downtown|midtown|uptown)\b/i;
 
@@ -95,6 +106,14 @@ export function brandTail(raw: string): string | undefined {
 /** R6.2 signal 2 — the segment names a trade. */
 export function hasOrgSignal(segment: string): boolean {
   return ORG_SIGNAL.test(segment);
+}
+
+/**
+ * R8.3 — one word, tested whole, against the trade-word list.  `hasOrgSignal`
+ * searches anywhere in a phrase; the catalog-tail test needs a per-word answer.
+ */
+export function isOrgSignalWord(word: string): boolean {
+  return ORG_SIGNAL.test(word) && /^[a-z&'-]+$/i.test(word);
 }
 
 /** R6.3 / R6.4 — the segment is a job title or a place, so it is decoration. */

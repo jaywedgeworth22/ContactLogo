@@ -91,9 +91,44 @@ public enum WordLists {
         matches(text, roleWords) || isPlace(text)
     }
 
-    /// R8.3 `CATALOG_TAIL_OK` = GEO_WORDS ∪ SUBBRAND_TAIL.
+    /// R8.3 `CATALOG_TAIL_OK` = GEO_WORDS ∪ SUBBRAND_TAIL, as single words.
+    /// `subbrandTail` carries one phrase ("drive thru"); both of its words are
+    /// tail-ok on their own, so the word set splits it.
+    static let catalogTailWords: Set<String> = {
+        var out = geoWords
+        for entry in subbrandTail {
+            for word in entry.split(separator: " ").map(String.init) { out.insert(word) }
+        }
+        return out
+    }()
+
+    static func isTailOkWord(_ word: String) -> Bool {
+        if catalogTailWords.contains(word) { return true }
+        // A store number.  `tokens` has already dropped the "#", so the digits
+        // are all that is left of "#1234"; a bare "#" is handled by the caller.
+        if word.count >= 2, word.count <= 5, word.allSatisfy({ $0.isNumber }) { return true }
+        return false
+    }
+
+    /// R8.3 — may this tail be dropped, leaving the head brand?
+    ///
+    /// Two conditions, and both are needed.  Requiring only that *some* word be
+    /// tail-ok reduced "Delta Dental Center" to delta.com on the strength of
+    /// `center` alone — an airline's logo on a dental practice.  Requiring that
+    /// *every* word be tail-ok instead rejected "Walgreens Mason Rd", because a
+    /// street name is not on any list and never can be.
+    ///
+    /// So: something must positively mark the tail as a place or department, and
+    /// nothing in it may name a different trade.  An unrecognised word ("mason")
+    /// is tolerated as part of an address; an `orgSignal` word ("dental") is not,
+    /// since it makes the tail a business of its own.  `subbrandTail` wins where
+    /// the two lists overlap — "pharmacy" and "bakery" are H-E-B departments.
     public static func isCatalogTailOK(_ tail: String) -> Bool {
-        matches(tail, subbrandTail) || isPlace(tail)
+        let words = tokens(tail)
+        guard !words.isEmpty else { return false }
+        let marked = tail.contains("#") || words.contains(where: isTailOkWord)
+        guard marked else { return false }
+        return words.allSatisfy { isTailOkWord($0) || !orgSignal.contains($0) }
     }
 
     private static func containsRun(_ haystack: [String], _ run: [String]) -> Bool {

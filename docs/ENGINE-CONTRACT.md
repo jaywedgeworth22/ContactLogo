@@ -428,20 +428,42 @@ catalogDomain(displayName)` → `{d, catalog}`.
 2. `DOMAINS[k]`, else `DOMAINS[k without spaces]`.
 3. Else split `k` into words; for `i` from `words.count - 1` down to `1`:
    `head = words[0..<i]`, `tail = words[i...]`. If `DOMAINS[head]` (or the
-   space-less head) exists **and** `tail` matches `CATALOG_TAIL_OK` → that
-   domain.
+   space-less head) exists **and** `isCatalogTailOK(tail)` → that domain.
 4. Else `null`.
 
-`CATALOG_TAIL_OK` = `GEO_WORDS` (R6.6) ∪ `SUBBRAND_TAIL`:
+`TAIL_OK_WORD(w)` — one word, tested whole: `w ∈ GEO_WORDS` (R6.6) ∪
+`SUBBRAND_TAIL`, or `w` matches `#\d*` or `\d{2,5}` (a store number).
 
 ```
-pharmacy deli bakery fuel gas market marketplace optical photo curbside
-drive thru corporate hq distribution warehouse
+SUBBRAND_TAIL = pharmacy deli bakery fuel gas market marketplace optical photo
+                curbside drive thru corporate hq distribution warehouse
 ```
 
-`H-E-B Pharmacy (Bridgeland)` → `heb.com`. `Kroger Marketplace Cypress` →
-`kroger.com`. `Delta Dental` MUST NOT reduce to `delta.com`: `dental` is an
-`ORG_SIGNAL` trade word and is deliberately absent from `CATALOG_TAIL_OK`.
+`isCatalogTailOK(tail)` — **both** conditions, over the tail's words:
+
+1. **at least one** word satisfies `TAIL_OK_WORD`, and
+2. **every** word satisfies `TAIL_OK_WORD` **or** is not in `ORG_SIGNAL` (R6.6).
+
+Condition 1 requires something to positively mark the tail as a place or a
+department. Condition 2 forbids a word that names a *different trade*; an
+unrecognised word is tolerated, because a street name is not on any list and
+never can be. Where the two lists overlap (`bakery`, `pharmacy`), condition 1
+decides — those are departments of the head brand.
+
+| name | tail | reduces to | why |
+| --- | --- | --- | --- |
+| `H-E-B Pharmacy (Bridgeland)` | `pharmacy` | `heb.com` | SUBBRAND_TAIL |
+| `H-E-B Bakery` | `bakery` | `heb.com` | SUBBRAND_TAIL beats ORG_SIGNAL |
+| `Kroger Marketplace Cypress` | `marketplace cypress` | `kroger.com` | both words tail-ok |
+| `Walgreens Mason Rd` | `mason rd` | `walgreens.com` | `rd` marks it; `mason` is merely unknown |
+| `Walgreens #1234` | `#1234` | `walgreens.com` | store number |
+| `Delta Dental` | `dental` | — | ORG_SIGNAL, nothing marks it |
+| `Delta Dental Center` | `dental center` | — | `center` marks it, but `dental` is ORG_SIGNAL |
+
+The last row is the reason both conditions exist. "Some word is tail-ok" alone
+gave a dental practice Delta Air Lines' logo; "every word is tail-ok" alone
+refused `Walgreens Mason Rd`. All three engines held one of those two readings
+and none held both, which is what `catalog-tail-*` in the corpus now pins.
 
 The canonical table is `Sources/ContactLogoKit/Normalize/CompanyCatalog.swift`
 (≈150 keys). The TypeScript table is a subset and the Kotlin table a smaller
@@ -735,16 +757,20 @@ cases also assert `simpleIconsSlug` (R13). Compare flags as a **set**.
 
 **R14.2** Each engine ships one test that loads the JSON, runs its own static
 path, and asserts all six fields per case. No network, no image fetch, no clock.
-Swift reads it in `Tests/ContactLogoKitTests`; TypeScript in
-`web/src/engine/engine.test.ts`; Kotlin in the app's unit-test source set.
+Swift reads it in `Tests/ContactLogoKitTests/GoldenCorpusTests.swift`;
+TypeScript in `web/src/engine/corpus.test.ts`; Kotlin in
+`EngineContractConformanceTest.kt`. All three run in `ci.yml`.
 
 **R14.3** A case that an engine cannot yet satisfy is a **failing test**, never
 a skipped one and never a deleted case. Adding a case requires a rule reference
 in this document; if no rule decides it, add the rule first.
 
 **R14.4** `ARCHITECTURE.md` claimed this corpus already existed and that CI
-asserted it. It now exists; wiring it into the three test targets and into
-`.github/workflows/ci.yml` is the remaining work (owned outside this file).
+asserted it. It now does, in all three engines. It earned its keep immediately:
+the Android suite was the only consumer for one round and caught R10.1b missing
+from Kotlin; adding the other two caught R8.3 meaning three different things
+(see the `catalog-tail-*` cases). A rule that runs in one engine is a rule two
+engines do not have.
 
 ---
 
@@ -759,6 +785,7 @@ Each line is a contract violation in shipping code, with the audit id.
 | TypeScript | guess path skips `companyKey` | R5.3, R8.5 (CL-14) |
 | TypeScript | `passesSimilarity` exported, never called | R9 (CL-16) |
 | TypeScript | `via == email` capped at medium | R10 |
+| all three | R8.3 catalog tail read three ways; `Delta Dental Center` → `delta.com` in Swift and TypeScript, `Walgreens Mason Rd` unresolved in Kotlin | R8.3 |
 | Kotlin | no GENERIC / NON_BRAND / HOMONYM sets at all | R4 (CL-04) |
 | Kotlin | favicon at candidate index 0, auto-approved at HIGH | R11.4 (CL-04) |
 | Kotlin | Simple Icons slug derived by stripping the TLD | R13.2 (CL-04) |

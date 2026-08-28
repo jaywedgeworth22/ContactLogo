@@ -9,9 +9,38 @@ up without re-deriving any of it.
 ## Why this handoff exists
 
 The remote sandbox has Node 22, npm, Chromium and Playwright — so the web app was fully built, tested
-and driven in a real browser.  It has **no Swift toolchain and no Android SDK**.  Every Swift and
-Kotlin change in this branch was therefore written without ever being compiled.  It also has no
-access to the Vercel dashboard, App Store Connect, Datadog, or a real address book.
+and driven in a real browser.  It has **no Swift toolchain and no Android SDK**, and no access to the
+Vercel dashboard, App Store Connect, Datadog, or a real address book.
+
+Two things changed after this note was first written, and both narrow the handoff:
+
+- **CI now compiles the Apple and Android targets** (`ci.yml` gained `apple` and `android` jobs), so
+  Swift and Kotlin are no longer wholly unverified — they are verified on push rather than locally.
+- **The Android engine package can be compiled and tested inside the sandbox after all.** It is pure
+  JVM Kotlin apart from `ContactsRepository.kt`, so a standalone compiler covers it without the
+  Android SDK. The recipe, which turns a 4-minute CI round trip into a 10-second one:
+
+  ```sh
+  curl -sSLo kotlinc.zip \
+    https://github.com/JetBrains/kotlin/releases/download/v1.9.24/kotlin-compiler-1.9.24.zip
+  unzip -q kotlinc.zip                       # match the version in Apps/ContactLogoAndroid/build.gradle.kts
+  curl -sSLo junit.jar     https://repo1.maven.org/maven2/junit/junit/4.13.2/junit-4.13.2.jar
+  curl -sSLo hamcrest.jar  https://repo1.maven.org/maven2/org/hamcrest/hamcrest-core/1.3/hamcrest-core-1.3.jar
+
+  E=Apps/ContactLogoAndroid/app/src/main/java/com/contactlogo/engine
+  T=Apps/ContactLogoAndroid/app/src/test/java/com/contactlogo/engine
+  kotlinc/bin/kotlinc -jvm-target 17 -classpath junit.jar:hamcrest.jar -d out \
+    $E/Blocklists.kt $E/CompanyCatalog.kt $E/MatchPipeline.kt $E/Models.kt \
+    $E/Normalize.kt $E/PhoneDirectory.kt $E/SimpleIcons.kt $T/*.kt
+  java -cp out:junit.jar:hamcrest.jar:kotlinc/lib/kotlin-stdlib.jar org.junit.runner.JUnitCore \
+    com.contactlogo.engine.EngineContractConformanceTest com.contactlogo.engine.MatchPipelineTest
+  ```
+
+  Deliberately excludes `ContactsRepository.kt` — that one file needs the Android SDK. UI, Compose and
+  instrumentation still need a real Gradle build locally.
+
+Swift remains the one engine with no local execution path here; `swift test` on macOS is still the
+only way to run it outside CI.
 
 Everything below falls into one of three buckets: blocked on a toolchain, blocked on access, or an
 owner decision.  Nothing below is "unfinished because we ran out of time" — it is work that
