@@ -2410,6 +2410,89 @@
       },
       "rule": "ENGINE-CONTRACT R8.3 CATALOG_TAIL_OK",
       "why": "'bakery' is on both SUBBRAND_TAIL and ORG_SIGNAL. The department list wins: an H-E-B bakery counter is H-E-B."
+    },
+    {
+      "id": "rule8-tail-unrelated-email",
+      "contact": {
+        "displayName": "Dana At Costco",
+        "givenName": "Dana",
+        "familyName": null,
+        "organization": null,
+        "emails": [
+          "dana@consulting.com"
+        ],
+        "websites": [],
+        "phones": [],
+        "hasImage": false
+      },
+      "expect": {
+        "class": "businessCard",
+        "query": "Costco",
+        "domain": "consulting.com",
+        "via": "email",
+        "maxConfidence": "medium",
+        "flags": [
+          "brand-tail",
+          "email-domain-unrelated",
+          "via-email"
+        ]
+      },
+      "rule": "MATCHING-ENGINE section 5 rule 8; ENGINE-CONTRACT R7.3.b employee guard",
+      "why": "The employee guard asks whether this person's email says they work at the brand on the card. Kotlin derived the brand's domain by walking the contact's own emails, so the check compared the email with itself and every rule-8 card carrying an unrelated work email was filed as an employee and dropped from review."
+    },
+    {
+      "id": "rule8-tail-employee-email",
+      "contact": {
+        "displayName": "Dana At Costco",
+        "givenName": "Dana",
+        "familyName": null,
+        "organization": null,
+        "emails": [
+          "dana@costco.com"
+        ],
+        "websites": [],
+        "phones": [],
+        "hasImage": false
+      },
+      "expect": {
+        "class": "person",
+        "query": null,
+        "domain": null,
+        "via": null,
+        "maxConfidence": "skip",
+        "flags": [
+          "employee",
+          "person"
+        ]
+      },
+      "rule": "MATCHING-ENGINE section 5 rule 7 beats rule 8; ENGINE-CONTRACT R7.3.b",
+      "why": "The other side of the same guard, so a fix cannot simply disable it: an email at the brand on the card does mean a person who works there, and rule 7 wins."
+    },
+    {
+      "id": "rule8-tail-no-email",
+      "contact": {
+        "displayName": "Dana At Costco",
+        "givenName": "Dana",
+        "familyName": null,
+        "organization": null,
+        "emails": [],
+        "websites": [],
+        "phones": [],
+        "hasImage": false
+      },
+      "expect": {
+        "class": "businessCard",
+        "query": "Costco",
+        "domain": "costco.com",
+        "via": "catalog",
+        "maxConfidence": "medium",
+        "flags": [
+          "brand-tail",
+          "via-catalog"
+        ]
+      },
+      "rule": "MATCHING-ENGINE section 5 rule 8; ENGINE-CONTRACT R8.3",
+      "why": "With no email at all the guard cannot fire, so this is the baseline the other two are measured against."
     }
   ]
 }

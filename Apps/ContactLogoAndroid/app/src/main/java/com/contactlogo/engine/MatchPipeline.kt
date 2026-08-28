@@ -66,7 +66,7 @@ object MatchPipeline {
                 CompanyCatalog.domainForName(organization)?.let { candidateDomains.add(it) }
             }
             if (brandTailFired) {
-                resolveTailIdentity(contact, dispSegment.query)?.let { candidateDomains.add(it.first) }
+                tailBrandDomain(dispSegment.query)?.let { candidateDomains.add(it) }
             }
 
             val isEmployee = candidateDomains.isNotEmpty() && contact.emailAddresses.any { e ->
@@ -249,28 +249,24 @@ object MatchPipeline {
      * R8 applied to the tail alone (R7.3.b's employee guard): R8.3 here is
      * restricted to `catalogDomain(tail)` — no organization/displayName fallback.
      */
-    private fun resolveTailIdentity(contact: ContactIdentity, tail: String): Pair<String, String>? {
-        for (u in contact.urls) {
-            val fullHost = Normalize.fullHost(u)
-            val d = Normalize.registrableDomain(u) ?: continue
-            if (d in Blocklists.FREEMAIL) continue
-            if ((fullHost != null && fullHost in Blocklists.SOCIAL) || d in Blocklists.SOCIAL) continue
-            if ((fullHost != null && fullHost in Blocklists.PLATFORM) || d in Blocklists.PLATFORM) continue
-            return d to "website"
-        }
-        for (e in contact.emailAddresses) {
-            val at = e.lastIndexOf('@')
-            if (at < 0) continue
-            val d = Normalize.registrableDomain(e.substring(at + 1)) ?: continue
-            if (d in Blocklists.FREEMAIL || d in Blocklists.SOCIAL) continue
-            return d to "email"
-        }
-        CompanyCatalog.domainForName(tail)?.let { return it to "catalog" }
-        for (p in contact.phoneNumbers) {
-            PhoneDirectory.domainForPhone(p)?.let { return it to "phone" }
-        }
-        Normalize.guessSlug(tail)?.let { return "$it.com" to "guess" }
-        return null
+    /**
+     * R7.3.b — the domain the *brand tail* names, for the employee guard only.
+     *
+     * Name-derived sources exclusively.  This walked `contact.urls` and
+     * `contact.emailAddresses` first, which made the guard compare the contact's
+     * email against a domain taken from that same email — always a match.  Any
+     * rule-8 card with an unrelated work email was therefore filed as an employee
+     * and dropped from review: "Dana At Costco" with dana@consulting.com never
+     * reached Costco, and neither did MATCHING-ENGINE section 5's own examples
+     * "Chris At NTB" and "Byron Goode Jr - Root Insurance".
+     *
+     * The guard asks "does this person's email say they work at the brand on the
+     * card?", so the brand's domain has to come from the brand's name and nothing
+     * else.  The Swift kit already does this via `guessDomain(brandName)`.
+     */
+    private fun tailBrandDomain(tail: String): String? {
+        CompanyCatalog.domainForName(tail)?.let { return it }
+        return Normalize.guessSlug(tail)?.let { "$it.com" }
     }
 
     /** R8: website -> work email -> catalog -> phone -> guess. Strict order; first hit wins. */

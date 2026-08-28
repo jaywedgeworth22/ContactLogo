@@ -71,8 +71,24 @@ public struct WikimediaSource: LogoSource, Sendable {
             let title = hit.title.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? hit.title
             guard let infoURL = URL(string:
                 "https://commons.wikimedia.org/w/api.php?action=query&titles=\(title)&prop=imageinfo&iiprop=url&iiurlwidth=500&format=json") else { continue }
-            guard let idata = try? await HTTPRetry.withRateLimitRetry(operation: { try await self.get(infoURL) }),
-                  let page = try? JSONDecoder().decode(InfoResponse.self, from: idata).query.pages.values.first,
+            // R11.6 — `try?` here turned an exhausted retry budget into an
+            // ordinary miss.  When every file's info request rate-limits out, the
+            // search having succeeded, this returned an empty *success*: the
+            // pipeline recorded no SourceFailure and the contact went to terminal
+            // "Not found" instead of the retryable state.  A source that ran out
+            // of retries is a failure; only a genuine miss may be skipped.
+            let idata: Data
+            do {
+                idata = try await HTTPRetry.withRateLimitRetry(operation: { try await self.get(infoURL) })
+            } catch let error as LogoSourceError where error.isRunFailure {
+                throw error
+            } catch {
+                // A miss, a decode problem or a transient hiccup on one file is
+                // not a run failure: skip this file and keep the others, exactly
+                // as `try?` did.  Only the exhausted-retry case above changes.
+                continue
+            }
+            guard let page = try? JSONDecoder().decode(InfoResponse.self, from: idata).query.pages.values.first,
                   let info = page.imageinfo?.first,
                   let thumb = info.thumburl ?? info.url,
                   let url = URL(string: thumb) else { continue }
