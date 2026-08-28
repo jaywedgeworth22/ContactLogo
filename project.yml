@@ -79,14 +79,12 @@ targets:
         INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.utilities"
         GENERATE_INFOPLIST_FILE: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-    info:
-      properties:
         # Required for BGTaskScheduler.submit() to succeed — see CL-05.
-        # UIBackgroundModes is an array, so it can't be expressed as a
-        # scalar INFOPLIST_KEY_* build setting; it has to go through the
-        # generated Info.plist's `properties` merge instead.
-        UIBackgroundModes:
-          - processing
+        # Xcode's INFOPLIST_KEY_ mechanism does cover array-valued keys: the
+        # value is a space-separated list.  A target-level `info:` block would
+        # need its own `path:` and would turn off GENERATE_INFOPLIST_FILE, which
+        # every other key in this file depends on.
+        INFOPLIST_KEY_UIBackgroundModes: processing
 
   ContactLogoMac:
     type: application
