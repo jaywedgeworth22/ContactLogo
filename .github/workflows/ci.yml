@@ -86,7 +86,7 @@ jobs:
         run: |
           xcodebuild build \
             -project ContactLogo.xcodeproj \
-            -target ${{ matrix.target }} \
+            -scheme ${{ matrix.target }} \
             -destination "${{ matrix.destination }}" \
             -derivedDataPath .build/DerivedData \
             CODE_SIGNING_ALLOWED=NO \

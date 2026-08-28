@@ -105,3 +105,15 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         CODE_SIGN_ENTITLEMENTS: Apps/ContactLogoMac/ContactLogoMac.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+
+# xcodebuild requires -scheme (not -target) whenever -derivedDataPath is given,
+# and XcodeGen does not generate schemes unless they are declared here.
+schemes:
+  ContactLogoiOS:
+    build:
+      targets:
+        ContactLogoiOS: all
+  ContactLogoMac:
+    build:
+      targets:
+        ContactLogoMac: all
