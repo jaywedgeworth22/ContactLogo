@@ -277,22 +277,47 @@ public final class ReviewSession: ObservableObject {
 
     /// Restores a specific batch. On failure `lastBatchID` is left alone so the
     /// shell can offer Retry instead of losing the batch.
+    /// Undo a batch, and everything applied after it.
+    ///
+    /// `undoHistory` is newest-first, so undoing an older batch means unwinding
+    /// the newer ones first — each restore puts a contact back to how it was
+    /// before that batch, so replaying them newest to oldest lands on the state
+    /// before `batchID`.
+    ///
+    /// This previously restored only the chosen batch and then deleted its log
+    /// *and every newer log*: undoing A after B left B's changes applied and
+    /// destroyed B's backup, permanently. VISION.md promises undo always, and a
+    /// discarded backup is the one failure that cannot be walked back. A log is
+    /// now deleted only once its own restore has succeeded, and a failure stops
+    /// the unwind with everything not yet restored still on disk.
     public func undo(batchID: String) async {
         lastError = nil
         #if canImport(Contacts)
         let log = UndoLog()
-        do {
-            try await log.restore(batchID: batchID, using: CNContactsProvider())
-        } catch {
-            lastError = .undoFailed(batchID: batchID, underlying: error.localizedDescription)
+        let provider = CNContactsProvider()
+
+        guard let index = undoHistory.firstIndex(where: { $0.id == batchID }) else {
+            // Not in the loaded history — restore it alone rather than guessing
+            // what else might be newer.
+            do {
+                try await log.restore(batchID: batchID, using: provider)
+                try? log.deleteBatch(batchID)
+            } catch {
+                lastError = .undoFailed(batchID: batchID, underlying: error.localizedDescription)
+            }
+            refreshUndoHistory()
             return
         }
-        // Restoring an older batch over a newer one is not supported, so the
-        // restored batch and anything newer leave the history.
-        if let index = undoHistory.firstIndex(where: { $0.id == batchID }) {
-            for summary in undoHistory[...index] { try? log.deleteBatch(summary.id) }
-        } else {
-            try? log.deleteBatch(batchID)
+
+        for summary in undoHistory[...index] {
+            do {
+                try await log.restore(batchID: summary.id, using: provider)
+            } catch {
+                lastError = .undoFailed(batchID: summary.id, underlying: error.localizedDescription)
+                refreshUndoHistory()
+                return
+            }
+            try? log.deleteBatch(summary.id)
         }
         refreshUndoHistory()
         #endif

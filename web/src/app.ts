@@ -267,6 +267,7 @@ export function adoptContacts(contacts: BookContact[], label: string) {
     return;
   }
   cardViews.clear();
+  mountedBySection.clear();
   state.contacts = contacts;
   state.items = matchBook(contacts);
   state.stage = "review";
@@ -1071,6 +1072,27 @@ export function trimViewCache<K, V>(cache: Map<K, V>, mounted: readonly K[], cap
 /** Enough to survive a degenerate measurement without holding a whole book. */
 const MIN_CACHED_VIEWS = 60;
 
+/**
+ * What each section currently has mounted.
+ *
+ * `cardViews` is shared by every section but `paint` runs per section, so
+ * trimming against one section's window treated the other sections' *attached*
+ * views as evictable.  Once the combined windows passed the cap, painting a
+ * later section tore down still-visible cards in an earlier one and the next
+ * render rebuilt them and re-requested their thumbnails — the repeated network
+ * and DOM work the cap was added to stop, now triggered by an ordinary checkbox
+ * click.  Trimming against the union fixes that; a view is evictable only when
+ * no section has it on screen.
+ */
+const mountedBySection = new Map<SectionKey, readonly ReviewItem[]>();
+
+function trimSharedViewCache(key: SectionKey, mountedItems: readonly ReviewItem[]): void {
+  mountedBySection.set(key, mountedItems);
+  const union: ReviewItem[] = [];
+  for (const section of mountedBySection.values()) union.push(...section);
+  trimViewCache(cardViews, union, Math.max(MIN_CACHED_VIEWS, union.length * 3));
+}
+
 function cardFor(item: ReviewItem): HTMLElement {
   let view = cardViews.get(item);
   if (!view) {
@@ -1155,7 +1177,7 @@ function buildSection(title: string, key: SectionKey): SectionView {
     const mountedItems = items.slice(slice.start, slice.end);
     const mounted = mountedItems.map(cardFor);
     if (!sameChildren(grid, mounted)) grid.replaceChildren(...mounted);
-    trimViewCache(cardViews, mountedItems, Math.max(MIN_CACHED_VIEWS, mountedItems.length * 3));
+    trimSharedViewCache(key, mountedItems);
 
     if (!remeasuring && measureRowHeight(grid)) {
       remeasuring = true;
