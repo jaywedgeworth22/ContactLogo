@@ -10,10 +10,29 @@ public protocol LogoSource: Sendable {
     func candidates(forDomain domain: String) async throws -> [LogoCandidate]
 }
 
-public enum LogoSourceError: Error, Sendable {
+public enum LogoSourceError: Error, Equatable, Sendable {
+    /// The provider asked us to slow down. Retried with backoff (R11.6); when
+    /// it survives the whole budget the source is recorded as failed, never
+    /// silently dropped.
     case rateLimited(retryAfter: TimeInterval?)
+    /// The provider answered, and has nothing for this brand. Not a failure.
     case notFound
+    /// The source is not usable in this build (no API key, say). Not a failure.
     case misconfigured(String)
+
+    /// A run-level failure the review UI must surface, as opposed to a source
+    /// that simply had no answer.
+    public var isRunFailure: Bool {
+        switch self {
+        case .rateLimited: return true
+        case .notFound, .misconfigured: return false
+        }
+    }
+
+    public var isRateLimited: Bool {
+        if case .rateLimited = self { return true }
+        return false
+    }
 }
 
 /// Minimal PNG/JPEG/WebP header dimension reader — the square rule must work

@@ -48,6 +48,8 @@ struct ContentView: View {
 struct ReviewQueueView: View {
     @EnvironmentObject var model: ReviewSession
     @State private var searchText = ""
+    @State private var manualOverrideResult: MatchResult?
+    @State private var showError = false
 
     var rows: [MatchResult] {
         let base: [MatchResult]
@@ -76,24 +78,67 @@ struct ReviewQueueView: View {
                 Button("Apply selected (\(model.selected.count))") { Task { await model.applySelected() } }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.return, modifiers: .command)
-                if model.lastBatchID != nil {
-                    Button("Undo last batch") { Task { await model.undoLast() } }
+                if let mostRecent = model.undoHistory.first {
+                    Button("Undo last batch") { Task { await model.undo(batchID: mostRecent.id) } }
                         .keyboardShortcut("z", modifiers: .command)
+                }
+                if model.undoHistory.count > 1 {
+                    Menu("History (\(model.undoHistory.count))") {
+                        ForEach(model.undoHistory) { batch in
+                            Button {
+                                Task { await model.undo(batchID: batch.id) }
+                            } label: {
+                                Text("\(batch.contactCount) contact\(batch.contactCount == 1 ? "" : "s") — \(batch.createdAt.formatted(.relative(presentation: .named)))")
+                            }
+                        }
+                    }
+                    .fixedSize()
                 }
             }
             Text("High-confidence matches are pre-checked. Favicon fallbacks, guessed domains, and contacts with existing photos stay in Needs review.")
                 .foregroundStyle(.secondary)
             List(rows, id: \.contactID) { result in
-                ReviewRow(result: result)
+                ReviewRow(result: result, onManualOverride: {
+                    manualOverrideResult = result
+                })
             }
             .searchable(text: $searchText, prompt: "Search brands or domains…")
         }
+        .sheet(item: $manualOverrideResult) { result in
+            ManualOverrideSheet(contactID: result.contactID)
+        }
+        .onChange(of: model.lastError) { newValue in
+            showError = newValue != nil
+        }
+        .alert("ContactLogo", isPresented: $showError, presenting: model.lastError) { _ in
+            Button("OK") {}
+        } message: { error in
+            Text(errorMessage(error))
+        }
     }
+
+    private func errorMessage(_ error: ReviewSessionError) -> String {
+        switch error {
+        case .applyFailed(let succeeded, let failed, let underlying):
+            return "\(failed) of \(succeeded + failed) logos failed to apply (\(underlying))."
+        case .nothingToApply:
+            return "Nothing selected to apply."
+        case .undoFailed(let batchID, let underlying):
+            return "Couldn't undo batch \(batchID.prefix(8)) (\(underlying)). You can try again."
+        case .noBatchToUndo:
+            return "There's no batch to undo."
+        }
+    }
+}
+
+extension MatchResult: @retroactive Identifiable {
+    public var id: String { contactID }
 }
 
 struct ReviewRow: View {
     @EnvironmentObject var model: ReviewSession
     let result: MatchResult
+    var onManualOverride: (() -> Void)? = nil
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -101,6 +146,7 @@ struct ReviewRow: View {
                 get: { model.selected.contains(result.contactID) },
                 set: { model.setSelected(result.contactID, $0) }
             ))
+            .labelsHidden()
             .disabled(result.candidates.isEmpty)
             LogoThumb(url: model.chosenCandidate(for: result)?.imageURL)
                 .frame(width: 56, height: 56)
@@ -109,14 +155,16 @@ struct ReviewRow: View {
                 Text(detail)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                if result.candidates.count > 1 {
-                    HStack(spacing: 8) {
+                HStack(spacing: 8) {
+                    if result.candidates.count > 1 {
                         Button("Try another") { model.cycleCandidate(result.contactID) }
                             .font(.caption)
                         Text("(\((model.chosenIndex[result.contactID] ?? 0) + 1)/\(result.candidates.count))")
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
                     }
+                    Button("Choose your own…") { onManualOverride?() }
+                        .font(.caption)
                 }
             }
         }
@@ -140,12 +188,17 @@ struct ReviewRow: View {
 
 struct LogoThumb: View {
     let url: URL?
+    @State private var decodedDataImage: NSImage?
 
     var body: some View {
         Group {
             if let url {
-                if url.scheme == "data", let data = try? Data(contentsOf: url) {
-                    dataImage(data)
+                if url.scheme == "data" {
+                    if let decodedDataImage {
+                        Image(nsImage: decodedDataImage).resizable().scaledToFit()
+                    } else {
+                        placeholder
+                    }
                 } else {
                     AsyncImage(url: url) { phase in
                         switch phase {
@@ -167,19 +220,23 @@ struct LogoThumb: View {
         .frame(width: 56, height: 56)
         .background(Color.gray.opacity(0.08))
         .clipShape(RoundedRectangle(cornerRadius: 8))
+        .task(id: url) {
+            await loadDataImageIfNeeded()
+        }
     }
 
-    @ViewBuilder
-    private func dataImage(_ data: Data) -> some View {
-        #if canImport(AppKit)
-        if let ns = NSImage(data: data) {
-            Image(nsImage: ns).resizable().scaledToFit()
-        } else {
-            placeholder
+    // Decodes data: URLs once per distinct `url` (cached in state) instead
+    // of synchronously re-decoding base64 on every body evaluation.
+    private func loadDataImageIfNeeded() async {
+        guard let url, url.scheme == "data" else {
+            if decodedDataImage != nil { decodedDataImage = nil }
+            return
         }
-        #else
-        placeholder
-        #endif
+        let image = await Task.detached(priority: .utility) { () -> NSImage? in
+            guard let raw = try? Data(contentsOf: url) else { return nil }
+            return NSImage(data: raw)
+        }.value
+        decodedDataImage = image
     }
 
     private var placeholder: some View {

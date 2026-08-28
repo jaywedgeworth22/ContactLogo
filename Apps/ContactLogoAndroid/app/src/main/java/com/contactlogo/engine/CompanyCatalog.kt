@@ -1,9 +1,14 @@
 package com.contactlogo.engine
 
-import java.util.Locale
-
+/**
+ * R8.3 — offline name -> official domain catalog, plus the CATALOG_TAIL_OK
+ * sub-brand reduction ("H-E-B Pharmacy" -> heb.com, "Kroger Marketplace Cypress"
+ * -> kroger.com) without folding trade-word tails onto the wrong parent
+ * ("Delta Dental" MUST NOT reduce to delta.com).
+ */
 object CompanyCatalog {
-    private val domains = mapOf(
+
+    private val domains: Map<String, String> = mapOf(
         "apple" to "apple.com", "apple inc" to "apple.com",
         "google" to "google.com", "alphabet" to "google.com",
         "microsoft" to "microsoft.com", "amazon" to "amazon.com",
@@ -43,19 +48,47 @@ object CompanyCatalog {
         "labcorp" to "labcorp.com", "enterprise" to "enterprise.com",
         "hertz" to "hertz.com", "avis" to "avis.com",
         "shell" to "shell.com", "chevron" to "chevron.com",
-        "exxon" to "exxon.com", "bp" to "bp.com", "7-eleven" to "7-eleven.com",
-        "wawa" to "wawa.com", "buc-ees" to "buc-ees.com"
+        "exxon" to "exxon.com", "exxonmobil" to "exxonmobil.com",
+        "bp" to "bp.com", "7-eleven" to "7-eleven.com",
+        "wawa" to "wawa.com", "buc-ees" to "buc-ees.com",
+        "h&r block" to "hrblock.com",
+        "cisco" to "cisco.com",
+        // MATCHING-ENGINE §2 rule 4 alias map.
+        "txt" to "texasbytexas.com", "gcx" to "raise.com"
     )
 
+    /** R8.3 CATALOG_TAIL_OK = GEO_WORDS (R6.6) union SUBBRAND_TAIL, tested word by word. */
+    private val subbrandTailWords: Set<String> = setOf(
+        "pharmacy", "deli", "bakery", "fuel", "gas", "market", "marketplace", "optical", "photo",
+        "curbside", "drive", "thru", "corporate", "hq", "distribution", "warehouse"
+    )
+    private val tailOkWords: Set<String> = Normalize.GEO_WORDS_LITERAL + subbrandTailWords
+    private val tailOkNumeric = listOf(Regex("""^#\d*$"""), Regex("""^\d{2,5}$"""))
+
+    private fun isTailOkWord(w: String): Boolean {
+        if (w.lowercase() in tailOkWords) return true
+        return tailOkNumeric.any { it.matches(w) }
+    }
+
+    /**
+     * R8.3: `DOMAINS[companyKey(raw)]`, else the space-collapsed key, else the
+     * longest-head / sub-brand-tail reduction, else null.
+     */
     fun domainForName(name: String): String? {
-        val key = Normalize.companyKey(name)
-        domains[key]?.let { return it }
+        val k = Normalize.companyKey(name)
+        if (k.isEmpty()) return null
+        domains[k]?.let { return it }
 
-        // Strip location tails
-        val cleaned = Normalize.cleanName(name)
-        val cleanedKey = Normalize.companyKey(cleaned)
-        domains[cleanedKey]?.let { return it }
+        val nospace = k.replace(" ", "")
+        domains[nospace]?.let { return it }
 
+        val words = k.split(" ")
+        for (i in words.size - 1 downTo 1) {
+            val head = words.subList(0, i).joinToString(" ")
+            val tailWords = words.subList(i, words.size)
+            val dom = domains[head] ?: domains[head.replace(" ", "")]
+            if (dom != null && tailWords.all { isTailOkWord(it) }) return dom
+        }
         return null
     }
 }

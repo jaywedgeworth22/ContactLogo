@@ -9,9 +9,12 @@ and the web.
 **Slack `repo:`:** `ContactLogo`
 **Acronym:** `CL`
 
-Production hosting is Coolify + Cloudflare, not Render.  Do not invent Apple or
-DNS credentials.  Do not treat Grok Publish (`contact-logo.grok.me`,
-`contactlogo.grok.me`, `bizlogo.grok.me`) as the product URL.
+Production hosting is Vercel (auto-deployed from main, no Docker container in use).
+The `web/` directory is the Vercel root directory per dashboard configuration.
+Security headers, cache policy for `/assets/*`, and build configuration are in
+`vercel.json`.  Do not invent Apple or DNS credentials.  Do not treat Grok
+Publish (`contact-logo.grok.me`, `contactlogo.grok.me`, `bizlogo.grok.me`) as
+the product URL.
 
 Sibling names (other apps, not this repo): Autorotate public host is
 `autorotate.codes` (GitHub may still say TopSpin).  DealDex public host is

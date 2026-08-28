@@ -10,10 +10,18 @@ options:
 
 settings:
   base:
-    SWIFT_VERSION: "5.9"
+    # Must stay >= the language mode implied by Package.swift's
+    # `swift-tools-version: 6.0` — Apps/ uses `@retroactive` conformances,
+    # which require Swift 5.10+, and Sources/ContactLogoKit is compiled by
+    # both this Xcode project and SwiftPM from the same sources.
+    SWIFT_VERSION: "6.0"
     MARKETING_VERSION: "1.0.0"
     CURRENT_PROJECT_VERSION: "1"
-    DEVELOPMENT_TEAM: CC8UTF7ATG
+    # Not a secret, but pinning one developer's Apple Team ID here would break
+    # the build for everyone else. Override per-checkout with:
+    #   CONTACTLOGO_DEVELOPMENT_TEAM=YOURTEAMID xcodegen generate
+    # (falls back to the project's own team when unset).
+    DEVELOPMENT_TEAM: "${CONTACTLOGO_DEVELOPMENT_TEAM:-CC8UTF7ATG}"
     CODE_SIGN_STYLE: Automatic
     INFOPLIST_KEY_CFBundleDisplayName: "ContactLogo"
     INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.utilities"
@@ -29,7 +37,6 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.contactlogo.kit
-        DEVELOPMENT_TEAM: CC8UTF7ATG
         CODE_SIGN_STYLE: Automatic
         DEFINES_MODULE: YES
         GENERATE_INFOPLIST_FILE: YES
@@ -45,7 +52,6 @@ targets:
         PRODUCT_NAME: ContactLogoKit
         PRODUCT_MODULE_NAME: ContactLogoKit
         PRODUCT_BUNDLE_IDENTIFIER: com.contactlogo.kit.macos
-        DEVELOPMENT_TEAM: CC8UTF7ATG
         CODE_SIGN_STYLE: Automatic
         DEFINES_MODULE: YES
         GENERATE_INFOPLIST_FILE: YES
@@ -62,7 +68,6 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.contactlogo
         PRODUCT_NAME: "ContactLogo"
-        DEVELOPMENT_TEAM: CC8UTF7ATG
         CODE_SIGN_STYLE: Automatic
         TARGETED_DEVICE_FAMILY: "1,2"
         INFOPLIST_KEY_CFBundleDisplayName: "ContactLogo"
@@ -71,6 +76,14 @@ targets:
         INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.utilities"
         GENERATE_INFOPLIST_FILE: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    info:
+      properties:
+        # Required for BGTaskScheduler.submit() to succeed — see CL-05.
+        # UIBackgroundModes is an array, so it can't be expressed as a
+        # scalar INFOPLIST_KEY_* build setting; it has to go through the
+        # generated Info.plist's `properties` merge instead.
+        UIBackgroundModes:
+          - processing
 
   ContactLogoMac:
     type: application
@@ -84,10 +97,10 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.contactlogo.macos
         PRODUCT_NAME: "ContactLogo"
-        DEVELOPMENT_TEAM: CC8UTF7ATG
         CODE_SIGN_STYLE: Automatic
         INFOPLIST_KEY_CFBundleDisplayName: "ContactLogo"
         INFOPLIST_KEY_NSContactsUsageDescription: "ContactLogo scans your contacts to find company logos for businesses in your address book."
         INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.utilities"
         GENERATE_INFOPLIST_FILE: YES
         CODE_SIGN_ENTITLEMENTS: Apps/ContactLogoMac/ContactLogoMac.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

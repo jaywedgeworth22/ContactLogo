@@ -150,9 +150,19 @@ final class ClassificationTests: XCTestCase {
 
 final class SimpleIconsTests: XCTestCase {
     func testSlugMapAndDeltaSkip() {
-        XCTAssertEqual(SimpleIconsSource.slug(for: "chase.com"), "jpmorgan")
-        XCTAssertEqual(SimpleIconsSource.slug(for: "att.com"), "atandt")
+        XCTAssertEqual(SimpleIconsSource.slug(for: "chase.com"), "jpmorgan" as String?)
+        XCTAssertEqual(SimpleIconsSource.slug(for: "att.com"), "atandt" as String?)
         XCTAssertNotNil(SimpleIconsSource.url(for: "fedex.com"))
+        // R13.3 — the airline is served by the curated mark, never by the
+        // Simple Icons "delta" slug, which is a software company.
+        XCTAssertNil(SimpleIconsSource.slug(for: "delta.com"))
+        XCTAssertNil(SimpleIconsSource.url(for: "delta.com"))
+    }
+    func testSlugsAreNeverDerived() {
+        // R13.2 — an unmapped domain produces no candidate at all; stripping
+        // the TLD is right only by accident.
+        XCTAssertNil(SimpleIconsSource.slug(for: "bayoucitysprinkler.com"))
+        XCTAssertNil(SimpleIconsSource.url(for: "acmeroofing.com"))
     }
 }
 
@@ -220,3 +230,485 @@ final class DefaultSourcesTests: XCTestCase {
         XCTAssertEqual(withBrand[1], .brandfetch)
     }
 }
+
+// MARK: - ENGINE-CONTRACT conformance of the pieces this lane changed
+
+final class LegalSuffixTests: XCTestCase {
+    /// R5.2 — the suffix must be a separate token. Without the leading
+    /// separator the `co` alternative eats the end of a word.
+    func testSuffixNeedsASeparator() {
+        XCTAssertEqual(NameNormalizer.companyKey("Costco"), "costco")
+        XCTAssertEqual(NameNormalizer.companyKey("Cisco"), "cisco")
+        XCTAssertEqual(NameNormalizer.companyKey("Medico"), "medico")
+        XCTAssertEqual(NameNormalizer.companyKey("TRICO"), "trico")
+    }
+    func testSuffixIsStrippedWhenItIsATokan() {
+        XCTAssertEqual(NameNormalizer.companyKey("Apple Inc"), "apple")
+        XCTAssertEqual(NameNormalizer.companyKey("Zeta Metalworks, Inc."), "zeta metalworks")
+        XCTAssertEqual(NameNormalizer.companyKey("Acme Roofing Co"), "acme roofing")
+        XCTAssertEqual(NameNormalizer.companyKey("Bayou City Sprinkler Repair LLC"), "bayou city sprinkler repair")
+    }
+    func testAmpersandSpellingsCollapse() {
+        XCTAssertEqual(NameNormalizer.companyKey("H & R Block"), "h&r block")
+        XCTAssertEqual(NameNormalizer.companyKey("H&R Block"), "h&r block")
+        XCTAssertEqual(CompanyCatalog.domain(forName: "H & R Block"), "hrblock.com")
+    }
+    func testGuessSlug() {
+        XCTAssertEqual(NameNormalizer.guessSlug("Bayou City Sprinkler Repair LLC"), "bayoucitysprinklerrepair")
+        XCTAssertEqual(NameNormalizer.guessSlug("Smith & Sons Plumbing"), "smithandsonsplumbing")
+        XCTAssertNil(NameNormalizer.guessSlug("Bo"))
+        XCTAssertNil(NameNormalizer.guessSlug("Northwest Harris County Municipal Utility District"))
+    }
+    func testMedicoStaysOnTheBlocklist() {
+        // Only reachable once companyKey stops turning "Medico" into "medi".
+        XCTAssertTrue(GenericBlocklist.isNonBrand("Medico"))
+    }
+}
+
+final class SegmentationTests: XCTestCase {
+    /// R6.2 — §5 rule 8, the rule the audit found dead in all three engines.
+    func testBrandTailIsRecognised() {
+        XCTAssertEqual(NameNormalizer.segment("Byron Goode Jr - Root Insurance").query, "Root Insurance")
+        XCTAssertTrue(NameNormalizer.segment("Byron Goode Jr - Root Insurance").isBrandTail)
+        XCTAssertTrue(NameNormalizer.segment("Chris At NTB").isBrandTail)
+        XCTAssertTrue(NameNormalizer.segment("Dana At Costco").isBrandTail)
+        XCTAssertTrue(NameNormalizer.segment("Katy Auto - Firestone Tire").isBrandTail)
+    }
+    /// R6.3 / R6.4 — decoration is stripped, not searched for.
+    func testDecorationIsStripped() {
+        let australia = NameNormalizer.segment("Apple - Australia")
+        XCTAssertEqual(australia.query, "Apple")
+        XCTAssertTrue(australia.decorationStripped)
+        XCTAssertFalse(australia.isBrandTail)
+
+        XCTAssertEqual(NameNormalizer.segment("TRICO - General Mgr").query, "TRICO")
+        XCTAssertEqual(NameNormalizer.segment("Hsa PTO - Asst Treasurer").query, "Hsa PTO")
+        XCTAssertEqual(NameNormalizer.segment("Riverbend Clinic - Voicemail").query, "Riverbend Clinic")
+        XCTAssertEqual(NameNormalizer.segment("Walgreens - Mason Rd").query, "Walgreens")
+        // Role head, generic tail: the tail survives and R7.5 then rejects it.
+        XCTAssertEqual(NameNormalizer.segment("Front Desk - Hospital").query, "Hospital")
+    }
+    func testRoleTailIsNotABrand() {
+        XCTAssertFalse(NameNormalizer.segment("Priya Rao - Regional Manager").isBrandTail)
+        XCTAssertNil(NameNormalizer.brandTail("Priya Rao - Regional Manager"))
+    }
+    func testCatalogTailAllowsSubBrandsButNotTrades() {
+        XCTAssertEqual(CompanyCatalog.domain(forName: "H-E-B Pharmacy"), "heb.com")
+        // "dental" is a trade word, so Delta Dental must not become the airline.
+        XCTAssertNil(CompanyCatalog.domain(forName: "Delta Dental"))
+        XCTAssertNil(CompanyCatalog.domain(forName: "Southwest Reservations"))
+    }
+}
+
+final class StaticMatchTests: XCTestCase {
+    let pipeline = MatchPipeline(sources: [], fetchImage: { _ in Data() })
+
+    private func contact(_ display: String, given: String? = nil, family: String? = nil,
+                         org: String? = nil, emails: [String] = [], websites: [String] = [],
+                         phones: [String] = [], hasImage: Bool = false) -> ContactIdentity {
+        ContactIdentity(id: "c", displayName: display, givenName: given, familyName: family,
+                        organization: org, emailDomains: emails, websiteHosts: websites,
+                        phoneNumbers: phones, hasImage: hasImage)
+    }
+
+    func testRule8ReclassifiesAPersonWithABrandTail() {
+        let byron = contact("Byron Goode Jr - Root Insurance", given: "Byron", family: "Goode")
+        let match = pipeline.staticMatch(byron)
+        XCTAssertEqual(match.contactClass, .businessCard)
+        XCTAssertEqual(match.query, "Root Insurance")
+        XCTAssertEqual(match.domain, "rootinsurance.com")
+        XCTAssertEqual(match.via, .guess)
+        XCTAssertEqual(match.maxConfidence, .medium)
+        XCTAssertTrue(match.flags.contains("brand-tail"))
+    }
+
+    func testEmployeeGuardBeatsRule8() {
+        let maya = contact("Maya Chen - Apple", given: "Maya", family: "Chen", emails: ["maya@apple.com"])
+        let match = pipeline.staticMatch(maya)
+        XCTAssertEqual(match.contactClass, .person)
+        XCTAssertNil(match.query)
+        XCTAssertTrue(match.flags.contains("employee"))
+    }
+
+    func testMergedDomainIsCapped() {
+        let match = pipeline.staticMatch(contact("NTB", websites: ["https://www.ntb.com"]))
+        XCTAssertEqual(match.domain, "ntb.com")
+        XCTAssertEqual(match.via, .website)
+        XCTAssertEqual(match.maxConfidence, .medium)
+        XCTAssertTrue(match.flags.contains("brand-redirect-risk"))
+    }
+
+    func testSocialAndPlatformHostsNeverBecomeTheDomain() {
+        let linkedIn = pipeline.staticMatch(
+            contact("Acme Roofing Co", websites: ["https://www.linkedin.com/company/acme-roofing"]))
+        XCTAssertEqual(linkedIn.domain, "acmeroofing.com")
+        XCTAssertEqual(linkedIn.via, .guess)
+        XCTAssertTrue(linkedIn.flags.contains("social-url-ignored"))
+
+        // R3.2 — the email path is filtered too.
+        let socialMail = pipeline.staticMatch(
+            contact("Gulf Coast Marine Supply", emails: ["sales@facebook.com"]))
+        XCTAssertEqual(socialMail.domain, "gulfcoastmarinesupply.com")
+        XCTAssertTrue(socialMail.flags.contains("social-url-ignored"))
+
+        // R3.3 — sites.google.com would otherwise reduce to google.com.
+        let littleLeague = pipeline.staticMatch(
+            contact("Spring Creek Little League", websites: ["https://sites.google.com/view/springcreekll"]))
+        XCTAssertEqual(littleLeague.domain, "springcreeklittleleague.com")
+        XCTAssertTrue(littleLeague.flags.contains("platform-host-ignored"))
+    }
+
+    func testSubdomainReduction() {
+        let match = pipeline.staticMatch(contact("Walgreens", websites: ["https://shop.walgreens.com/store/12345"]))
+        XCTAssertEqual(match.domain, "walgreens.com")
+        XCTAssertEqual(match.maxConfidence, .high)
+        XCTAssertTrue(match.flags.contains("subdomain-reduced"))
+    }
+
+    func testHomonymCeilingNeedsContactOwnedEvidence() {
+        XCTAssertEqual(pipeline.staticMatch(contact("Delta")).maxConfidence, .medium)
+        XCTAssertEqual(pipeline.staticMatch(contact("Delta", websites: ["https://www.delta.com/"])).maxConfidence, .high)
+        // R4.2 — the cap is keyed on companyKey, so "Apple Inc" is capped too.
+        XCTAssertEqual(pipeline.staticMatch(contact("Apple Inc")).maxConfidence, .medium)
+        // A qualified name is a different key and is not a homonym.
+        let ibcBank = pipeline.staticMatch(contact("IBC Bank", emails: ["teller@ibc.com"]))
+        XCTAssertEqual(ibcBank.maxConfidence, .high)
+        XCTAssertFalse(ibcBank.flags.contains("homonym-risk"))
+    }
+
+    func testExistingPhotoAndNoIdentityCeilings() {
+        let costco = pipeline.staticMatch(contact("Costco", hasImage: true))
+        XCTAssertEqual(costco.maxConfidence, .medium)
+        XCTAssertTrue(costco.flags.contains("replace-existing"))
+
+        let unresolvable = pipeline.staticMatch(contact("Bo"))
+        XCTAssertEqual(unresolvable.contactClass, .businessCard)
+        XCTAssertNil(unresolvable.domain)
+        XCTAssertEqual(unresolvable.maxConfidence, .skip)
+        XCTAssertTrue(unresolvable.flags.contains("no-identity"))
+    }
+
+    func testNonBrandIsDecidedBeforeAnySplit() {
+        XCTAssertEqual(pipeline.classify(contact("Printer at Farm (WF-2950)")), .nonBrand)
+        XCTAssertEqual(pipeline.classify(contact("Front Desk - Hospital")), .nonBrand)
+        XCTAssertEqual(pipeline.classify(contact("Verification Code (Twilio Powered)")), .nonBrand)
+    }
+
+    func testWorkEmailMayReachHigh() {
+        let match = pipeline.staticMatch(contact("Bluebonnet Dental", emails: ["office@bluebonnetdental.com"]))
+        XCTAssertEqual(match.via, .email)
+        XCTAssertEqual(match.maxConfidence, .high)
+    }
+}
+
+final class BackoffTests: XCTestCase {
+    func testFullJitterIsBoundedAndGrows() {
+        // Deterministic "random": always the top of the range.
+        let top: (ClosedRange<Double>) -> Double = { $0.upperBound }
+        XCTAssertEqual(HTTPRetry.delay(forAttempt: 0, random: top), 0.5, accuracy: 0.0001)
+        XCTAssertEqual(HTTPRetry.delay(forAttempt: 1, random: top), 1.0, accuracy: 0.0001)
+        XCTAssertEqual(HTTPRetry.delay(forAttempt: 2, random: top), 2.0, accuracy: 0.0001)
+        XCTAssertEqual(HTTPRetry.delay(forAttempt: 9, random: top), HTTPRetry.maxDelay, accuracy: 0.0001)
+        // Full jitter: never longer than the ceiling.
+        let bottom: (ClosedRange<Double>) -> Double = { $0.lowerBound }
+        XCTAssertEqual(HTTPRetry.delay(forAttempt: 3, random: bottom), 0, accuracy: 0.0001)
+    }
+    func testRetryAfterWins() {
+        let bottom: (ClosedRange<Double>) -> Double = { $0.lowerBound }
+        XCTAssertEqual(HTTPRetry.delay(forAttempt: 0, retryAfter: 3, random: bottom), 3, accuracy: 0.0001)
+        XCTAssertEqual(HTTPRetry.retryAfterSeconds("12"), 12)
+        XCTAssertNil(HTTPRetry.retryAfterSeconds("Wed, 21 Oct 2026 07:28:00 GMT"))
+    }
+    func testRateLimitIsRetriedThenSurfaced() async {
+        var calls = 0
+        do {
+            _ = try await HTTPRetry.withRateLimitRetry(attempts: 2) { () -> Int in
+                calls += 1
+                throw LogoSourceError.rateLimited(retryAfter: 0)
+            }
+            XCTFail("expected the rate limit to be rethrown")
+        } catch {
+            XCTAssertEqual(error as? LogoSourceError, LogoSourceError.rateLimited(retryAfter: 0))
+        }
+        XCTAssertEqual(calls, 2)
+    }
+    func testOnlyRateLimitsAreRetried() async {
+        var calls = 0
+        _ = try? await HTTPRetry.withRateLimitRetry(attempts: 4) { () -> Int in
+            calls += 1
+            throw LogoSourceError.notFound
+        }
+        XCTAssertEqual(calls, 1)
+    }
+}
+
+final class SourceFailureTests: XCTestCase {
+    /// A source that 429s must be recorded, not silently dropped for the rest
+    /// of the run (ENGINE-CONTRACT R11.6).
+    struct RateLimitedSource: LogoSource {
+        let kind = SourceKind.brandfetch
+        func candidates(forBrandName name: String) async throws -> [LogoCandidate] {
+            throw LogoSourceError.rateLimited(retryAfter: 0)
+        }
+        func candidates(forDomain domain: String) async throws -> [LogoCandidate] {
+            throw LogoSourceError.rateLimited(retryAfter: 0)
+        }
+    }
+    struct EmptySource: LogoSource {
+        let kind = SourceKind.wikimedia
+        func candidates(forBrandName name: String) async throws -> [LogoCandidate] { [] }
+        func candidates(forDomain domain: String) async throws -> [LogoCandidate] { [] }
+    }
+
+    func testRateLimitedSourceIsReportedAndRowIsRetryable() async {
+        let pipeline = MatchPipeline(sources: [RateLimitedSource()], fetchImage: { _ in Data() })
+        let result = await pipeline.match(ContactIdentity(id: "1", displayName: "FedEx"))
+        XCTAssertEqual(result.confidence, .skip)
+        XCTAssertEqual(result.sourceErrors.count, 1)
+        XCTAssertEqual(result.sourceErrors.first?.source, .brandfetch)
+        XCTAssertTrue(result.sourceErrors.first?.rateLimited == true)
+        XCTAssertTrue(result.flags.contains("source-error"))
+        XCTAssertTrue(result.isRetryable)
+    }
+
+    func testASourceWithNothingToSayIsNotAFailure() async {
+        let pipeline = MatchPipeline(sources: [EmptySource()], fetchImage: { _ in Data() })
+        let result = await pipeline.match(ContactIdentity(id: "1", displayName: "FedEx"))
+        XCTAssertTrue(result.sourceErrors.isEmpty)
+        XCTAssertFalse(result.isRetryable)
+    }
+
+    func testNameSearchGateDropsUnrelatedBrands() {
+        let hit = LogoCandidate(source: .wikimedia, imageURL: URL(string: "https://x/a.png")!,
+                                altText: "File:Bread Zine logo.svg")
+        XCTAssertFalse(MatchPipeline.passesNameSearchGate(hit, query: "Cash App"))
+        let domainHit = LogoCandidate(source: .simpleIcons, imageURL: URL(string: "https://x/b.svg")!,
+                                      altText: "raise.com")
+        // R9.3 — candidates fetched by domain are exempt from the gate.
+        XCTAssertTrue(MatchPipeline.passesNameSearchGate(domainHit, query: "GCX"))
+    }
+}
+
+final class FallbackTileTests: XCTestCase {
+    private func buffer(width: Int, height: Int, background: (UInt8, UInt8, UInt8),
+                        ink: (UInt8, UInt8, UInt8), inkRect: (x: Int, y: Int, w: Int, h: Int)) -> [UInt8] {
+        var pixels = [UInt8](repeating: 255, count: width * height * 4)
+        for y in 0..<height {
+            for x in 0..<width {
+                let inside = x >= inkRect.x && x < inkRect.x + inkRect.w
+                    && y >= inkRect.y && y < inkRect.y + inkRect.h
+                let colour = inside ? ink : background
+                let offset = (y * width + x) * 4
+                pixels[offset] = colour.0
+                pixels[offset + 1] = colour.1
+                pixels[offset + 2] = colour.2
+                pixels[offset + 3] = 255
+            }
+        }
+        return pixels
+    }
+
+    func testCentredGlyphOnAFlatFieldIsATile() {
+        let pixels = buffer(width: 64, height: 64, background: (240, 240, 240), ink: (20, 20, 20),
+                            inkRect: (x: 22, y: 22, w: 20, h: 20))
+        XCTAssertTrue(ImageFlags.isCentredGlyph(pixels: pixels, width: 64, height: 64))
+    }
+
+    func testAMarkThatReachesTheEdgesIsNotATile() {
+        let pixels = buffer(width: 64, height: 64, background: (240, 240, 240), ink: (20, 20, 20),
+                            inkRect: (x: 2, y: 27, w: 60, h: 10))
+        XCTAssertFalse(ImageFlags.isCentredGlyph(pixels: pixels, width: 64, height: 64))
+    }
+
+    func testByteFloorOnlyAppliesToRaster() {
+        // A curated SVG mark is often ~400 bytes and must survive.
+        let svg = Data("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M0 0h24v24H0z'/></svg>".utf8)
+        XCTAssertLessThan(svg.count, ImageFlags.rasterByteFloor)
+        XCTAssertFalse(ImageFlags.isFallbackTile(svg))
+
+        var tinyPNG = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+        tinyPNG.append(Data(repeating: 0, count: 100))
+        XCTAssertTrue(ImageFlags.isFallbackTile(tinyPNG))
+    }
+
+    func testProviderFlagWins() {
+        XCTAssertTrue(ImageFlags.isProviderFallback(headerValue: "true"))
+        XCTAssertTrue(ImageFlags.isProviderFallback(headerValue: "1"))
+        XCTAssertFalse(ImageFlags.isProviderFallback(headerValue: "false"))
+        XCTAssertFalse(ImageFlags.isProviderFallback(headerValue: nil))
+        XCTAssertTrue(ImageFlags.isFallbackTile(Data(repeating: 9, count: 4096), providerFlagged: true))
+    }
+}
+
+final class HonestHeadersTests: XCTestCase {
+    func testNoSpoofedBrowserOrForgedReferer() {
+        let request = BrandfetchSource.imageRequest(url: URL(string: "https://cdn.example.com/logo.png")!)
+        let agent = request.value(forHTTPHeaderField: "User-Agent") ?? ""
+        let referer = request.value(forHTTPHeaderField: "Referer") ?? ""
+        XCTAssertFalse(agent.contains("Chrome"))
+        XCTAssertFalse(agent.contains("Mozilla"))
+        XCTAssertTrue(agent.contains("ContactLogo"))
+        XCTAssertFalse(referer.contains("google.com"))
+        XCTAssertFalse(referer.contains("example.com"))
+        XCTAssertTrue(referer.contains("contactlogo.com"))
+    }
+}
+
+final class UndoLogTests: XCTestCase {
+    private func makeLog() throws -> UndoLog {
+        let dir = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ContactLogoTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return UndoLog(directory: dir)
+    }
+
+    func testBatchesAreOrderedChronologicallyNotByUUID() throws {
+        let log = try makeLog()
+        var ids: [String] = []
+        for index in 0..<3 {
+            let entry = ChangeSet.Entry(contactID: "contact-\(index)",
+                                        newImageData: Data([1, 2, 3]),
+                                        previousImageData: Data([9]))
+            ids.append(try log.recordBatch([entry]).lastPathComponent)
+            Thread.sleep(forTimeInterval: 0.01)
+        }
+        let summaries = try log.listBatchSummaries()
+        XCTAssertEqual(summaries.count, 3)
+        XCTAssertEqual(summaries.first?.id, ids.last)
+        XCTAssertEqual(summaries.last?.id, ids.first)
+        XCTAssertEqual(summaries.first?.contactCount, 1)
+        try? FileManager.default.removeItem(at: log.directory)
+    }
+
+    func testPruneKeepsTheMostRecent() throws {
+        let log = try makeLog()
+        for index in 0..<4 {
+            let entry = ChangeSet.Entry(contactID: "contact-\(index)",
+                                        newImageData: Data([1]), previousImageData: nil)
+            _ = try log.recordBatch([entry])
+            Thread.sleep(forTimeInterval: 0.01)
+        }
+        try log.prune(keeping: 2)
+        XCTAssertEqual(try log.listBatchSummaries().count, 2)
+        try? FileManager.default.removeItem(at: log.directory)
+    }
+
+    func testFileNamesAreNeverContactIdentifiers() throws {
+        let log = try makeLog()
+        let entry = ChangeSet.Entry(contactID: "../../etc/passwd",
+                                    newImageData: Data([1]), previousImageData: Data([7]))
+        let dir = try log.recordBatch([entry])
+        let files = try FileManager.default.contentsOfDirectory(atPath: dir.path).sorted()
+        XCTAssertEqual(files, ["meta.json", "previous-0.img"])
+        try? FileManager.default.removeItem(at: log.directory)
+    }
+
+    func testTraversalComponentsAreRejected() {
+        XCTAssertNil(UndoLog.safeComponent("../../etc/passwd"))
+        XCTAssertNil(UndoLog.safeComponent(".."))
+        XCTAssertNil(UndoLog.safeComponent(".hidden"))
+        XCTAssertNil(UndoLog.safeComponent("a/b.img"))
+        XCTAssertEqual(UndoLog.safeComponent("previous-0.img"), "previous-0.img")
+    }
+}
+
+#if canImport(CoreGraphics) && canImport(ImageIO)
+import CoreGraphics
+
+final class ImagePreparerTests: XCTestCase {
+    /// CL-06: the two highest-priority sources both return SVG, which Contacts
+    /// rejects and `ImageDimensions` cannot measure — so the curated marks
+    /// could never satisfy the square rule and never reach high confidence.
+    func testCuratedVectorMarkBecomesAMeasurableSquarePNG() throws {
+        let svg = try XCTUnwrap(PreferredMarksSource.svg(for: "delta.com"))
+        let data = Data(svg.utf8)
+        XCTAssertTrue(ImagePreparer.isVector(data))
+        XCTAssertNil(ImageDimensions.read(data), "raw SVG has no readable pixel size")
+
+        let prepared = try ImagePreparer.squarePNG(from: data)
+        XCTAssertEqual(prepared.width, 512)
+        XCTAssertEqual(prepared.height, 512)
+        XCTAssertTrue(ImageFlags.isPNG(prepared.data))
+        let size = try XCTUnwrap(ImageDimensions.read(prepared.data))
+        XCTAssertEqual(size.0, 512)
+        XCTAssertEqual(size.1, 512)
+
+        let candidate = LogoCandidate(source: .preferred, imageURL: URL(string: "https://x/mark.png")!,
+                                      pixelWidth: prepared.width, pixelHeight: prepared.height,
+                                      assetType: "icon", hasAlpha: true)
+        XCTAssertTrue(candidate.isSquareish)
+        XCTAssertEqual(CandidateRanker.confidence(for: candidate, nameSimilarityPassed: true,
+                                                  homonymRisk: false, domainAgrees: true), .high)
+    }
+
+    /// §5.3 pad, never crop: a full-bleed source comes back with transparent
+    /// margin rather than with its edges cut off.
+    func testPaddingNeverCrops() throws {
+        let svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\">"
+            + "<rect x=\"0\" y=\"0\" width=\"100\" height=\"100\" fill=\"#ff0000\"/></svg>"
+        let prepared = try ImagePreparer.squarePNG(from: Data(svg.utf8))
+        XCTAssertEqual(prepared.width, 512)
+        XCTAssertTrue(ImageFlags.pngHasAlpha(prepared.data),
+                      "an opaque full-bleed mark must gain a transparent margin")
+    }
+
+    func testUndecodableBytesThrowRatherThanBeingWritten() {
+        XCTAssertThrowsError(try ImagePreparer.squarePNG(from: Data("not an image".utf8)))
+        XCTAssertThrowsError(try ImagePreparer.squarePNG(from: Data()))
+    }
+
+    func testPathDataIsParsed() {
+        let triangle = SVGRasterizer.parsePathData("M0 0 L10 0 L10 10 Z")
+        XCTAssertFalse(triangle.isEmpty)
+        XCTAssertEqual(triangle.boundingBox.width, 10, accuracy: 0.001)
+        XCTAssertEqual(triangle.boundingBox.height, 10, accuracy: 0.001)
+
+        // Relative commands and packed arc flags must not derail the scanner.
+        let curved = SVGRasterizer.parsePathData("M2 2 c1 0 2 1 2 2 a2 2 0 011-1 h3 v3 z")
+        XCTAssertFalse(curved.isEmpty)
+    }
+
+    func testViewBoxlessOrEmptyMarkupIsRejected() {
+        XCTAssertNil(SVGRasterizer.parse(Data("<svg><g/></svg>".utf8)))
+        XCTAssertTrue(SVGRasterizer.looksLikeSVG(Data("<?xml version=\"1.0\"?><svg viewBox=\"0 0 1 1\"></svg>".utf8)))
+        XCTAssertFalse(SVGRasterizer.looksLikeSVG(Data([0x89, 0x50, 0x4E, 0x47])))
+    }
+}
+
+@MainActor
+final class ManualCandidateTests: XCTestCase {
+    /// VISION's unsure-queue promise: the user's own image becomes the top
+    /// candidate, already squared and padded.
+    func testManualPickBecomesTheTopCandidate() throws {
+        let session = ReviewSession()
+        session.results = [MatchResult(contactID: "1", contactClass: .businessCard,
+                                       candidates: [], confidence: .skip, flags: [])]
+        let svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\">"
+            + "<circle cx=\"5\" cy=\"5\" r=\"4\" fill=\"#0033aa\"/></svg>"
+        try session.setManualCandidate(for: "1", imageData: Data(svg.utf8))
+
+        XCTAssertEqual(session.results[0].candidates.first?.source, .manual)
+        XCTAssertEqual(session.results[0].candidates.first?.pixelWidth, 512)
+        XCTAssertTrue(session.results[0].candidates.first?.isSquareish == true)
+        XCTAssertEqual(session.chosenIndex["1"], 0)
+        XCTAssertTrue(session.selected.contains("1"))
+        XCTAssertEqual(session.results[0].candidates.first?.imageURL.scheme, "data")
+    }
+
+    func testUnusableManualBytesThrowAndChangeNothing() {
+        let session = ReviewSession()
+        session.results = [MatchResult(contactID: "1", contactClass: .businessCard,
+                                       candidates: [], confidence: .skip, flags: [])]
+        XCTAssertThrowsError(try session.setManualCandidate(for: "1", imageData: Data("nope".utf8)))
+        XCTAssertTrue(session.results[0].candidates.isEmpty)
+        XCTAssertFalse(session.selected.contains("1"))
+    }
+
+    func testUndoWithNoBatchIsReportedNotSilent() async {
+        let session = ReviewSession()
+        session.lastBatchID = nil
+        await session.undoLast()
+        XCTAssertEqual(session.lastError, ReviewSessionError.noBatchToUndo)
+    }
+}
+#endif

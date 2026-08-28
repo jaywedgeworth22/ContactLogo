@@ -61,13 +61,18 @@
 
 - Users may plug in their own Brandfetch/Google CSE keys (Settings).
 - Shared free-tier keys are server-side only (web app), quota-limited per IP.
-- All sources honor 429 with exponential backoff; scraping mode is opt-in,
-  macOS-only, with visible pacing.
+- Rate-limited sources (Brandfetch, Wikimedia) throw `LogoSourceError.rateLimited`
+  on HTTP 429; `HTTPRetry` with exponential backoff (base 500 ms, doubling,
+  full jitter, 3 attempts) retries; final failure is logged via `SourceFailure`.
+  See `Sources/HTTPRetry.swift` and `Sources/BrandfetchSource.swift`.
 
 ## Testing strategy
 
-- **Golden corpus**: the 189-name real-world set from the battle test,
-  including the trap cases in MATCHING-ENGINE.md §4. CI asserts expected
-  domains/candidates for each.
+- **Golden corpus**: fixture in `fixtures/golden-corpus.json` with 86 conformance
+  cases covering the trap examples in MATCHING-ENGINE.md §4 (nonbrand generics,
+  social hosts, subdomains, homonyms, legal suffixes, brand tails, etc.).
+  Language-neutral specification; all three engines (Swift, TypeScript, Kotlin)
+  must produce identical results for each case.  Planned: add CI assertion to
+  catch engine drift.
 - Ranking unit tests for aspect/icon/padding rules.
 - `ContactsProvider` mock for pipeline tests.

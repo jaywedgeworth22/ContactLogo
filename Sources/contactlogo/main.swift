@@ -8,6 +8,7 @@ import ContactLogoKit
 ///   contactlogo review                     export review.html from match-results.json
 ///   contactlogo apply <ids...|--high>      apply approved images (undo log written first)
 ///   contactlogo undo <batchID>             restore a previous batch
+///   contactlogo undo --list                list batches, newest first
 ///
 /// Brandfetch keys come from the environment:
 ///   CONTACTLOGO_BRANDFETCH_CLIENT_ID  (Logo Link CDN, required)
@@ -29,6 +30,18 @@ struct CLI {
 
     static func makePipeline() -> MatchPipeline {
         DefaultSources.makePipeline()
+    }
+
+    /// Contact identifiers become file names, so they are reduced to a single
+    /// safe path component — no separators, no traversal.
+    static func safeFileStem(_ raw: String) -> String {
+        let allowed = raw.map { character -> Character in
+            character.isLetter || character.isNumber || character == "-" || character == "_" || character == "." ? character : "-"
+        }
+        var stem = String(allowed)
+        while stem.hasPrefix(".") { stem.removeFirst() }
+        if stem.contains("..") { stem = stem.replacingOccurrences(of: "..", with: "-") }
+        return stem.isEmpty ? "contact" : String(stem.prefix(120))
     }
 }
 
@@ -66,7 +79,7 @@ struct ContactLogoCLI {
 
     static func usage() {
         print("""
-        contactlogo scan | match [--limit N] | review | apply <ids...|--high> | undo <batchID>
+        contactlogo scan | match [--limit N] | review | apply <ids...|--high> | undo <batchID>|--list
         """)
     }
 
@@ -132,12 +145,21 @@ struct ContactLogoCLI {
             print("  → \(c.id)")
             let result = await pipeline.match(c)
             var file: String? = nil
-            if let best = result.candidates.first {
-                let req = BrandfetchSource.cdnRequest(url: best.imageURL)
-                if let (data, _) = try? await URLSession.shared.data(for: req), data.count > 300 {
-                    file = "\(c.id).png"
-                    try? data.write(to: candDir.appendingPathComponent(file!))
+            if let best = result.candidates.first,
+               let raw = try? await DefaultSources.fetchImage(best.imageURL),
+               // Same preparation the apply path uses: rasterized, padded, square.
+               let prepared = try? ImagePreparer.squarePNG(from: raw) {
+                let name = "\(CLI.safeFileStem(c.id)).png"
+                do {
+                    try prepared.data.write(to: candDir.appendingPathComponent(name))
+                    file = name
+                } catch {
+                    file = nil
                 }
+            }
+            if !result.sourceErrors.isEmpty {
+                let detail = result.sourceErrors.map { "\($0.source.rawValue): \($0.reason)" }.joined(separator: ", ")
+                print("    ! sources failed — \(detail)")
             }
             let conf: String = switch result.confidence {
             case .high: "high"
@@ -210,27 +232,50 @@ struct ContactLogoCLI {
             let ids = Set(args)
             wanted = results.filter { ids.contains($0.contactID) }
         }
+        let candidatesDir = dir.appendingPathComponent("candidates", isDirectory: true)
         let provider = CNContactsProvider()
         guard try await provider.requestAccess() else {
             throw NSError(domain: "ContactLogo", code: 1, userInfo: [NSLocalizedDescriptionKey: "Contacts access denied"])
         }
         var entries: [ChangeSet.Entry] = []
         for r in wanted {
-            guard let file = r.candidateFile else { continue }
-            let img = try Data(contentsOf: dir.appendingPathComponent("candidates/\(file)"))
+            // match-results.json is read back off disk, so the file name it
+            // carries is untrusted: one path component, no traversal.
+            guard let file = r.candidateFile, file == CLI.safeFileStem(file) else { continue }
+            let img = try Data(contentsOf: candidatesDir.appendingPathComponent(file))
+            // `match` already writes a padded square PNG; anything else (a file
+            // the user dropped in by hand) is prepared now — Contacts never
+            // receives raw source bytes.
+            let payload: Data
+            if ImageFlags.isPNG(img), let size = ImageDimensions.read(img),
+               size.0 == size.1, size.0 == Int(ImagePreparer.outputSize) {
+                payload = img
+            } else {
+                payload = try ImagePreparer.squarePNG(from: img).data
+            }
             let prev = try await provider.imageData(forContactID: r.contactID)
-            entries.append(.init(contactID: r.contactID, newImageData: img, previousImageData: prev))
+            entries.append(.init(contactID: r.contactID, newImageData: payload, previousImageData: prev))
         }
         let undo = UndoLog()
         let batch = try undo.recordBatch(entries)
         for entry in entries {
             try await provider.setImage(entry.newImageData, forContactID: entry.contactID)
         }
+        try? undo.prune()
         print("applied \(entries.count) logos (undo batch: \(batch.lastPathComponent))")
     }
 
     static func undo(args: [String]) async throws {
         guard let batchID = args.first else { usage(); return }
+        if batchID == "--list" {
+            let formatter = ISO8601DateFormatter()
+            let batches = try UndoLog().listBatchSummaries()
+            if batches.isEmpty { print("no undo batches recorded") }
+            for batch in batches {
+                print("\(batch.id)  \(formatter.string(from: batch.createdAt))  \(batch.contactCount) contacts")
+            }
+            return
+        }
         let provider = CNContactsProvider()
         guard try await provider.requestAccess() else {
             throw NSError(domain: "ContactLogo", code: 1, userInfo: [NSLocalizedDescriptionKey: "Contacts access denied"])

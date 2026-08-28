@@ -20,7 +20,7 @@ public enum DefaultSources {
             WikimediaSource(),
             FaviconSource()
         ]
-        if let id = brandfetchClientID {
+        if let id = brandfetchClientID, !id.isEmpty {
             sources.insert(
                 BrandfetchSource(brandAPIKey: brandfetchAPIKey, logoClientID: id),
                 at: 1
@@ -29,11 +29,27 @@ public enum DefaultSources {
         return sources
     }
 
+    /// Fetches candidate bytes with an honest, identifying User-Agent and our
+    /// own referer.  Translates HTTP status into `LogoSourceError` so a 429 is
+    /// retried (R11.6) and a provider letter-tile marker is treated as "not
+    /// found" rather than offered to the user (R11.5.1).
     public static func fetchImage(_ url: URL) async throws -> Data {
         if url.scheme == "data" { return try Data(contentsOf: url) }
-        let req = BrandfetchSource.cdnRequest(url: url)
-        let (data, _) = try await URLSession.shared.data(for: req)
-        return data
+        return try await HTTPRetry.withRateLimitRetry {
+            let (data, response) = try await URLSession.shared.data(for: BrandfetchSource.imageRequest(url: url))
+            if let http = response as? HTTPURLResponse {
+                if http.statusCode == 429 {
+                    throw LogoSourceError.rateLimited(
+                        retryAfter: HTTPRetry.retryAfterSeconds(http.value(forHTTPHeaderField: "Retry-After"))
+                    )
+                }
+                guard (200...299).contains(http.statusCode) else { throw LogoSourceError.notFound }
+                if ImageFlags.isProviderFallback(headerValue: http.value(forHTTPHeaderField: "x-brandfetch-fallback")) {
+                    throw LogoSourceError.notFound
+                }
+            }
+            return data
+        }
     }
 
     public static func makePipeline(

@@ -21,7 +21,7 @@ jobs:
       run:
         working-directory: web
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: actions/setup-node@v4
         with:
@@ -45,7 +45,75 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Swift tests
         run: swift test
+
+  # Builds the SwiftUI app shells (Apps/) that `swift test` never touches,
+  # because they live in an XcodeGen-generated Xcode project, not the SwiftPM
+  # package. Regenerates the project from project.yml so it always reflects
+  # the committed spec, then builds each app target without codesigning.
+  apple:
+    runs-on: macos-15
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: ContactLogoiOS
+            destination: "generic/platform=iOS Simulator"
+          - target: ContactLogoMac
+            destination: "platform=macOS"
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Cache DerivedData
+        uses: actions/cache@v4
+        with:
+          path: .build/DerivedData
+          key: ${{ runner.os }}-xcode-${{ matrix.target }}-${{ hashFiles('project.yml', 'Package.swift', 'Sources/**', 'Apps/**') }}
+          restore-keys: |
+            ${{ runner.os }}-xcode-${{ matrix.target }}-
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build ${{ matrix.target }}
+        run: |
+          xcodebuild build \
+            -project ContactLogo.xcodeproj \
+            -target ${{ matrix.target }} \
+            -destination "${{ matrix.destination }}" \
+            -derivedDataPath .build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
+
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: Apps/ContactLogoAndroid
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          build-root-directory: Apps/ContactLogoAndroid
+
+      - name: Assemble debug
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest --no-daemon

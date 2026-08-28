@@ -8,8 +8,8 @@ Oracle RAG.  Sentry and PagerDuty stay as-is when those keys exist.
 
 | Surface | What ships | Notes |
 |---|---|---|
-| ContactLogo Web | Browser logs + RUM + same-origin APM traces | UI exists.  Init in `web/src/observability/datadog.ts`. |
-| Coolify static host | `dd-trace` APM + JSON stdout logs | `web/server.mjs`.  Agent on `DD_AGENT_HOST:DD_TRACE_AGENT_PORT`. |
+| ContactLogo Web (Vercel) | Browser logs + RUM only | UI exists.  Init in `web/src/observability/datadog.ts`.  Vercel is a serverless CDN, not a Node runtime. |
+| Local development server | `dd-trace` APM + JSON stdout logs | `web/server.mjs` and `npm start`.  Agent on `DD_AGENT_HOST:DD_TRACE_AGENT_PORT`.  Not the production path. |
 | macOS / iOS | none in this change | No local Mac/iOS ship from this work. |
 | Android | none in this change | Native RUM can reuse the same public RUM env later. |
 

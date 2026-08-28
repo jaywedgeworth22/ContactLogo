@@ -8,5 +8,11 @@
     <true/>
     <key>com.apple.security.network.client</key>
     <true/>
+    <!-- Reading the file the user picks in the manual-override NSOpenPanel
+         (per-contact override, VISION.md) requires this even though the
+         panel itself is always shown — without it, Data(contentsOf:) on the
+         selected URL fails under App Sandbox. -->
+    <key>com.apple.security.files.user-selected.read-only</key>
+    <true/>
 </dict>
 </plist>

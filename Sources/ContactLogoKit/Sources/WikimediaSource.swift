@@ -31,6 +31,23 @@ public struct WikimediaSource: LogoSource, Sendable {
         let query: Query
     }
 
+    /// One GET with our descriptive UA, translating 429 into a retryable
+    /// error rather than a decode failure.
+    private func get(_ url: URL) async throws -> Data {
+        var request = URLRequest(url: url)
+        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+        let (data, response) = try await session.data(for: request)
+        if let http = response as? HTTPURLResponse {
+            if http.statusCode == 429 {
+                throw LogoSourceError.rateLimited(
+                    retryAfter: HTTPRetry.retryAfterSeconds(http.value(forHTTPHeaderField: "Retry-After"))
+                )
+            }
+            guard (200...299).contains(http.statusCode) else { throw LogoSourceError.notFound }
+        }
+        return data
+    }
+
     public func candidates(forDomain domain: String) async throws -> [LogoCandidate] {
         try await candidates(forBrandName: domain.replacingOccurrences(of: ".com", with: ""))
     }
@@ -42,9 +59,9 @@ public struct WikimediaSource: LogoSource, Sendable {
         let query = "intitle:\(quoted) intitle:logo".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? name
         guard let searchURL = URL(string:
             "https://commons.wikimedia.org/w/api.php?action=query&list=search&srsearch=\(query)&srnamespace=6&format=json&srlimit=5") else { return [] }
-        var req = URLRequest(url: searchURL)
-        req.setValue(userAgent, forHTTPHeaderField: "User-Agent")
-        let (data, _) = try await session.data(for: req)
+        // Commons throttles rapid bursts; without backoff identical contacts
+        // return different answers on different runs (ENGINE-CONTRACT R11.6).
+        let data = try await HTTPRetry.withRateLimitRetry { try await self.get(searchURL) }
         let hits = try JSONDecoder().decode(SearchResponse.self, from: data).query.search
 
         var out: [LogoCandidate] = []
@@ -54,9 +71,7 @@ public struct WikimediaSource: LogoSource, Sendable {
             let title = hit.title.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? hit.title
             guard let infoURL = URL(string:
                 "https://commons.wikimedia.org/w/api.php?action=query&titles=\(title)&prop=imageinfo&iiprop=url&iiurlwidth=500&format=json") else { continue }
-            var ireq = URLRequest(url: infoURL)
-            ireq.setValue(userAgent, forHTTPHeaderField: "User-Agent")
-            guard let (idata, _) = try? await session.data(for: ireq),
+            guard let idata = try? await HTTPRetry.withRateLimitRetry(operation: { try await self.get(infoURL) }),
                   let page = try? JSONDecoder().decode(InfoResponse.self, from: idata).query.pages.values.first,
                   let info = page.imageinfo?.first,
                   let thumb = info.thumburl ?? info.url,
