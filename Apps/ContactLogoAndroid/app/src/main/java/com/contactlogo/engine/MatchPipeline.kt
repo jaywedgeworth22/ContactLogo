@@ -135,6 +135,14 @@ object MatchPipeline {
         fun cap(c: Confidence) { ceiling = min(ceiling, c) }
 
         if (via == "guess") cap(Confidence.MEDIUM)
+        // R10.1b — an email domain is the contact's own data but routinely not the
+        // brand's (subsidiaries, regional domains, resellers, consultants on a
+        // client domain).  Cap when it shares no token with the query; let an
+        // evident one through ("Bluebonnet Dental" at bluebonnetdental.com).
+        if (via == "email" && !Normalize.passesSimilarity(resolvedQuery, domainLabel(domain))) {
+            flags.add("email-domain-unrelated")
+            cap(Confidence.MEDIUM)
+        }
         if ("homonym-risk" in flags && via !in setOf("website", "email", "phone")) cap(Confidence.MEDIUM)
         if ("brand-tail" in flags) cap(Confidence.MEDIUM)
         if (contact.hasCustomPhoto) {
@@ -193,6 +201,16 @@ object MatchPipeline {
         val parts = Normalize.clean(n).replace(",", " ").split(Regex("""\s+""")).filter { it.isNotBlank() }
         if (parts.size !in 2..4) return false
         return parts.all { it.matches(Regex("""^[A-Za-z][A-Za-z'.-]{1,30}$""")) }
+    }
+
+    /**
+     * R10.1b — the registrable domain minus its public suffix, which is the part
+     * that can plausibly name the brand.  Kept identical to the Swift and
+     * TypeScript engines: strip the last dot-segment, nothing more.
+     */
+    private fun domainLabel(domain: String): String {
+        val dot = domain.lastIndexOf('.')
+        return if (dot < 0) domain else domain.substring(0, dot)
     }
 
     private fun isFreemailAddress(email: String): Boolean {
