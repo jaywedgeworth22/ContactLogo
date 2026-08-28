@@ -43,7 +43,9 @@ public enum DefaultSources {
                         retryAfter: HTTPRetry.retryAfterSeconds(http.value(forHTTPHeaderField: "Retry-After"))
                     )
                 }
-                guard (200...299).contains(http.statusCode) else { throw LogoSourceError.notFound }
+                guard (200...299).contains(http.statusCode) else {
+                    throw LogoSourceError.forStatus(http.statusCode)
+                }
                 if ImageFlags.isProviderFallback(headerValue: http.value(forHTTPHeaderField: "x-brandfetch-fallback")) {
                     throw LogoSourceError.notFound
                 }

@@ -41,10 +41,21 @@ Input is one raw contact field value (a URL field, or the part of an email after
 `@`). Steps run in order; any step returning `null` ends the function.
 
 1. Lowercase and trim ASCII whitespace.
-2. **Scheme.** If the value contains `://`, the scheme MUST be `http` or
-   `https`; anything else (`ms-outlook:`, `tel:`, `mailto:`, `fb:`) → `null`.
-   Take the substring after `://`. If there is no `://`, treat the whole value
-   as an authority.
+2. **Scheme.** If the value begins `<scheme>:` where `<scheme>` matches
+   `[a-z][a-z0-9+-]*`, the scheme MUST be `http` or `https`; anything else
+   (`ms-outlook:`, `tel:`, `mailto:`, `fb:`, `sip:`) → `null`. Take the
+   substring after the colon, then drop a leading `//`. A value with no such
+   prefix is treated as an authority.
+
+   Matching only `://` is not sufficient and was the shipping behaviour until
+   2026-08-28: `URL:mailto:sales@costco.com` fell through to step 4, which
+   stripped `mailto:sales@` as userinfo and resolved the card to `costco.com` —
+   a contact-owned website, `high`, pre-checked, from a field naming no website.
+
+   The scheme pattern excludes `.` deliberately. RFC 3986 permits it, but
+   allowing it here would read `costco.com:8080` as a scheme named
+   `costco.com`. Corpus: `url-field-mailto-is-not-a-website`,
+   `url-field-tel-is-not-a-website`, `url-field-host-with-port-still-resolves`.
 3. **Path.** Truncate at the first `/`, `?` or `#`.
 4. **Userinfo.** If `@` is present, drop everything up to and including the
    **last** `@`. (`doug@texasdescon.com` → `texasdescon.com`.)
@@ -612,6 +623,16 @@ Stable sort: score descending, original order on ties. Keep the top 5.
 **R11.3** If `via != guess` and the winner is square and the tier came out
 `medium`, promote to `high` and flag `domain-match` (§6).
 
+**R11.3b Tier follows the candidate, not the card.** The tier is a property of
+the candidate being shown. When that candidate is removed after matching — an
+image that 404s or comes back a favicon is dropped at review time — the tier
+MUST be recomputed for whichever candidate takes its place, and an **automatic**
+approval withdrawn if the replacement is not `high`. Simple Icons failing and
+Clearbit stepping in behind it is the ordinary case, and it must not export a
+Clearbit mark under the approval Simple Icons earned. Only `high` is withdrawn:
+it is the one tier the app assigns by itself, so a card the user checked by hand
+keeps its check.
+
 **R11.4 Caps that need the asset:**
 
 - winner's source is `favicon` (or any `*/s2/favicons`, `icons.duckduckgo.com`,
@@ -672,6 +693,12 @@ may be silent.
   `MatchPipeline` calls `BrandfetchSource` that way today, so a single 429 turns
   the best source off silently and every later contact is scored as if the
   source had simply found nothing.
+- **5xx is not "not found".** A non-2xx status maps to `notFound` only when it
+  is a 4xx — the provider answering "not this one". A **5xx is a run failure**
+  and MUST be recorded as one. Mapping both to `notFound` makes a run where
+  every candidate 500s produce a result with no candidates and no retry marker,
+  which is exactly a completed search that found nothing. Swift:
+  `LogoSourceError.forStatus(_:)`, applied at all three status checks.
 - **Determinism.** A run in which a source errored MUST NOT report `skip` as
   though the search were complete; those contacts belong in a retryable state,
   not in "not found".
@@ -845,6 +872,9 @@ Each line is a contract violation in shipping code, with the audit id.
 | Kotlin | `square()` scaled against the full canvas, so a square mark reached all four edges and Contacts clipped its corners | R11.7 — fixed 2026-08-28 |
 | TypeScript | `padAndSquareImage` called without `onFallback` on the export, Google-sync and manual-crop paths; a failed render shipped the unprepared source as a success | R11.7 — fixed 2026-08-28 |
 | Swift, Kotlin vs TypeScript | a source smaller than the content box is upscaled by Swift and Kotlin, left small by web | R11.7 — open, product call |
+| all three | the scheme check matched only `://`, so `mailto:sales@costco.com` in a URL field resolved to `costco.com` | R1.2 — fixed 2026-08-28 |
+| TypeScript | a removed high-tier candidate left the card `high` and pre-checked for its lower-tier replacement | R11.3b — fixed 2026-08-28 |
+| Swift | every non-2xx became `notFound`, so a run of 5xx was recorded as a completed search | R11.6 — fixed 2026-08-28 |
 | Swift, TypeScript | legal-suffix regex has no leading separator, so `Costco` → `cost`, `Cisco` → `cis`, `Medico` → `medi`, `TRICO` → `tri` | R5.2 (new — found while writing the corpus) |
 | Kotlin | legal-suffix regex is unanchored, so it strips `Co`/`Group`/`Services` mid-string, not only as a trailing token | R5.2 |
 

@@ -19,7 +19,7 @@ import {
   viaLabel,
   type LogoHit,
 } from "./engine/logos.ts";
-import { bucket, matchBook, type ReviewItem } from "./engine/match.ts";
+import { assetTier, bucket, matchBook, type ReviewItem } from "./engine/match.ts";
 import { canPickDeviceContacts, pickDeviceContacts } from "./engine/picker.ts";
 import { getGoogleClientId, setGoogleClientId } from "./engine/settings.ts";
 import { backupFilename, contactsToVcard, downloadText, parseVcard } from "./engine/vcard.ts";
@@ -216,6 +216,7 @@ export function filterItems(items: ReviewItem[], query: string, filter: FilterSt
 export function removeCandidate(item: ReviewItem, src: string): boolean {
   const index = item.candidates.findIndex((c) => c.src === src);
   if (index === -1) return false;
+  const shown = item.candidates[item.chosenIndex]?.src;
   item.candidates.splice(index, 1);
   if (item.chosenIndex > index) item.chosenIndex -= 1;
   if (item.chosenIndex >= item.candidates.length) {
@@ -224,6 +225,26 @@ export function removeCandidate(item: ReviewItem, src: string): boolean {
   if (item.candidates.length === 0) {
     item.selected = false;
     item.confidence = "skip";
+    return true;
+  }
+
+  // R11.2 — the tier belongs to the candidate the card is showing, not to the
+  // card.  When that candidate is removed and a weaker one takes over — a
+  // Simple Icons image that 404s and Clearbit stepping in behind it is the
+  // ordinary case — the `high` it earned does not transfer, or the replacement
+  // is exported under an automatic approval the user never gave *it*.
+  //
+  // Narrow on purpose.  Only when the shown candidate actually changed, and
+  // only away from `high`, which is the one tier the app assigns by itself and
+  // therefore the only one safe to take away: a medium card the user checked by
+  // hand keeps its check, and so does a pasted or uploaded image.
+  const next = item.candidates[item.chosenIndex];
+  if (next && shown !== next.src && item.confidence === "high" && item.via) {
+    const tier = assetTier(next, item.via);
+    if (tier !== "high") {
+      item.confidence = tier;
+      item.selected = false;
+    }
   }
   return true;
 }

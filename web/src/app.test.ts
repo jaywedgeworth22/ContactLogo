@@ -272,3 +272,81 @@ test("every export and sync path collects embed and padding failures", () => {
     );
   }
 });
+
+/**
+ * R11.2 — the tier belongs to the candidate a card is showing.  A high-tier
+ * image that 404s is removed at review time and the next candidate takes over;
+ * before this, the card kept the `high` it earned for the candidate that no
+ * longer existed, still pre-checked, so a Clearbit mark could be exported under
+ * an approval the user never gave it.
+ */
+test("a card drops out of auto-apply when its high-tier candidate is replaced", () => {
+  const item = {
+    contact: { id: "1", displayName: "FedEx" },
+    contactClass: "businessCard",
+    query: "FedEx",
+    domain: "fedex.com",
+    via: "website",
+    candidates: [
+      { src: "https://cdn.simpleicons.org/fedex", source: "simpleicons", kind: "icon" },
+      { src: "https://logo.clearbit.com/fedex.com?size=512", source: "clearbit", kind: "icon" },
+    ],
+    confidence: "high",
+    flags: [],
+    selected: true,
+    chosenIndex: 0,
+  } as unknown as ReviewItem;
+
+  assert.equal(removeCandidate(item, "https://cdn.simpleicons.org/fedex"), true);
+  assert.equal(item.candidates[0]?.source, "clearbit");
+  assert.equal(item.confidence, "medium", "clearbit is deliberately not a high-tier source");
+  assert.equal(item.selected, false, "an automatic approval must not survive its candidate");
+});
+
+test("removing a candidate that is not the one on screen leaves the card alone", () => {
+  const item = {
+    contact: { id: "1", displayName: "FedEx" },
+    contactClass: "businessCard",
+    query: "FedEx",
+    domain: "fedex.com",
+    via: "website",
+    candidates: [
+      { src: "https://cdn.simpleicons.org/fedex", source: "simpleicons", kind: "icon" },
+      { src: "https://logo.clearbit.com/fedex.com?size=512", source: "clearbit", kind: "icon" },
+    ],
+    confidence: "high",
+    flags: [],
+    selected: true,
+    chosenIndex: 0,
+  } as unknown as ReviewItem;
+
+  assert.equal(removeCandidate(item, "https://logo.clearbit.com/fedex.com?size=512"), true);
+  assert.equal(item.confidence, "high");
+  assert.equal(item.selected, true);
+});
+
+/**
+ * A card the user checked by hand, or whose winner they chose themselves, must
+ * keep its check: `high` is the only tier the app assigns on its own, so it is
+ * the only one safe to take away.
+ */
+test("a hand-checked medium card keeps its check when a candidate fails", () => {
+  const item = {
+    contact: { id: "1", displayName: "Acme Roofing" },
+    contactClass: "businessCard",
+    query: "Acme Roofing",
+    domain: "acme.example",
+    via: "guess",
+    candidates: [
+      { src: "https://logo.clearbit.com/acme.example?size=512", source: "clearbit", kind: "icon" },
+      { src: "https://icons.duckduckgo.com/ip3/acme.example.ico", source: "favicon", kind: "icon" },
+    ],
+    confidence: "medium",
+    flags: [],
+    selected: true,
+    chosenIndex: 0,
+  } as unknown as ReviewItem;
+
+  assert.equal(removeCandidate(item, "https://logo.clearbit.com/acme.example?size=512"), true);
+  assert.equal(item.selected, true, "the app did not make this selection, so it must not undo it");
+});

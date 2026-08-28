@@ -52,15 +52,28 @@ public enum DomainDeriver {
         public let subdomainReduced: Bool
     }
 
+    /// An RFC 3986 scheme name, minus the dot the grammar allows: without that
+    /// exclusion `costco.com:8080` reads as a scheme named `costco.com`.
+    private static func isSchemeName(_ value: String) -> Bool {
+        guard let first = value.first, first.isLetter else { return false }
+        return value.allSatisfy { $0.isLetter || $0.isNumber || $0 == "+" || $0 == "-" }
+    }
+
     /// R1 — `registrableDomain(input)`.
     public static func reduce(_ input: String) -> HostDerivation? {
         var s = input.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
         guard !s.isEmpty else { return nil }
 
-        if let scheme = s.range(of: "://") {
-            let proto = String(s[s.startIndex..<scheme.lowerBound])
-            guard proto == "http" || proto == "https" else { return nil }
-            s = String(s[scheme.upperBound...])
+        // R1.2 — the colon form has to be rejected as well as `scheme://`:
+        // `mailto:sales@costco.com` in a URL field otherwise reaches userinfo
+        // stripping and resolves as the business's own website.
+        if let colon = s.firstIndex(of: ":") {
+            let proto = String(s[s.startIndex..<colon])
+            if Self.isSchemeName(proto) {
+                guard proto == "http" || proto == "https" else { return nil }
+                s = String(s[s.index(after: colon)...])
+                if s.hasPrefix("//") { s = String(s.dropFirst(2)) }
+            }
         }
         if let cut = s.firstIndex(where: { $0 == "/" || $0 == "?" || $0 == "#" }) {
             s = String(s[s.startIndex..<cut])

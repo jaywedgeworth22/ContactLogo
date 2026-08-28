@@ -43,7 +43,9 @@ public struct WikimediaSource: LogoSource, Sendable {
                     retryAfter: HTTPRetry.retryAfterSeconds(http.value(forHTTPHeaderField: "Retry-After"))
                 )
             }
-            guard (200...299).contains(http.statusCode) else { throw LogoSourceError.notFound }
+            guard (200...299).contains(http.statusCode) else {
+                throw LogoSourceError.forStatus(http.statusCode)
+            }
         }
         return data
     }

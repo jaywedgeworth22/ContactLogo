@@ -19,12 +19,24 @@ public enum LogoSourceError: Error, Equatable, Sendable {
     case notFound
     /// The source is not usable in this build (no API key, say). Not a failure.
     case misconfigured(String)
+    /// The provider is broken right now — a 5xx.  Distinct from `.notFound`
+    /// because "answered, and has nothing" and "could not answer" must not both
+    /// land the contact in terminal Not found (R11.6's determinism clause).
+    case serverError(status: Int)
+
+    /// R11.6 — what a non-2xx status means.  A 4xx is the provider answering
+    /// "not this one"; a 5xx is the provider failing to answer at all.  Mapping
+    /// both to `.notFound` made a whole run of 500s indistinguishable from a
+    /// completed search that found nothing.
+    public static func forStatus(_ status: Int) -> LogoSourceError {
+        status >= 500 ? .serverError(status: status) : .notFound
+    }
 
     /// A run-level failure the review UI must surface, as opposed to a source
     /// that simply had no answer.
     public var isRunFailure: Bool {
         switch self {
-        case .rateLimited: return true
+        case .rateLimited, .serverError: return true
         case .notFound, .misconfigured: return false
         }
     }

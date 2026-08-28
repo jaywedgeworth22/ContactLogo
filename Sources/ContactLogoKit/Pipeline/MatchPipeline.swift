@@ -302,7 +302,14 @@ public struct MatchPipeline: Sendable {
         let failure: SourceFailure
         if let known = error as? LogoSourceError {
             guard known.isRunFailure else { return }
-            failure = SourceFailure(source: kind, reason: "rate limited", rateLimited: true)
+            switch known {
+            case .rateLimited:
+                failure = SourceFailure(source: kind, reason: "rate limited", rateLimited: true)
+            case .serverError(let status):
+                failure = SourceFailure(source: kind, reason: "server error \(status)")
+            case .notFound, .misconfigured:
+                return // not run failures; the guard above already returned
+            }
         } else {
             failure = SourceFailure(source: kind, reason: error.localizedDescription)
         }

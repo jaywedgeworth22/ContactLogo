@@ -125,11 +125,18 @@ export type DerivedHost = {
 export function deriveHost(value: string): DerivedHost | undefined {
   let s = value.toLowerCase().trim();
 
-  const scheme = s.indexOf("://");
-  if (scheme >= 0) {
-    // R1.2: ms-outlook:, tel:, mailto:, fb: … are not websites.
-    if (!/^https?$/.test(s.slice(0, scheme))) return undefined;
-    s = s.slice(scheme + 3);
+  // R1.2: ms-outlook:, tel:, mailto:, fb: … are not websites.  The check has to
+  // cover the plain colon form and not just `scheme://`: a URL field holding
+  // `mailto:sales@costco.com` otherwise falls straight through to userinfo
+  // stripping and resolves as `costco.com` — the business's own site, at high
+  // confidence and pre-checked, from a field that names no website at all.
+  //
+  // The scheme pattern excludes `.` on purpose, so `costco.com:8080` is not
+  // read as a scheme named `costco.com`.
+  const scheme = /^([a-z][a-z0-9+-]*):/.exec(s);
+  if (scheme) {
+    if (!/^https?$/.test(scheme[1] ?? "")) return undefined;
+    s = s.slice(scheme[0].length).replace(/^\/\//, "");
   }
   s = s.split(/[/?#]/)[0] ?? "";
 

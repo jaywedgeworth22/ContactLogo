@@ -22,17 +22,31 @@ object Normalize {
     private val pathBoundary = Regex("""[/?#]""")
     private val whitespaceRegex = Regex("""\s+""")
 
+    /**
+     * R1.2 — an http(s) scheme is stripped; any other scheme means the value is
+     * not a website and the caller must reject it.
+     *
+     * The pattern excludes `.` on purpose: without that, `costco.com:8080`
+     * reads as a scheme named `costco.com`.  Matching only `://` was the bug —
+     * `mailto:sales@costco.com` in a URL field went straight to userinfo
+     * stripping and resolved as the business's own site, pre-checked.
+     */
+    private val schemeName = Regex("^([a-z][a-z0-9+-]*):")
+
+    /** Null when the value carries a scheme that is not http(s). */
+    private fun stripScheme(value: String): String? {
+        val match = schemeName.find(value) ?: return value
+        val scheme = match.groupValues[1]
+        if (scheme != "http" && scheme != "https") return null
+        return value.substring(match.value.length).removePrefix("//")
+    }
+
     /** Strips scheme/path/userinfo/port/escapes per R1 steps 1-7, returns null on an invalid scheme. */
     private fun authority(input: String): String? {
         var s = input.trim().lowercase(Locale.ROOT)
         if (s.isEmpty()) return null
 
-        val schemeIdx = s.indexOf("://")
-        if (schemeIdx >= 0) {
-            val scheme = s.substring(0, schemeIdx)
-            if (scheme != "http" && scheme != "https") return null
-            s = s.substring(schemeIdx + 3)
-        }
+        s = stripScheme(s) ?: return null
 
         val boundary = pathBoundary.find(s)
         if (boundary != null) s = s.substring(0, boundary.range.first)
@@ -72,12 +86,7 @@ object Normalize {
     /** True when the URL's authority carries userinfo ("user@host") that R1.4 strips. */
     fun hasUserinfo(input: String): Boolean {
         var s = input.trim().lowercase(Locale.ROOT)
-        val schemeIdx = s.indexOf("://")
-        if (schemeIdx >= 0) {
-            val scheme = s.substring(0, schemeIdx)
-            if (scheme != "http" && scheme != "https") return false
-            s = s.substring(schemeIdx + 3)
-        }
+        s = stripScheme(s) ?: return false
         val boundary = pathBoundary.find(s)
         if (boundary != null) s = s.substring(0, boundary.range.first)
         return s.contains('@')

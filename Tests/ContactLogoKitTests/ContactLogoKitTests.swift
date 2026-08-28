@@ -766,6 +766,35 @@ final class ImagePreparerTests: XCTestCase {
     }
 }
 
+/// R11.6 — "answered, and has nothing" and "could not answer" are different
+/// outcomes, and only the first may put a contact in terminal Not found.
+final class SourceStatusTests: XCTestCase {
+
+    /// The regression: every non-2xx became `.notFound`, which
+    /// `MatchPipeline.match` drops without recording a `SourceFailure`.  A run
+    /// where every candidate 500s then produced a result with no candidates and
+    /// no retry marker — indistinguishable from a search that completed.
+    func testServerErrorsAreRunFailuresAndNotFoundIsNot() {
+        XCTAssertEqual(LogoSourceError.forStatus(500), .serverError(status: 500))
+        XCTAssertEqual(LogoSourceError.forStatus(502), .serverError(status: 502))
+        XCTAssertEqual(LogoSourceError.forStatus(503), .serverError(status: 503))
+        XCTAssertTrue(LogoSourceError.forStatus(500).isRunFailure)
+
+        // A 4xx is the provider answering, and is not a failure of the run.
+        XCTAssertEqual(LogoSourceError.forStatus(404), .notFound)
+        XCTAssertEqual(LogoSourceError.forStatus(403), .notFound)
+        XCTAssertEqual(LogoSourceError.forStatus(400), .notFound)
+        XCTAssertFalse(LogoSourceError.forStatus(404).isRunFailure)
+    }
+
+    /// A 5xx is not a rate limit, so it must not be reported as one — the
+    /// review UI reads `rateLimited` to decide whether backoff is the story.
+    func testServerErrorIsNotReportedAsRateLimiting() {
+        XCTAssertFalse(LogoSourceError.forStatus(503).isRateLimited)
+        XCTAssertTrue(LogoSourceError.rateLimited(retryAfter: nil).isRateLimited)
+    }
+}
+
 /// The names `contactlogo match` writes into `.contactlogo/candidates/`.
 ///
 /// Two contacts sharing a file means `apply` writes one contact's logo onto
