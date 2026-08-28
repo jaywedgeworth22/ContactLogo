@@ -1,0 +1,629 @@
+{
+  "version": 1,
+  "about": "Language-neutral conformance fixture for the ContactLogo matching engine. Every case is decidable offline from docs/ENGINE-CONTRACT.md with no network access. ContactLogoKit (Swift), web/src/engine (TypeScript) and Apps/ContactLogoAndroid (Kotlin) must all produce the same answer for every case.",
+  "schema": {
+    "contact": {
+      "displayName": "string",
+      "givenName": "string | null",
+      "familyName": "string | null",
+      "organization": "string | null",
+      "emails": "string[] — full addresses, in contact order",
+      "websites": "string[] — raw URL field values, in contact order, any scheme",
+      "phones": "string[] — raw phone strings, in contact order",
+      "hasImage": "boolean — the contact already has a photo"
+    },
+    "expect": {
+      "class": "person | businessCard | nonBrand",
+      "query": "string | null — the brand query. null for person and nonBrand: no lookup is performed (ENGINE-CONTRACT R7.6)",
+      "domain": "string | null — resolved registrable domain. null when class is not businessCard, or when no identity resolved",
+      "via": "website | email | catalog | phone | guess | null",
+      "maxConfidence": "skip | low | medium | high — the STATIC CEILING (ENGINE-CONTRACT R10). The final tier is min(staticCeiling, assetTier); an engine must never exceed this value for this contact, whatever assets come back",
+      "flags": "string[] — the complete set of STATIC flags (ENGINE-CONTRACT R12.1). Compare as a set, order-insensitive. Asset-time flags (favicon-fallback, fallback-tile, domain-match, non-square, aggregator-source, name-mismatch) are never asserted here",
+      "simpleIconsSlug": "OPTIONAL string | null — the Simple Icons slug for expect.domain (ENGINE-CONTRACT R13). null means no Simple Icons candidate may be emitted. Absent means the case does not assert it"
+    }
+  },
+  "cases": [
+    {
+      "id": "nonbrand-hospital",
+      "contact": { "displayName": "Hospital", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "nonBrand", "query": null, "domain": null, "via": null, "maxConfidence": "skip", "flags": ["non-brand"] },
+      "rule": "MATCHING-ENGINE §1 non-brand, §4 generic nouns; ENGINE-CONTRACT R7.1",
+      "why": "A generic noun on the exact blocklist; a red-cross clip-art is worse than no logo."
+    },
+    {
+      "id": "nonbrand-gift-card",
+      "contact": { "displayName": "Gift Card", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "nonBrand", "query": null, "domain": null, "via": null, "maxConfidence": "skip", "flags": ["non-brand"] },
+      "rule": "MATCHING-ENGINE §1; ENGINE-CONTRACT R7.1",
+      "why": "GENERIC exact match — never a brand, never in the not-found bucket."
+    },
+    {
+      "id": "nonbrand-manager",
+      "contact": { "displayName": "Manager", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "nonBrand", "query": null, "domain": null, "via": null, "maxConfidence": "skip", "flags": ["non-brand"] },
+      "rule": "MATCHING-ENGINE §1; ENGINE-CONTRACT R7.1",
+      "why": "A role, not an organization."
+    },
+    {
+      "id": "nonbrand-verification-code-twilio",
+      "contact": { "displayName": "Verification Code (Twilio Powered)", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": ["+1 555 016 2200"], "hasImage": false },
+      "expect": { "class": "nonBrand", "query": null, "domain": null, "via": null, "maxConfidence": "skip", "flags": ["non-brand"] },
+      "rule": "MATCHING-ENGINE §4 devices & services; ENGINE-CONTRACT R7.1",
+      "why": "Parenthetical is stripped first, then NON_BRAND /\\bverification\\b/ matches; a Twilio logo here would be wrong."
+    },
+    {
+      "id": "nonbrand-printer-model",
+      "contact": { "displayName": "Printer at Farm (WF-2950)", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "nonBrand", "query": null, "domain": null, "via": null, "maxConfidence": "skip", "flags": ["non-brand"] },
+      "rule": "MATCHING-ENGINE §4 devices & services; ENGINE-CONTRACT R7.1",
+      "why": "NON_BRAND is tested before any ' at ' brand-tail split, so this never becomes a query for 'Farm'."
+    },
+    {
+      "id": "nonbrand-password-reset",
+      "contact": { "displayName": "Password Reset", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "nonBrand", "query": null, "domain": null, "via": null, "maxConfidence": "skip", "flags": ["non-brand"] },
+      "rule": "MATCHING-ENGINE §4 devices & services; ENGINE-CONTRACT R4.4",
+      "why": "NON_BRAND pattern /\\bpassword\\b/ — a service SMS sender, not a brand."
+    },
+    {
+      "id": "nonbrand-medico",
+      "contact": { "displayName": "Medico", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "nonBrand", "query": null, "domain": null, "via": null, "maxConfidence": "skip", "flags": ["non-brand"] },
+      "rule": "MATCHING-ENGINE §4 generic nouns; ENGINE-CONTRACT R4.3",
+      "why": "From the battle-test blocklist — matched unrelated medical clip-art."
+    },
+    {
+      "id": "nonbrand-jerry-generic-beats-homonym",
+      "contact": { "displayName": "Jerry", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "nonBrand", "query": null, "domain": null, "via": null, "maxConfidence": "skip", "flags": ["non-brand"] },
+      "rule": "MATCHING-ENGINE §4; ENGINE-CONTRACT R7.1 precedence",
+      "why": "'jerry' is in both GENERIC and HOMONYM. GENERIC is tested first, so the contact is skipped, not matched at medium."
+    },
+    {
+      "id": "nonbrand-candy",
+      "contact": { "displayName": "Candy", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "nonBrand", "query": null, "domain": null, "via": null, "maxConfidence": "skip", "flags": ["non-brand"] },
+      "rule": "MATCHING-ENGINE §4 generic nouns; ENGINE-CONTRACT R7.1 precedence",
+      "why": "Same GENERIC-before-HOMONYM precedence as 'Jerry'."
+    },
+    {
+      "id": "nonbrand-suspected-spam",
+      "contact": { "displayName": "Suspected Spam", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": ["+1 281 555 0117"], "hasImage": false },
+      "expect": { "class": "nonBrand", "query": null, "domain": null, "via": null, "maxConfidence": "skip", "flags": ["non-brand"] },
+      "rule": "MATCHING-ENGINE §1 non-brand; ENGINE-CONTRACT R4.3",
+      "why": "Carrier-generated label, not an organization."
+    },
+    {
+      "id": "nonbrand-role-head-generic-tail",
+      "contact": { "displayName": "Front Desk - Hospital", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "nonBrand", "query": null, "domain": null, "via": null, "maxConfidence": "skip", "flags": ["non-brand"] },
+      "rule": "MATCHING-ENGINE §1, §2 rule 2; ENGINE-CONTRACT R6.4 + R7.5",
+      "why": "Role head is dropped, leaving 'Hospital', which the post-segment GENERIC re-check catches."
+    },
+    {
+      "id": "person-plain",
+      "contact": { "displayName": "Maya Chen", "givenName": "Maya", "familyName": "Chen", "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "person", "query": null, "domain": null, "via": null, "maxConfidence": "skip", "flags": ["person"] },
+      "rule": "MATCHING-ENGINE §1 person; ENGINE-CONTRACT R7.3",
+      "why": "Given/family present and no brand tail — never a logo target."
+    },
+    {
+      "id": "person-employee-corporate-email",
+      "contact": { "displayName": "Maya Chen", "givenName": "Maya", "familyName": "Chen", "organization": "Apple", "emails": ["maya@apple.com"], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "person", "query": null, "domain": null, "via": null, "maxConfidence": "skip", "flags": ["person", "employee"] },
+      "rule": "MATCHING-ENGINE §1 'Employees are not the company', §5 rule 7; ENGINE-CONTRACT R7.3",
+      "why": "A person with a corporate email is an employee; the Apple logo must not land on her card."
+    },
+    {
+      "id": "person-employee-org-only",
+      "contact": { "displayName": "Doug Alvarez", "givenName": "Doug", "familyName": "Alvarez", "organization": "Texas Descon", "emails": ["doug@gmail.com"], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "person", "query": null, "domain": null, "via": null, "maxConfidence": "skip", "flags": ["person"] },
+      "rule": "MATCHING-ENGINE §1; ENGINE-CONTRACT R7.3",
+      "why": "Display name is a person and the only email is freemail — organization alone never promotes a person."
+    },
+    {
+      "id": "person-with-existing-photo",
+      "contact": { "displayName": "Priya Rao", "givenName": "Priya", "familyName": "Rao", "organization": "Hsa PTO - Asst Treasurer", "emails": [], "websites": [], "phones": [], "hasImage": true },
+      "expect": { "class": "person", "query": null, "domain": null, "via": null, "maxConfidence": "skip", "flags": ["photo-protected"] },
+      "rule": "MATCHING-ENGINE §1 'Existing photos stay'; ENGINE-CONTRACT R12.1",
+      "why": "Role junk in `organization` is irrelevant: a person with a photo is photo-protected, not 'not found'."
+    },
+    {
+      "id": "person-suffixed-name",
+      "contact": { "displayName": "Byron Goode Jr", "givenName": "Byron", "familyName": "Goode", "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "person", "query": null, "domain": null, "via": null, "maxConfidence": "skip", "flags": ["person"] },
+      "rule": "MATCHING-ENGINE §1; ENGINE-CONTRACT R7.3",
+      "why": "Control for the rule-8 case below: without a brand tail this is just a person."
+    },
+    {
+      "id": "person-role-tail-not-a-brand",
+      "contact": { "displayName": "Priya Rao - Regional Manager", "givenName": "Priya", "familyName": "Rao", "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "person", "query": null, "domain": null, "via": null, "maxConfidence": "skip", "flags": ["person"] },
+      "rule": "MATCHING-ENGINE §2 rule 2, §5 rule 8; ENGINE-CONTRACT R6.3",
+      "why": "The tail is a role, so rule 8 does not fire and the contact stays a person."
+    },
+    {
+      "id": "person-lone-firm-name-with-freemail",
+      "contact": { "displayName": "Walgreens", "givenName": "Walgreens", "familyName": null, "organization": null, "emails": ["wgreensrx@gmail.com"], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "person", "query": null, "domain": null, "via": null, "maxConfidence": "skip", "flags": ["person"] },
+      "rule": "MATCHING-ENGINE §2b 'no personal email'; ENGINE-CONTRACT R7.4",
+      "why": "The lone-firm-name promotion is blocked by a consumer email address — this is a human who happens to be filed oddly."
+    },
+    {
+      "id": "businesscard-fedex",
+      "contact": { "displayName": "FedEx", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "FedEx", "domain": "fedex.com", "via": "catalog", "maxConfidence": "high", "flags": ["via-catalog"], "simpleIconsSlug": "fedex" },
+      "rule": "MATCHING-ENGINE §1 business card, §2b step 3; ENGINE-CONTRACT R8.3",
+      "why": "The canonical easy case: no person name, unambiguous catalog brand, iconic mark available."
+    },
+    {
+      "id": "walgreens-parenthetical",
+      "contact": { "displayName": "Walgreens (Mason Rd / Cypress)", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Walgreens", "domain": "walgreens.com", "via": "catalog", "maxConfidence": "high", "flags": ["via-catalog"], "simpleIconsSlug": "walgreens" },
+      "rule": "MATCHING-ENGINE §2 rule 1; ENGINE-CONTRACT R5.1",
+      "why": "Store-location parentheticals are stripped before any lookup."
+    },
+    {
+      "id": "heb-pharmacy-subbrand-tail",
+      "contact": { "displayName": "H-E-B Pharmacy (Bridgeland)", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "H-E-B Pharmacy", "domain": "heb.com", "via": "catalog", "maxConfidence": "high", "flags": ["via-catalog"] },
+      "rule": "MATCHING-ENGINE §1 business-card example; ENGINE-CONTRACT R8.3 CATALOG_TAIL_OK",
+      "why": "The rulebook's own business-card example: a catalog head plus a department tail resolves to the parent brand."
+    },
+    {
+      "id": "kroger-location-tail",
+      "contact": { "displayName": "Kroger Marketplace Cypress", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Kroger Marketplace Cypress", "domain": "kroger.com", "via": "catalog", "maxConfidence": "high", "flags": ["via-catalog"] },
+      "rule": "MATCHING-ENGINE §2b step 3; ENGINE-CONTRACT R8.3 CATALOG_TAIL_OK",
+      "why": "Catalog head match with a locationish tail; the query keeps the full name, only the domain reduces."
+    },
+    {
+      "id": "businesscard-lone-firm-given-name",
+      "contact": { "displayName": "Walgreens", "givenName": "Walgreens", "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Walgreens", "domain": "walgreens.com", "via": "catalog", "maxConfidence": "high", "flags": ["lone-firm-name", "via-catalog"], "simpleIconsSlug": "walgreens" },
+      "rule": "MATCHING-ENGINE §2b 'A lone given or family name that is a catalog firm'; ENGINE-CONTRACT R7.4",
+      "why": "A catalog firm parked in the given-name field is a business card, not a person."
+    },
+    {
+      "id": "businesscard-website-owned-domain",
+      "contact": { "displayName": "Acme Roofing Co", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": ["https://acmeroofing.com/contact"], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Acme Roofing Co", "domain": "acmeroofing.com", "via": "website", "maxConfidence": "high", "flags": ["via-website"], "simpleIconsSlug": null },
+      "rule": "MATCHING-ENGINE §2b step 1, §6; ENGINE-CONTRACT R8.1",
+      "why": "A contact-owned website is the strongest identity evidence and can reach high; no Simple Icons slug exists, so none may be invented."
+    },
+    {
+      "id": "businesscard-work-email-domain",
+      "contact": { "displayName": "Bluebonnet Dental", "givenName": null, "familyName": null, "organization": null, "emails": ["office@bluebonnetdental.com"], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Bluebonnet Dental", "domain": "bluebonnetdental.com", "via": "email", "maxConfidence": "high", "flags": ["via-email"] },
+      "rule": "MATCHING-ENGINE §2b step 2; ENGINE-CONTRACT R8.2",
+      "why": "A non-freemail work address is contact-owned evidence and may reach high."
+    },
+    {
+      "id": "businesscard-phone-directory",
+      "contact": { "displayName": "Southwest Reservations", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": ["1-800-435-9792"], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Southwest Reservations", "domain": "southwest.com", "via": "phone", "maxConfidence": "high", "flags": ["via-phone"], "simpleIconsSlug": "southwestairlines" },
+      "rule": "MATCHING-ENGINE §2b step 4; ENGINE-CONTRACT R8.4",
+      "why": "'Reservations' is not a catalog tail, so resolution falls through to the published customer-service number."
+    },
+    {
+      "id": "businesscard-replace-existing-photo",
+      "contact": { "displayName": "Costco", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": true },
+      "expect": { "class": "businessCard", "query": "Costco", "domain": "costco.com", "via": "catalog", "maxConfidence": "medium", "flags": ["via-catalog", "replace-existing"], "simpleIconsSlug": "costco" },
+      "rule": "MATCHING-ENGINE §1 'replace-existing caps at medium', §6; ENGINE-CONTRACT R10.4",
+      "why": "Overwriting an existing photo always goes through review, never pre-checked."
+    },
+    {
+      "id": "businesscard-organization-preferred-over-display",
+      "contact": { "displayName": "Front Office", "givenName": null, "familyName": null, "organization": "Publix", "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Publix", "domain": "publix.com", "via": "catalog", "maxConfidence": "high", "flags": ["via-catalog"] },
+      "rule": "MATCHING-ENGINE §1 notes; ENGINE-CONTRACT R7.2",
+      "why": "When `organization` is present it is the brand source, so a generic display name does not blocklist the card."
+    },
+    {
+      "id": "subdomain-shop-walgreens",
+      "contact": { "displayName": "Walgreens", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": ["https://shop.walgreens.com/store/12345"], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Walgreens", "domain": "walgreens.com", "via": "website", "maxConfidence": "high", "flags": ["subdomain-reduced", "via-website"], "simpleIconsSlug": "walgreens" },
+      "rule": "MATCHING-ENGINE §4 junk domains; ENGINE-CONTRACT R1 (CL-13)",
+      "why": "shop.walgreens.com must reduce to walgreens.com, or the catalog entry and the Simple Icons glyph are both missed."
+    },
+    {
+      "id": "subdomain-mail-utexas-edu",
+      "contact": { "displayName": "UT Austin Registrar", "givenName": null, "familyName": null, "organization": null, "emails": ["registrar@mail.utexas.edu"], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "UT Austin Registrar", "domain": "utexas.edu", "via": "email", "maxConfidence": "high", "flags": ["subdomain-reduced", "via-email"], "simpleIconsSlug": null },
+      "rule": "ENGINE-CONTRACT R1 (CL-13)",
+      "why": "mail.utexas.edu reduces to utexas.edu; .edu is a single-label public suffix, so only two labels are kept."
+    },
+    {
+      "id": "subdomain-multipart-cctld",
+      "contact": { "displayName": "Example Retail Ltd", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": ["https://shop.example.co.uk/"], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Example Retail Ltd", "domain": "example.co.uk", "via": "website", "maxConfidence": "high", "flags": ["subdomain-reduced", "via-website"] },
+      "rule": "ENGINE-CONTRACT R1.10 multi-part ccTLD list (CL-13)",
+      "why": "co.uk is a two-label public suffix, so three labels are kept — reducing to co.uk would be catastrophic."
+    },
+    {
+      "id": "subdomain-deep-path",
+      "contact": { "displayName": "UT Housing", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": ["https://housing.utexas.edu/apply?year=2026"], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "UT Housing", "domain": "utexas.edu", "via": "website", "maxConfidence": "high", "flags": ["subdomain-reduced", "via-website"] },
+      "rule": "ENGINE-CONTRACT R1.3 (path/query stripped) + R1.11",
+      "why": "Path and query string must be discarded before the host is reduced."
+    },
+    {
+      "id": "www-prefix-is-not-a-subdomain",
+      "contact": { "displayName": "Bluebonnet Dental", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": ["https://www.bluebonnetdental.com"], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Bluebonnet Dental", "domain": "bluebonnetdental.com", "via": "website", "maxConfidence": "high", "flags": ["via-website"] },
+      "rule": "ENGINE-CONTRACT R1.8 + R12.1",
+      "why": "www. is stripped but is not a reduction, so `subdomain-reduced` must not be emitted."
+    },
+    {
+      "id": "userinfo-in-url-field",
+      "contact": { "displayName": "Texas Descon", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": ["doug@texasdescon.com"], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Texas Descon", "domain": "texasdescon.com", "via": "website", "maxConfidence": "high", "flags": ["userinfo-stripped", "via-website"] },
+      "rule": "MATCHING-ENGINE §4 junk domains ('doug@texasdescon.com as URL'); ENGINE-CONTRACT R1.4",
+      "why": "An email address typed into the URL field still carries the right domain once userinfo is stripped."
+    },
+    {
+      "id": "junk-scheme-ms-outlook",
+      "contact": { "displayName": "Katy Sprinkler Systems", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": ["ms-outlook://people/0123456789"], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Katy Sprinkler Systems", "domain": "katysprinklersystems.com", "via": "guess", "maxConfidence": "medium", "flags": ["via-guess", "guessed-domain"] },
+      "rule": "MATCHING-ENGINE §4 junk domains ('only http(s) URLs'); ENGINE-CONTRACT R1.2",
+      "why": "A non-web scheme yields no identity, so resolution falls through to the capped guess."
+    },
+    {
+      "id": "social-linkedin-only-url",
+      "contact": { "displayName": "Acme Roofing Co", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": ["https://www.linkedin.com/company/acme-roofing"], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Acme Roofing Co", "domain": "acmeroofing.com", "via": "guess", "maxConfidence": "medium", "flags": ["social-url-ignored", "via-guess", "guessed-domain"] },
+      "rule": "MATCHING-ENGINE §4 junk domains ('strip social/profile domains'); ENGINE-CONTRACT R3 (CL-03)",
+      "why": "The audit's exact reproduction: a LinkedIn company page must never resolve to linkedin.com or produce the LinkedIn glyph pre-checked."
+    },
+    {
+      "id": "social-facebook-only-url",
+      "contact": { "displayName": "Cypress Pet Grooming", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": ["https://facebook.com/cypresspetgrooming"], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Cypress Pet Grooming", "domain": "cypresspetgrooming.com", "via": "guess", "maxConfidence": "medium", "flags": ["social-url-ignored", "via-guess", "guessed-domain"] },
+      "rule": "MATCHING-ENGINE §4; ENGINE-CONTRACT R3 (CL-03)",
+      "why": "Small businesses whose only web presence is a Facebook page are the common case for this trap."
+    },
+    {
+      "id": "social-yelp-only-url",
+      "contact": { "displayName": "Tonys Pizza Napoletana", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": ["https://www.yelp.com/biz/tonys-pizza-napoletana"], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Tonys Pizza Napoletana", "domain": "tonyspizzanapoletana.com", "via": "guess", "maxConfidence": "medium", "flags": ["social-url-ignored", "via-guess", "guessed-domain"] },
+      "rule": "MATCHING-ENGINE §4; ENGINE-CONTRACT R3 (CL-03)",
+      "why": "Yelp is on the canonical SOCIAL set; the web engine currently has no social set at all."
+    },
+    {
+      "id": "social-then-real-website",
+      "contact": { "displayName": "Katy Barbershop", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": ["https://instagram.com/katybarbershop", "https://katybarbershop.com"], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Katy Barbershop", "domain": "katybarbershop.com", "via": "website", "maxConfidence": "high", "flags": ["social-url-ignored", "via-website"] },
+      "rule": "MATCHING-ENGINE §2b step 1; ENGINE-CONTRACT R8.1",
+      "why": "Social hosts are skipped, not fatal: the next website in contact order is used and can still reach high."
+    },
+    {
+      "id": "social-email-domain-ignored",
+      "contact": { "displayName": "Gulf Coast Marine Supply", "givenName": null, "familyName": null, "organization": null, "emails": ["sales@facebook.com"], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Gulf Coast Marine Supply", "domain": "gulfcoastmarinesupply.com", "via": "guess", "maxConfidence": "medium", "flags": ["social-url-ignored", "via-guess", "guessed-domain"] },
+      "rule": "ENGINE-CONTRACT R3.2 (SOCIAL applies to the email path too)",
+      "why": "A social host in the email field is as wrong a logo source as one in the URL field."
+    },
+    {
+      "id": "platform-host-wixsite",
+      "contact": { "displayName": "Acme Bakery", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": ["https://acmebakery.wixsite.com/home"], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Acme Bakery", "domain": "acmebakery.com", "via": "guess", "maxConfidence": "medium", "flags": ["platform-host-ignored", "via-guess", "guessed-domain"] },
+      "rule": "MATCHING-ENGINE §4 junk domains; ENGINE-CONTRACT R3.3",
+      "why": "wixsite.com serves the Wix favicon for every tenant — the same failure class as CL-03."
+    },
+    {
+      "id": "platform-host-sites-google",
+      "contact": { "displayName": "Spring Creek Little League", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": ["https://sites.google.com/view/springcreekll"], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Spring Creek Little League", "domain": "springcreeklittleleague.com", "via": "guess", "maxConfidence": "medium", "flags": ["platform-host-ignored", "via-guess", "guessed-domain"] },
+      "rule": "ENGINE-CONTRACT R3.3 (the full host is tested, not only the registrable domain)",
+      "why": "Reducing sites.google.com to google.com would put the Google logo on a little-league team, so the host is rejected before reduction and resolution falls through to the capped guess."
+    },
+    {
+      "id": "freemail-email-ignored",
+      "contact": { "displayName": "Katy Sprinkler Systems", "givenName": null, "familyName": null, "organization": null, "emails": ["owner@gmail.com"], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Katy Sprinkler Systems", "domain": "katysprinklersystems.com", "via": "guess", "maxConfidence": "medium", "flags": ["via-guess", "guessed-domain"] },
+      "rule": "MATCHING-ENGINE §2b step 2 'never freemail'; ENGINE-CONTRACT R2",
+      "why": "gmail.com must never become a logo domain."
+    },
+    {
+      "id": "freemail-typosquat-gnail",
+      "contact": { "displayName": "Bayou City Sprinkler Repair", "givenName": null, "familyName": null, "organization": null, "emails": ["ops@gnail.com"], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Bayou City Sprinkler Repair", "domain": "bayoucitysprinklerrepair.com", "via": "guess", "maxConfidence": "medium", "flags": ["via-guess", "guessed-domain"] },
+      "rule": "MATCHING-ENGINE §4 junk domains ('gnail.com typos'); ENGINE-CONTRACT R2",
+      "why": "Freemail typo-squats are on the canonical FREEMAIL set so they never resolve as a brand."
+    },
+    {
+      "id": "legal-suffix-llc-stripped",
+      "contact": { "displayName": "Bayou City Sprinkler Repair LLC", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Bayou City Sprinkler Repair LLC", "domain": "bayoucitysprinklerrepair.com", "via": "guess", "maxConfidence": "medium", "flags": ["via-guess", "guessed-domain"] },
+      "rule": "MATCHING-ENGINE §2b step 5; ENGINE-CONTRACT R8.5 (CL-14)",
+      "why": "The guess path must use companyKey(): with 'LLC' left on, the slug is 27 chars, trips the 24-char cap and the contact vanishes."
+    },
+    {
+      "id": "legal-suffix-absent-same-answer",
+      "contact": { "displayName": "Bayou City Sprinkler Repair", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Bayou City Sprinkler Repair", "domain": "bayoucitysprinklerrepair.com", "via": "guess", "maxConfidence": "medium", "flags": ["via-guess", "guessed-domain"] },
+      "rule": "ENGINE-CONTRACT R8.5 (CL-14)",
+      "why": "Paired with the LLC case: the two must be indistinguishable in domain, via, ceiling and flags."
+    },
+    {
+      "id": "legal-suffix-comma-inc",
+      "contact": { "displayName": "Zeta Metalworks, Inc.", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Zeta Metalworks, Inc.", "domain": "zetametalworks.com", "via": "guess", "maxConfidence": "medium", "flags": ["via-guess", "guessed-domain"] },
+      "rule": "ENGINE-CONTRACT R5.2 (LEGAL_SUFFIX allows a leading comma)",
+      "why": "', Inc.' is the most common written form and must strip identically to ' LLC'."
+    },
+    {
+      "id": "legal-suffix-catalog-apple-inc",
+      "contact": { "displayName": "Apple Inc", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Apple Inc", "domain": "apple.com", "via": "catalog", "maxConfidence": "medium", "flags": ["homonym-risk", "via-catalog"], "simpleIconsSlug": "apple" },
+      "rule": "MATCHING-ENGINE §4 homonyms; ENGINE-CONTRACT R4.5 (HOMONYM is keyed on companyKey)",
+      "why": "Homonym lookup must use companyKey, or 'Apple Inc' escapes the cap that 'Apple' gets."
+    },
+    {
+      "id": "legal-suffix-is-not-a-substring-cisco",
+      "contact": { "displayName": "Cisco", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Cisco", "domain": "cisco.com", "via": "catalog", "maxConfidence": "high", "flags": ["via-catalog"], "simpleIconsSlug": "cisco" },
+      "rule": "ENGINE-CONTRACT R5.2 (the legal suffix must be a separate token)",
+      "why": "The shipping regex starts with `\\s*,?\\s*`, all of which can match empty, so the `co` alternative eats the end of the word: companyKey('Cisco') is 'cis' today and the catalog entry is unreachable. Same defect hides Costco and lets Medico past the blocklist."
+    },
+    {
+      "id": "legal-suffix-is-not-a-substring-costco",
+      "contact": { "displayName": "Costco", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Costco", "domain": "costco.com", "via": "catalog", "maxConfidence": "high", "flags": ["via-catalog"], "simpleIconsSlug": "costco" },
+      "rule": "ENGINE-CONTRACT R5.2",
+      "why": "Paired with the Cisco case; 'Costco' must not normalize to 'cost'."
+    },
+    {
+      "id": "ampersand-catalog-key",
+      "contact": { "displayName": "H & R Block", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "H & R Block", "domain": "hrblock.com", "via": "catalog", "maxConfidence": "high", "flags": ["via-catalog"] },
+      "rule": "ENGINE-CONTRACT R5.2 (companyKey collapses whitespace around '&')",
+      "why": "Users type 'H & R Block', 'H&R Block' and 'H and R Block'; all three must reach the same catalog entry."
+    },
+    {
+      "id": "ampersand-guess-expansion",
+      "contact": { "displayName": "Smith & Sons Plumbing", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Smith & Sons Plumbing", "domain": "smithandsonsplumbing.com", "via": "guess", "maxConfidence": "medium", "flags": ["via-guess", "guessed-domain"] },
+      "rule": "ENGINE-CONTRACT R8.5 ('&' expands to 'and' in the guess slug)",
+      "why": "'&' is not a legal DNS character; the canonical expansion is 'and', not deletion."
+    },
+    {
+      "id": "hyphenated-catalog-brand",
+      "contact": { "displayName": "7-Eleven", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "7-Eleven", "domain": "7-eleven.com", "via": "catalog", "maxConfidence": "high", "flags": ["via-catalog"], "simpleIconsSlug": null },
+      "rule": "ENGINE-CONTRACT R5.2 (hyphens survive companyKey)",
+      "why": "Stripping hyphens from the key would break 7-eleven, t-mobile, h-e-b and buc-ees at once."
+    },
+    {
+      "id": "rule8-byron-goode-root-insurance",
+      "contact": { "displayName": "Byron Goode Jr - Root Insurance", "givenName": "Byron", "familyName": "Goode", "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Root Insurance", "domain": "rootinsurance.com", "via": "guess", "maxConfidence": "medium", "flags": ["brand-tail", "via-guess", "guessed-domain"] },
+      "rule": "MATCHING-ENGINE §5 rule 8; ENGINE-CONTRACT R6.2 + R7.3 (CL-15)",
+      "why": "The rulebook's own example. The tail carries an ORG_SIGNAL word, so the brand is the tail and the person name does not win; brand-tail always caps at medium."
+    },
+    {
+      "id": "rule8-chris-at-ntb",
+      "contact": { "displayName": "Chris At NTB", "givenName": "Chris", "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "NTB", "domain": "ntb.com", "via": "guess", "maxConfidence": "medium", "flags": ["brand-tail", "brand-redirect-risk", "via-guess", "guessed-domain"] },
+      "rule": "MATCHING-ENGINE §5 rule 8 + §4 domain redirect; ENGINE-CONTRACT R6.2 + R10.5 (CL-15)",
+      "why": "The 'X at Y' form with an acronym tail. ntb.com is on MERGED_DOMAINS (it now redirects to Mavis), so it also carries brand-redirect-risk."
+    },
+    {
+      "id": "rule8-catalog-tail-at-form",
+      "contact": { "displayName": "Dana At Costco", "givenName": "Dana", "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Costco", "domain": "costco.com", "via": "catalog", "maxConfidence": "medium", "flags": ["brand-tail", "via-catalog"], "simpleIconsSlug": "costco" },
+      "rule": "MATCHING-ENGINE §5 rule 8; ENGINE-CONTRACT R10.3",
+      "why": "Even with a catalog-perfect tail, a rule-8 reclassification is a heuristic override of the person rule and must be reviewed, never pre-checked."
+    },
+    {
+      "id": "rule8-employee-guard",
+      "contact": { "displayName": "Maya Chen - Apple", "givenName": "Maya", "familyName": "Chen", "organization": null, "emails": ["maya@apple.com"], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "person", "query": null, "domain": null, "via": null, "maxConfidence": "skip", "flags": ["person", "employee"] },
+      "rule": "MATCHING-ENGINE §5 rule 7 beats rule 8; ENGINE-CONTRACT R7.3.b",
+      "why": "When the contact's own email domain equals the tail's resolved domain, the person works there — rule 8 must not fire."
+    },
+    {
+      "id": "rule8-org-signal-no-person-head",
+      "contact": { "displayName": "Katy Auto - Firestone Tire", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Firestone Tire", "domain": "firestonetire.com", "via": "guess", "maxConfidence": "medium", "flags": ["brand-tail", "via-guess", "guessed-domain"] },
+      "rule": "MATCHING-ENGINE §5 rule 8; ENGINE-CONTRACT R6.2",
+      "why": "Rule 8 is not limited to person heads: a franchise-style 'local name - brand' entry queries the brand tail, capped at medium."
+    },
+    {
+      "id": "decoration-apple-australia",
+      "contact": { "displayName": "Apple - Australia", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Apple", "domain": "apple.com", "via": "catalog", "maxConfidence": "medium", "flags": ["decoration-stripped", "homonym-risk", "via-catalog"], "simpleIconsSlug": "apple" },
+      "rule": "MATCHING-ENGINE §4 decorated queries; ENGINE-CONTRACT R6.3",
+      "why": "The rulebook's own trap: the undecorated query is the parent brand, and 'Apple' is a homonym with no contact-owned domain, so it stays at medium."
+    },
+    {
+      "id": "decoration-walgreens-dash-location",
+      "contact": { "displayName": "Walgreens - Mason Rd", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Walgreens", "domain": "walgreens.com", "via": "catalog", "maxConfidence": "high", "flags": ["decoration-stripped", "via-catalog"], "simpleIconsSlug": "walgreens" },
+      "rule": "MATCHING-ENGINE §2 rule 2; ENGINE-CONTRACT R6.3",
+      "why": "A locationish tail after ' - ' is decoration, not a brand tail."
+    },
+    {
+      "id": "decoration-org-junk-trico",
+      "contact": { "displayName": "TRICO - General Mgr", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "TRICO", "domain": "trico.com", "via": "guess", "maxConfidence": "medium", "flags": ["decoration-stripped", "via-guess", "guessed-domain"] },
+      "rule": "MATCHING-ENGINE §1 notes ('organization often contains role junk'); ENGINE-CONTRACT R6.3",
+      "why": "The rulebook's own role-junk example; the role tail is removed before lookup."
+    },
+    {
+      "id": "decoration-org-junk-hsa-pto",
+      "contact": { "displayName": "Hsa PTO - Asst Treasurer", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Hsa PTO", "domain": "hsapto.com", "via": "guess", "maxConfidence": "medium", "flags": ["decoration-stripped", "via-guess", "guessed-domain"] },
+      "rule": "MATCHING-ENGINE §1 notes; ENGINE-CONTRACT R6.3",
+      "why": "Second role-junk example from the rulebook, reached through the same ROLE_WORDS list."
+    },
+    {
+      "id": "decoration-role-tail-voicemail",
+      "contact": { "displayName": "Riverbend Clinic - Voicemail", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Riverbend Clinic", "domain": "riverbendclinic.com", "via": "guess", "maxConfidence": "medium", "flags": ["decoration-stripped", "via-guess", "guessed-domain"] },
+      "rule": "MATCHING-ENGINE §2 rule 2; ENGINE-CONTRACT R6.3",
+      "why": "A generic word in the tail is decoration on a real business, not a reason to blocklist the whole card."
+    },
+    {
+      "id": "homonym-mercury-alone",
+      "contact": { "displayName": "Mercury", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Mercury", "domain": "mercury.com", "via": "guess", "maxConfidence": "medium", "flags": ["homonym-risk", "via-guess", "guessed-domain"] },
+      "rule": "MATCHING-ENGINE §4 homonyms; ENGINE-CONTRACT R10.2",
+      "why": "Bank, car marque or planet — with no contact context this can never auto-apply. Its only likely asset is a favicon, which is itself capped at medium."
+    },
+    {
+      "id": "homonym-mercury-with-work-email",
+      "contact": { "displayName": "Mercury", "givenName": null, "familyName": null, "organization": null, "emails": ["ops@mercury.com"], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Mercury", "domain": "mercury.com", "via": "email", "maxConfidence": "high", "flags": ["homonym-risk", "via-email"] },
+      "rule": "MATCHING-ENGINE §4 ('use contact context as a category signal'); ENGINE-CONTRACT R10.2",
+      "why": "Contact-owned evidence resolves the homonym, so the cap lifts while the flag stays for the review UI."
+    },
+    {
+      "id": "homonym-delta-catalog-only",
+      "contact": { "displayName": "Delta", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Delta", "domain": "delta.com", "via": "catalog", "maxConfidence": "medium", "flags": ["homonym-risk", "via-catalog"], "simpleIconsSlug": null },
+      "rule": "MATCHING-ENGINE §4 homonyms, §3 source 1; ENGINE-CONTRACT R10.2 + R13.3",
+      "why": "A catalog hit is name-derived, not contact context, so it does not resolve a homonym. simpleIconsSlug is null: delta.com is on the Simple Icons SKIP set because the 'delta' slug is the software company, and slugs must never be derived from the domain."
+    },
+    {
+      "id": "homonym-delta-with-website",
+      "contact": { "displayName": "Delta", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": ["https://www.delta.com/"], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Delta", "domain": "delta.com", "via": "website", "maxConfidence": "high", "flags": ["homonym-risk", "via-website"], "simpleIconsSlug": null },
+      "rule": "MATCHING-ENGINE §4 homonyms; ENGINE-CONTRACT R10.2",
+      "why": "Same contact name, contact-owned domain: the cap lifts, but the Simple Icons skip still applies."
+    },
+    {
+      "id": "homonym-delta-by-phone",
+      "contact": { "displayName": "Delta", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": ["1-800-221-1212"], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Delta", "domain": "delta.com", "via": "catalog", "maxConfidence": "medium", "flags": ["homonym-risk", "via-catalog"], "simpleIconsSlug": null },
+      "rule": "MATCHING-ENGINE §2b ordering; ENGINE-CONTRACT R8.3 before R8.4",
+      "why": "Catalog is step 3 and phone is step 4, so the catalog wins the `via` label even though the phone agrees — ordering must be identical in all three engines."
+    },
+    {
+      "id": "homonym-ibc-alone",
+      "contact": { "displayName": "IBC", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "IBC", "domain": "ibc.com", "via": "guess", "maxConfidence": "medium", "flags": ["homonym-risk", "via-guess", "guessed-domain"] },
+      "rule": "MATCHING-ENGINE §4 homonyms ('IBC = International Bank of Commerce ≠ IBC Root Beer')",
+      "why": "The rulebook's headline homonym; a guessed domain plus homonym risk is doubly capped."
+    },
+    {
+      "id": "homonym-ibc-bank-qualified",
+      "contact": { "displayName": "IBC Bank", "givenName": null, "familyName": null, "organization": null, "emails": ["teller@ibc.com"], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "IBC Bank", "domain": "ibc.com", "via": "email", "maxConfidence": "high", "flags": ["via-email"] },
+      "rule": "MATCHING-ENGINE §4 homonyms; ENGINE-CONTRACT R4.5",
+      "why": "The qualifier changes the companyKey to 'ibc bank', which is not a homonym, and the work email is contact-owned."
+    },
+    {
+      "id": "homonym-united-alone",
+      "contact": { "displayName": "United", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "United", "domain": "united.com", "via": "catalog", "maxConfidence": "medium", "flags": ["homonym-risk", "via-catalog"], "simpleIconsSlug": "unitedairlines" },
+      "rule": "MATCHING-ENGINE §4 homonyms; ENGINE-CONTRACT R10.2",
+      "why": "United Airlines, United Rentals, United Way — the catalog answer is a guess dressed up, so it stays in review."
+    },
+    {
+      "id": "homonym-apple-with-website",
+      "contact": { "displayName": "Apple", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": ["https://www.apple.com"], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Apple", "domain": "apple.com", "via": "website", "maxConfidence": "high", "flags": ["homonym-risk", "via-website"], "simpleIconsSlug": "apple" },
+      "rule": "MATCHING-ENGINE §4 homonyms; ENGINE-CONTRACT R10.2",
+      "why": "Contact-owned domain lifts the homonym cap; the flag remains so the review UI can explain the risk."
+    },
+    {
+      "id": "homonym-amazon-replace-existing",
+      "contact": { "displayName": "Amazon", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": true },
+      "expect": { "class": "businessCard", "query": "Amazon", "domain": "amazon.com", "via": "catalog", "maxConfidence": "medium", "flags": ["homonym-risk", "via-catalog", "replace-existing"], "simpleIconsSlug": "amazon" },
+      "rule": "MATCHING-ENGINE §4 + §6; ENGINE-CONTRACT R10",
+      "why": "Two independent caps land on the same contact; the result is still exactly medium, not low."
+    },
+    {
+      "id": "brand-vs-parent-exxon",
+      "contact": { "displayName": "Exxon", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Exxon", "domain": "exxon.com", "via": "catalog", "maxConfidence": "high", "flags": ["via-catalog"], "simpleIconsSlug": null },
+      "rule": "MATCHING-ENGINE §4 brand vs parent; ENGINE-CONTRACT R8.3",
+      "why": "The consumer-facing fuel brand keeps its own catalog entry and must not be folded into the corporate parent."
+    },
+    {
+      "id": "brand-vs-parent-exxonmobil",
+      "contact": { "displayName": "ExxonMobil", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "ExxonMobil", "domain": "exxonmobil.com", "via": "catalog", "maxConfidence": "high", "flags": ["via-catalog"], "simpleIconsSlug": null },
+      "rule": "MATCHING-ENGINE §4 brand vs parent; ENGINE-CONTRACT R8.3",
+      "why": "Paired with 'Exxon': the two names must not collapse onto one domain."
+    },
+    {
+      "id": "domain-redirect-ntb-website",
+      "contact": { "displayName": "NTB", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": ["https://www.ntb.com"], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "NTB", "domain": "ntb.com", "via": "website", "maxConfidence": "medium", "flags": ["brand-redirect-risk", "via-website"], "simpleIconsSlug": null },
+      "rule": "MATCHING-ENGINE §4 domain redirect after merger; ENGINE-CONTRACT R10.5",
+      "why": "ntb.com now serves Mavis Tire, so even a contact-owned domain is capped at medium; the domain-derived logo may be the successor brand."
+    },
+    {
+      "id": "alias-txt-texas-by-texas",
+      "contact": { "displayName": "TxT", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "TxT", "domain": "texasbytexas.com", "via": "catalog", "maxConfidence": "high", "flags": ["via-catalog"] },
+      "rule": "MATCHING-ENGINE §2 rule 4 alias map; ENGINE-CONTRACT R8.3",
+      "why": "Alias entries live in the catalog, so a three-letter abbreviation resolves without a guess."
+    },
+    {
+      "id": "alias-gcx-raise",
+      "contact": { "displayName": "GCX", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "GCX", "domain": "raise.com", "via": "catalog", "maxConfidence": "high", "flags": ["via-catalog"] },
+      "rule": "MATCHING-ENGINE §2 rule 4 alias map; ENGINE-CONTRACT R8.3",
+      "why": "The second rulebook alias; without the catalog this would guess gcx.com and be wrong."
+    },
+    {
+      "id": "guess-invented-brand",
+      "contact": { "displayName": "Zzqx Nonexistent Brand Xyz", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Zzqx Nonexistent Brand Xyz", "domain": "zzqxnonexistentbrandxyz.com", "via": "guess", "maxConfidence": "medium", "flags": ["via-guess", "guessed-domain"] },
+      "rule": "MATCHING-ENGINE §4 fallback tiles, §6; ENGINE-CONTRACT R8.5 + R11.4 (CL-18)",
+      "why": "The audit's invented brand. A guessed domain is capped at medium, and any letter-tile asset returned for it must be rejected by isFallbackTile before it can be offered at all."
+    },
+    {
+      "id": "guess-slug-too-long",
+      "contact": { "displayName": "Northwest Harris County Municipal Utility District", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Northwest Harris County Municipal Utility District", "domain": null, "via": null, "maxConfidence": "skip", "flags": ["no-identity"] },
+      "rule": "MATCHING-ENGINE §2b step 5; ENGINE-CONTRACT R8.5 (3–24 character cap)",
+      "why": "Long descriptive names produce absurd guesses; the engine refuses rather than inventing a domain."
+    },
+    {
+      "id": "guess-slug-too-short",
+      "contact": { "displayName": "Bo", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Bo", "domain": null, "via": null, "maxConfidence": "skip", "flags": ["no-identity"] },
+      "rule": "ENGINE-CONTRACT R8.5 (3–24 character cap)",
+      "why": "Two-character names are almost never a resolvable brand; skip rather than guess."
+    },
+    {
+      "id": "identity-order-falls-through-to-guess",
+      "contact": { "displayName": "The Guys", "givenName": null, "familyName": null, "organization": null, "emails": ["nobody@icloud.com"], "websites": ["ms-outlook://people/9"], "phones": ["+1 713 555 0142"], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "The Guys", "domain": "theguys.com", "via": "guess", "maxConfidence": "medium", "flags": ["via-guess", "guessed-domain"] },
+      "rule": "ENGINE-CONTRACT R8 ordering",
+      "why": "Every earlier step is disqualified (junk scheme, freemail, no catalog, non-toll-free local number), so the capped guess is the only route left."
+    },
+    {
+      "id": "delta-dental-not-delta",
+      "contact": { "displayName": "Delta Dental", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Delta Dental", "domain": "deltadental.com", "via": "guess", "maxConfidence": "medium", "flags": ["via-guess", "guessed-domain"] },
+      "rule": "MATCHING-ENGINE §4 homonyms; ENGINE-CONTRACT R8.3 (CATALOG_TAIL_OK excludes trade words)",
+      "why": "'Dental' is not a location or sub-brand tail, so the catalog must NOT fold this onto delta.com and hand it the airline logo."
+    },
+    {
+      "id": "simpleicons-slug-map-chase",
+      "contact": { "displayName": "Chase", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Chase", "domain": "chase.com", "via": "catalog", "maxConfidence": "high", "flags": ["via-catalog"], "simpleIconsSlug": "jpmorgan" },
+      "rule": "MATCHING-ENGINE §3 source 2; ENGINE-CONTRACT R13 (CL-04)",
+      "why": "The slug is not the domain label: deriving 'chase' from chase.com yields no icon at all."
+    },
+    {
+      "id": "simpleicons-slug-map-att",
+      "contact": { "displayName": "AT&T", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": [], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "AT&T", "domain": "att.com", "via": "catalog", "maxConfidence": "high", "flags": ["via-catalog"], "simpleIconsSlug": "atandt" },
+      "rule": "ENGINE-CONTRACT R13 (CL-04)",
+      "why": "att.com maps to the 'atandt' slug; TLD-stripping would request a non-existent 'att' icon."
+    },
+    {
+      "id": "simpleicons-no-slug-for-unknown-domain",
+      "contact": { "displayName": "Bayou City Sprinkler Repair LLC", "givenName": null, "familyName": null, "organization": null, "emails": [], "websites": ["https://bayoucitysprinkler.com"], "phones": [], "hasImage": false },
+      "expect": { "class": "businessCard", "query": "Bayou City Sprinkler Repair LLC", "domain": "bayoucitysprinkler.com", "via": "website", "maxConfidence": "high", "flags": ["via-website"], "simpleIconsSlug": null },
+      "rule": "ENGINE-CONTRACT R13.2 (slugs are never derived)",
+      "why": "An unmapped domain yields no Simple Icons candidate; deriving one requests a 404 or, worse, an unrelated brand's mark."
+    }
+  ]
+}
