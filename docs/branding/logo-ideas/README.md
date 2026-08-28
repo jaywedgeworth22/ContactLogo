@@ -22,12 +22,21 @@ matched logo.** That is the product story in two colors.
 
 ## Concepts
 
-### 01 — The Swap (`01-swap.svg`)
+### 01 — The Swap (`01-swap.svg`) — **front-runner**
 
 A contact tile split on the diagonal: the top half is the grey monogram
 silhouette every address book shows today; the bottom half is ink with a
 gold spark — the moment ContactLogo replaces it with a real brand mark.
 Most literal telling of the before/after.  Works directly as an app icon.
+
+Picked as the working direction after first review.  Three cuts:
+
+- `01-swap.svg` — the tile (app icon, marketing).
+- `01-swap-round.svg` — circular avatar cut, the shape it lives in inside
+  Contacts UIs; `01-swap-round-dark.svg` flips the ink half to cream so
+  the disc holds its shape on dark grounds.
+- `01-swap-small.svg` — simplified cut for 32 px and below: the person
+  glyph drops and the spark grows, so the favicon stays crisp.
 
 ### 02 — Card & Badge (`02-card.svg`, `02-card-icon.svg`)
 
@@ -42,6 +51,7 @@ A heavy letter C — ContactLogo's monogram — whose open mouth receives a
 gold dot: the C accepting a logo.  The most abstract and most scalable of
 the four; still legible at 16 px, works one-color, and doubles as a
 favicon, watermark, or stamp.  Pairs naturally with the wordmark below.
+Kept as the one-color alternate for stamps and watermarks.
 
 ### 04 — The Grid Lights Up (`04-grid.svg`, `04-grid-icon.svg`)
 
@@ -58,16 +68,16 @@ badge as the favicon and Concept 2.  Shown in `preview.html`.  If adopted,
 the letterforms should be converted to outlines so the wordmark does not
 depend on installed fonts.
 
-## Recommendation
+## Direction
 
-**03 (C Aperture) as the primary mark** — most distinctive, scales from
-16 px favicon to splash screen, and works in one color — with the
-**Concept 2 badge + wordmark** as the lockup, since the ring badge is
-already the favicon.  01 and 04 work well as marketing/illustration
-motifs (empty states, onboarding, the review screen) even if not chosen
-as the logo.
+**01 (The Swap) is the working direction after first review** — it tells
+the before/after story in one tile, is already the app icon, and its three
+cuts cover every context (tile, circular avatar with dark flip, simplified
+small-size).  03 stays the one-color alternate for stamps and watermarks;
+the Concept 2 badge remains the deployed favicon until the swap-in; 04
+works as an illustration motif in onboarding and empty states.
 
-## Next steps once a direction is picked
+## Next steps
 
 - Reversed (cream-on-ink) and one-color variants of the chosen mark.
 - Replace `web/public/favicon.svg` and the PWA manifest icons.

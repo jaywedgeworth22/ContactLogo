@@ -180,6 +180,7 @@
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <defs>
     <clipPath id="tile96"><rect width="96" height="96" rx="21"/></clipPath>
+    <clipPath id="disc96"><circle cx="48" cy="48" r="48"/></clipPath>
 
     <symbol id="m-swap" viewBox="0 0 96 96">
       <g clip-path="url(#tile96)">
@@ -189,6 +190,37 @@
         <circle cx="28" cy="22" r="8" fill="#a89d8d"/>
         <path d="M12 47a16 16 0 0 1 32 0Z" fill="#a89d8d"/>
         <path d="M64 45C66.6 59.4 68.6 61.4 83 64 68.6 66.6 66.6 68.6 64 83 61.4 68.6 59.4 66.6 45 64 59.4 61.4 61.4 59.4 64 45Z" fill="#c4a574"/>
+      </g>
+    </symbol>
+
+    <symbol id="m-swap-round" viewBox="0 0 96 96">
+      <g clip-path="url(#disc96)">
+        <rect width="96" height="96" fill="#ddd6c9"/>
+        <path d="M96 0 96 96 0 96Z" fill="#1c1917"/>
+        <line x1="98" y1="-2" x2="-2" y2="98" stroke="#f5f0e8" stroke-width="5"/>
+        <circle cx="30" cy="25" r="8" fill="#a89d8d"/>
+        <path d="M14 50a16 16 0 0 1 32 0Z" fill="#a89d8d"/>
+        <path d="M64 45C66.6 59.4 68.6 61.4 83 64 68.6 66.6 66.6 68.6 64 83 61.4 68.6 59.4 66.6 45 64 59.4 61.4 61.4 59.4 64 45Z" fill="#c4a574"/>
+      </g>
+    </symbol>
+
+    <symbol id="m-swap-round-dark" viewBox="0 0 96 96">
+      <g clip-path="url(#disc96)">
+        <rect width="96" height="96" fill="#3a332e"/>
+        <path d="M96 0 96 96 0 96Z" fill="#f5f0e8"/>
+        <line x1="98" y1="-2" x2="-2" y2="98" stroke="#1c1917" stroke-width="5"/>
+        <circle cx="30" cy="25" r="8" fill="#8a7f71"/>
+        <path d="M14 50a16 16 0 0 1 32 0Z" fill="#8a7f71"/>
+        <path d="M64 45C66.6 59.4 68.6 61.4 83 64 68.6 66.6 66.6 68.6 64 83 61.4 68.6 59.4 66.6 45 64 59.4 61.4 61.4 59.4 64 45Z" fill="#b08d55"/>
+      </g>
+    </symbol>
+
+    <symbol id="m-swap-small" viewBox="0 0 96 96">
+      <g clip-path="url(#tile96)">
+        <rect width="96" height="96" fill="#ddd6c9"/>
+        <path d="M96 0 96 96 0 96Z" fill="#1c1917"/>
+        <line x1="98" y1="-2" x2="-2" y2="98" stroke="#f5f0e8" stroke-width="6"/>
+        <path d="M62 42C64.8 56.4 66.6 58.2 82 62 66.6 65.8 64.8 67.6 62 82 59.2 67.6 57.4 65.8 42 62 57.4 58.2 59.2 56.4 62 42Z" fill="#c4a574"/>
       </g>
     </symbol>
 
@@ -299,23 +331,28 @@
           <p>A contact tile split on the diagonal.&nbsp; Above the seam: the grey silhouette every
             address book shows today.&nbsp; Below it: ink and a gold spark &mdash; the moment
             ContactLogo replaces the monogram with a real brand mark.</p>
-          <p>The most literal telling of the before/after, and it is already an app icon.</p>
+          <p>The most literal telling of the before/after, and it is already an app icon.&nbsp;
+            It comes in three cuts: the tile, a circular avatar for Contacts UIs (with a
+            dark-ground flip), and a simplified small-size cut &mdash; below 48&nbsp;px the
+            person glyph drops and the spark grows, so the favicon stays crisp.</p>
         </div>
         <div class="chips">
-          <span class="chip gold">App icon ready</span>
-          <span class="chip">Reads to 32 px</span>
+          <span class="chip gold">Front-runner</span>
+          <span class="chip">Circular avatar cut</span>
+          <span class="chip">Simplified below 48 px</span>
         </div>
       </div>
       <div class="board">
         <div class="grounds">
           <div class="chip-card on-light"><svg width="150" height="150"><use href="#m-swap"/></svg></div>
-          <div class="chip-card on-dark"><svg width="150" height="150"><use href="#m-swap"/></svg></div>
+          <div class="chip-card on-light"><svg width="150" height="150"><use href="#m-swap-round"/></svg></div>
+          <div class="chip-card on-dark"><svg width="150" height="150"><use href="#m-swap-round-dark"/></svg></div>
         </div>
         <div class="sizes">
           <figure class="size-cell"><svg width="128" height="128"><use href="#m-swap"/></svg><figcaption>128</figcaption></figure>
           <figure class="size-cell"><svg width="64" height="64"><use href="#m-swap"/></svg><figcaption>64</figcaption></figure>
-          <figure class="size-cell"><svg width="32" height="32"><use href="#m-swap"/></svg><figcaption>32</figcaption></figure>
-          <figure class="size-cell"><svg width="16" height="16"><use href="#m-swap"/></svg><figcaption>16</figcaption></figure>
+          <figure class="size-cell"><svg width="32" height="32"><use href="#m-swap-small"/></svg><figcaption>32</figcaption></figure>
+          <figure class="size-cell"><svg width="16" height="16"><use href="#m-swap-small"/></svg><figcaption>16</figcaption></figure>
         </div>
       </div>
     </div>
@@ -363,8 +400,7 @@
             the wordmark.</p>
         </div>
         <div class="chips">
-          <span class="chip gold">Primary candidate</span>
-          <span class="chip">One-color</span>
+          <span class="chip">One-color alternate</span>
           <span class="chip">Reads to 16 px</span>
         </div>
       </div>
@@ -440,13 +476,15 @@
   </section>
 
   <section class="plain" style="border-bottom:none">
-    <div class="c-head"><span class="c-index">&mdash;</span><h2>Recommendation</h2></div>
+    <div class="c-head"><span class="c-index">&mdash;</span><h2>Direction</h2></div>
     <div class="verdict">
-      <p><strong>03 C&nbsp;Aperture as the primary mark</strong> &mdash; the most distinctive of
-        the four, scales from favicon to splash screen, and survives one-color printing.</p>
-      <p>Pair it with the wordmark above for lockups, and keep the Concept&nbsp;02 badge as the
-        favicon it already is.&nbsp; 01 and 04 earn their keep as illustration motifs in
-        onboarding, empty states, and the review screen even if they are not the logo.</p>
+      <p><strong>01 The Swap is the working direction after first review.</strong>&nbsp; It
+        tells the before/after story in one tile, is already the app icon, and now covers
+        every context: circular avatar for Contacts UIs, dark-ground flip, and a simplified
+        cut that keeps the favicon crisp below 48&nbsp;px.</p>
+      <p>03 C&nbsp;Aperture stays the one-color alternate for stamps and watermarks, the
+        Concept&nbsp;02 badge remains the deployed favicon until the swap-in, and 04 earns its
+        keep as an illustration motif in onboarding and empty states.</p>
     </div>
   </section>
 
