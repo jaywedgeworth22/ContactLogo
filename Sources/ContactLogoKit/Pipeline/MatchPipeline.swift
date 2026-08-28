@@ -79,6 +79,13 @@ public struct MatchPipeline: Sendable {
             }
         } else {
             let segment = NameNormalizer.segment(name)
+            // No name fields, but "Dana At Costco" is still a person and plenty of
+            // imports carry no structured name at all, so read the head.
+            if segment.isBrandTail,
+               let head = NameNormalizer.splitHead(name),
+               NameNormalizer.headLooksPersonal(head) {
+                return Self.person(c, employee: isEmployee(c, of: segment.query))
+            }
             query = segment.query
             if segment.isBrandTail { flags.append("brand-tail") }
             if segment.decorationStripped { flags.append("decoration-stripped") }

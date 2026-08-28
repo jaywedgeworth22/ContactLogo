@@ -85,6 +85,9 @@ object CompanyCatalog {
      * since it makes the tail a business of its own.  SUBBRAND_TAIL wins where
      * the two lists overlap — "pharmacy" and "bakery" are H-E-B departments.
      */
+    /** `isTailOkWord` for callers outside this object (Normalize.headLooksPersonal). */
+    fun isTailOkWordPublic(word: String): Boolean = isTailOkWord(word)
+
     fun isCatalogTailOK(tail: List<String>): Boolean {
         if (tail.isEmpty()) return false
         if (tail.none { isTailOkWord(it) }) return false

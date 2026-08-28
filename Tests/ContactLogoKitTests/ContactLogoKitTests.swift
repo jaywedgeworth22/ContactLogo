@@ -337,13 +337,39 @@ final class StaticMatchTests: XCTestCase {
     }
 
     /// Rule 8 survives for the case it was written for: a card with no name
-    /// fields whose display name carries a brand tail.  Nothing here claims to
-    /// be a person, so nothing is mislabelled.
+    /// fields whose display name carries a brand tail, and whose head is not a
+    /// person's name.
     func testRule8StillFiresWhenTheCardHasNoNameFields() {
         let match = pipeline.staticMatch(contact("Front Office - Root Insurance"))
         XCTAssertEqual(match.contactClass, .businessCard)
         XCTAssertEqual(match.query, "Root Insurance")
         XCTAssertTrue(match.flags.contains("brand-tail"))
+
+        // A department inside a store is a real business and keeps the brand.
+        let pharmacy = pipeline.staticMatch(contact("Pharmacy At Costco"))
+        XCTAssertEqual(pharmacy.contactClass, .businessCard)
+        XCTAssertEqual(pharmacy.query, "Costco")
+    }
+
+    /// Name-field classification alone leaves a hole: a vCard carrying only `FN`
+    /// and no `N` parses with no givenName, so "Dana At Costco" would be a
+    /// business and wear Costco's mark.  The head of the split settles it.
+    func testAtFormIsAPersonEvenWithNoNameFields() {
+        for display in ["Dana At Costco", "Chris At NTB", "Byron Goode Jr - Root Insurance"] {
+            let match = pipeline.staticMatch(contact(display))
+            XCTAssertEqual(match.contactClass, .person, "\(display) should be a person")
+            XCTAssertNil(match.domain, "\(display) should have no logo domain")
+        }
+    }
+
+    func testHeadLooksPersonalDiscriminates() {
+        for personal in ["Dana", "Chris", "Byron Goode Jr"] {
+            XCTAssertTrue(NameNormalizer.headLooksPersonal(personal), personal)
+        }
+        // Department, trade, role and place words are not people.
+        for business in ["Pharmacy", "Optical", "Front Office", "Katy Auto", "Costco"] {
+            XCTAssertFalse(NameNormalizer.headLooksPersonal(business), business)
+        }
     }
 
     func testEmployeeGuardBeatsRule8() {

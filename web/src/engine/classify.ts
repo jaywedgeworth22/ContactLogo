@@ -1,4 +1,4 @@
-import { lookupCompanyDomain } from "./catalog.ts";
+import { isTailOkWord, lookupCompanyDomain } from "./catalog.ts";
 import { lookupPhoneDomain } from "./phones.ts";
 import {
   cleanName,
@@ -6,6 +6,7 @@ import {
   guessSlug,
   hasOrgSignal,
   isAcronym,
+  isOrgSignalWord,
   isRoleOrPlace,
   splitSegments,
 } from "./normalize.ts";
@@ -179,6 +180,37 @@ function looksLikePersonName(name: string): boolean {
   return parts.every((p) => /^[A-Za-z][A-Za-z'.-]{1,30}$/.test(p));
 }
 
+/**
+ * §1, applied to a card with no name fields: does the head of a "head - tail"
+ * split read as a person's name?
+ *
+ * Name-field classification only works when the import supplies structured
+ * names, and plenty do not — a vCard carrying only `FN:Dana At Costco` parses
+ * with no givenName at all, so without this the card is a business and wears
+ * Costco's mark.  That is the outcome the owner ruled out.
+ *
+ * Defined by exclusion, because there is no name dictionary here and the safe
+ * default for this shape is "person": a head is personal unless a word in it is
+ * one we already know means business, department, role, place or brand.
+ * `looksLikePersonName` is not reusable for this — it demands two to four
+ * parts, and "Dana" and "Chris" are one.
+ *
+ *   Dana / Chris / Byron Goode Jr   -> personal
+ *   Pharmacy / Optical              -> ORG_SIGNAL and SUBBRAND_TAIL departments
+ *   Front Office                    -> ROLE_WORDS
+ *   Katy Auto                       -> "katy" is a GEO_WORD
+ */
+function headLooksPersonal(head: string): boolean {
+  const cleaned = cleanName(head);
+  if (!cleaned) return false;
+  const parts = cleaned.replace(/,/g, " ").split(/\s+/).filter(Boolean);
+  if (parts.length === 0 || parts.length > 4) return false;
+  if (!parts.every((p) => /^[A-Za-z][A-Za-z'.-]{0,30}$/.test(p))) return false;
+  if (isGeneric(cleaned) || isRoleOrPlace(cleaned)) return false;
+  if (lookupCompanyDomain(cleaned)) return false;
+  return parts.every((p) => !isOrgSignalWord(p) && !isTailOkWord(p));
+}
+
 /** Every non-freemail, non-social email domain on the contact (R8.2's accept set). */
 function workEmailDomains(c: BookContact): string[] {
   const out: string[] = [];
@@ -309,7 +341,15 @@ export function analyzeContact(c: BookContact): ContactAnalysis {
     if (lone) return businessCard(selectSegment(cleanName(lone)), "lone-firm-name");
     return person(c, brandSource); // R7.3.d
   }
-  return businessCard(selectSegment(name));
+  // No name fields.  §5 rule 8 applies here — but a card whose display name is
+  // "Dana At Costco" is still a person, and many imports carry no structured
+  // name at all, so the head has to be read.
+  const segment = selectSegment(name);
+  if (segment.flag === "brand-tail") {
+    const seg = splitSegments(name);
+    if (seg && headLooksPersonal(seg.head)) return person(c, segment.query);
+  }
+  return businessCard(segment);
 }
 
 export function classifyContact(c: BookContact): ContactClass {

@@ -252,6 +252,43 @@ object Normalize {
     /** Result of R6 segment selection: the derived query and the static flags it produced. */
     data class Segment(val query: String, val flags: Set<String>)
 
+    /**
+     * The head of an R6.1 split, or null when the name does not split. Exposed so
+     * a card with no name fields can still be read as a person: see
+     * `headLooksPersonal` in MatchPipeline.
+     */
+    fun splitHead(name: String): String? = split(name)?.head
+
+    private val personTokenRegex = Regex("""^[A-Za-z][A-Za-z'.-]{0,30}$""")
+
+    /**
+     * MATCHING-ENGINE section 1, applied to a card with no name fields: does the
+     * head of a "head - tail" split read as a person's name?
+     *
+     * Name-field classification alone leaves a hole — a vCard carrying only FN
+     * and no N parses with no givenName, so "Dana At Costco" would be a business
+     * and wear Costco's mark, which is the outcome the owner ruled out.
+     *
+     * Defined by exclusion, because there is no name dictionary here and the safe
+     * default for this shape is "person": a head is personal unless a word in it
+     * is one already known to mean business, department, role, place or brand.
+     *
+     *   Dana / Chris / Byron Goode Jr   -> personal
+     *   Pharmacy / Optical              -> ORG_SIGNAL and SUBBRAND_TAIL departments
+     *   Front Office                    -> ROLE_WORDS
+     *   Katy Auto                       -> "katy" is a GEO_WORD
+     */
+    fun headLooksPersonal(head: String): Boolean {
+        val cleaned = clean(head)
+        if (cleaned.isEmpty()) return false
+        val parts = cleaned.replace(",", " ").split(whitespaceRegex).filter { it.isNotEmpty() }
+        if (parts.isEmpty() || parts.size > 4) return false
+        if (!parts.all { personTokenRegex.matches(it) }) return false
+        if (Blocklists.isGenericOrNonBrand(cleaned) || isRoleOrPlace(cleaned)) return false
+        if (CompanyCatalog.domainForName(cleaned) != null) return false
+        return parts.none { isOrgSignalWord(it) || CompanyCatalog.isTailOkWordPublic(it) }
+    }
+
     /** R6: which part of an (already business-relevant) name is the brand. First match wins. */
     fun selectSegment(name: String): Segment {
         val s = split(name) ?: return Segment(clean(name), emptySet())

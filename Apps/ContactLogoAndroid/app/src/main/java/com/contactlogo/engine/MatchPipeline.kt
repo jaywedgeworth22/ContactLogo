@@ -106,7 +106,17 @@ object MatchPipeline {
         // businessCard path: derive the query via R6 on clean(brandSource) unless
         // the person-path brand-tail already set it.
         if (query == null) {
-            val seg = Normalize.selectSegment(Normalize.clean(brandSource))
+            val cleanedSource = Normalize.clean(brandSource)
+            val seg = Normalize.selectSegment(cleanedSource)
+            // No name fields, but "Dana At Costco" is still a person and plenty of
+            // imports carry no structured name at all, so read the head.
+            if ("brand-tail" in seg.flags) {
+                val head = Normalize.splitHead(cleanedSource)
+                if (head != null && Normalize.headLooksPersonal(head)) {
+                    val personFlags = setOf(if (contact.hasCustomPhoto) "photo-protected" else "person")
+                    return EngineResult(ContactClass.PERSON, null, null, null, personFlags, Confidence.SKIP)
+                }
+            }
             query = seg.query
             flags += seg.flags
         }

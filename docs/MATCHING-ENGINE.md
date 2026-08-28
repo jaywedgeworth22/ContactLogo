@@ -111,6 +111,27 @@ is a business card, not a person. People who *work at* a company stay people.
    are affiliated with, not that the card is that business.  The "X At Y" form
    is the plainest case and is squarely rule 7's employee contact.
 
+   **And when there are no name fields, read the head.**  Name-field
+   classification alone leaves a hole: a vCard carrying only `FN` and no `N`
+   parses with no given name at all, so "Dana At Costco" would slip through as a
+   business.  If the head of the split reads as a person's name, the card is a
+   person.  The head is personal unless a word in it is one already known to
+   mean business, department, role, place or brand — there is no name
+   dictionary, and for this shape the safe default is "person".
+
+   | display name | head | class |
+   | --- | --- | --- |
+   | `Dana At Costco` | `Dana` | person |
+   | `Chris At NTB` | `Chris` | person |
+   | `Byron Goode Jr - Root Insurance` | `Byron Goode Jr` | person |
+   | `Pharmacy At Costco` | `Pharmacy` | business — `ORG_SIGNAL` |
+   | `Optical At Costco` | `Optical` | business — `SUBBRAND_TAIL` |
+   | `Front Office - Root Insurance` | `Front Office` | business — `ROLE_WORDS` |
+   | `Katy Auto - Firestone Tire` | `Katy Auto` | business — `katy` is a `GEO_WORD` |
+
+   A pharmacy counter inside a Costco is a real department and keeps the brand;
+   that is why the head is read rather than the "At" form suppressed outright.
+
    *(Owner decision, 2026-08-28.  This rule was found dead in all three engines
    by the 2026-08 audit (CL-15) and implemented during the remediation, which
    put company logos on named individuals.  Scoping it to org-only cards is the

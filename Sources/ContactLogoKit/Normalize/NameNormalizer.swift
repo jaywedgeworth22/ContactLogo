@@ -84,6 +84,49 @@ public enum NameNormalizer {
         return Segment(query: cleaned)
     }
 
+    /// The head of an R6.1 split, or nil when the name does not split.  Exposed so
+    /// a card with no name fields can still be read as a person.
+    public static func splitHead(_ name: String) -> String? {
+        splitSegments(clean(name))?.head
+    }
+
+    /// MATCHING-ENGINE §1, applied to a card with no name fields: does the head of
+    /// a "head - tail" split read as a person's name?
+    ///
+    /// Name-field classification alone leaves a hole — a vCard carrying only `FN`
+    /// and no `N` parses with no givenName, so "Dana At Costco" would be a
+    /// business and wear Costco's mark, which is the outcome the owner ruled out.
+    ///
+    /// Defined by exclusion, because there is no name dictionary here and the safe
+    /// default for this shape is "person": a head is personal unless a word in it
+    /// is one already known to mean business, department, role, place or brand.
+    ///
+    ///     Dana / Chris / Byron Goode Jr   personal
+    ///     Pharmacy / Optical              orgSignal and subbrandTail departments
+    ///     Front Office                    roleWords
+    ///     Katy Auto                       "katy" is a geoWord
+    public static func headLooksPersonal(_ head: String) -> Bool {
+        let cleaned = clean(head)
+        guard !cleaned.isEmpty else { return false }
+        let parts = cleaned.replacingOccurrences(of: ",", with: " ")
+            .split(whereSeparator: { $0 == " " || $0 == "\t" })
+            .map(String.init)
+        guard !parts.isEmpty, parts.count <= 4 else { return false }
+        for part in parts {
+            guard let first = part.first, first.isLetter else { return false }
+            guard part.count <= 31 else { return false }
+            guard part.allSatisfy({ $0.isLetter || $0 == "'" || $0 == "." || $0 == "-" }) else { return false }
+        }
+        if GenericBlocklist.isNonBrand(cleaned) || WordLists.isRoleOrPlace(cleaned) { return false }
+        if CompanyCatalog.domain(forName: cleaned) != nil { return false }
+        for part in parts {
+            let lower = part.lowercased()
+            if WordLists.orgSignal.contains(lower) { return false }
+            if WordLists.isTailOkWord(lower) { return false }
+        }
+        return true
+    }
+
     /// R6.2 — "Byron Goode Jr - Root Insurance" → "Root Insurance",
     /// "Chris At NTB" → "NTB" (MATCHING-ENGINE §5 rule 8).
     /// Returns nil when there is no tail that is recognizably a brand.

@@ -152,7 +152,7 @@ const SUBBRAND_TAIL: ReadonlySet<string> = new Set([
   "curbside", "drive", "thru", "corporate", "hq", "distribution", "warehouse",
 ]);
 
-function isTailOkWord(word: string): boolean {
+export function isTailOkWord(word: string): boolean {
   const w = word.toLowerCase();
   if (GEO_WORDS_LITERAL.has(w) || SUBBRAND_TAIL.has(w)) return true;
   return /^#\d*$/.test(w) || /^\d{2,5}$/.test(w);
