@@ -335,6 +335,25 @@ function normalizedWebsite(website: string): string {
   return website.includes("://") ? website : `https://${website}`;
 }
 
+/**
+ * The URL to write back onto a card that already carries one.  A card saying
+ * `URL:acme.example` must come back out saying `URL:acme.example`: the backup
+ * download re-emits every card untouched, and a backup that silently rewrites a
+ * field nobody approved is not a backup.  Only a genuinely different website —
+ * one the app changed — gets the scheme normalization that synthesized cards
+ * need to stay clickable in Apple Contacts.
+ */
+function websiteForRewrite(properties: VcardProperty[], website: string | undefined): string | undefined {
+  const wanted = website?.trim();
+  if (!wanted) return undefined;
+  const index = properties.findIndex((p) => p.name === "URL" && p.value.trim() !== "");
+  if (index >= 0) {
+    const current = unescapeVcard(properties[index]!.value).trim();
+    if (current && normalizedWebsite(current) === normalizedWebsite(wanted)) return current;
+  }
+  return normalizedWebsite(wanted);
+}
+
 /** Update a modelled value in place, without ever blanking a line the card had. */
 function updateFlat(
   properties: VcardProperty[],
@@ -422,12 +441,7 @@ function rewriteProperties(record: VcardRecord, contact: VcardContact): VcardPro
   updateComponents(properties, "ORG", [{ index: 0, value: contact.organization }], "ORG", 1);
   updateFlat(properties, "EMAIL", contact.email, "EMAIL;TYPE=INTERNET");
   updateFlat(properties, "TEL", contact.phone, "TEL;TYPE=WORK,VOICE");
-  updateFlat(
-    properties,
-    "URL",
-    contact.website ? normalizedWebsite(contact.website) : undefined,
-    "URL",
-  );
+  updateFlat(properties, "URL", websiteForRewrite(properties, contact.website), "URL");
   applyPhoto(properties, contact, record.version);
   return properties;
 }

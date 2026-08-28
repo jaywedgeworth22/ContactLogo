@@ -730,6 +730,35 @@ final class ImagePreparerTests: XCTestCase {
         XCTAssertFalse(curved.isEmpty)
     }
 
+    /// Simple Icons puts the brand colour on the root `<svg>` and leaves the
+    /// glyph's `<path>` bare.  Before the root's paint was inherited, the review
+    /// card previewed FedEx purple while Contacts was written a black
+    /// silhouette, and simpleicons is a high-tier source, so those marks are
+    /// pre-checked.
+    func testRootFillIsInheritedByBareChildren() throws {
+        let svg = "<svg fill=\"#4D148C\" role=\"img\" viewBox=\"0 0 24 24\">"
+            + "<title>FedEx</title><path d=\"M0 0 L24 0 L24 24 Z\"/></svg>"
+        let doc = try XCTUnwrap(SVGRasterizer.parse(Data(svg.utf8)))
+        let rgba = try XCTUnwrap(doc.shapes.first?.fill.components)
+        XCTAssertEqual(rgba[0], CGFloat(0x4D) / 255, accuracy: 0.005)
+        XCTAssertEqual(rgba[1], CGFloat(0x14) / 255, accuracy: 0.005)
+        XCTAssertEqual(rgba[2], CGFloat(0x8C) / 255, accuracy: 0.005)
+    }
+
+    /// An element's own `fill` still wins over the root's, and a root
+    /// `fill="none"` really does leave a bare child unpainted.
+    func testElementFillOverridesTheInheritedRootFill() throws {
+        let svg = "<svg fill=\"none\" viewBox=\"0 0 10 10\">"
+            + "<rect x=\"0\" y=\"0\" width=\"10\" height=\"10\" fill=\"#ff0000\"/>"
+            + "<rect x=\"0\" y=\"0\" width=\"4\" height=\"4\"/></svg>"
+        let doc = try XCTUnwrap(SVGRasterizer.parse(Data(svg.utf8)))
+        XCTAssertEqual(doc.shapes.count, 1, "the bare rect inherits fill=\"none\" and paints nothing")
+        let rgba = try XCTUnwrap(doc.shapes.first?.fill.components)
+        XCTAssertEqual(rgba[0], 1, accuracy: 0.005)
+        XCTAssertEqual(rgba[1], 0, accuracy: 0.005)
+        XCTAssertEqual(rgba[2], 0, accuracy: 0.005)
+    }
+
     func testViewBoxlessOrEmptyMarkupIsRejected() {
         XCTAssertNil(SVGRasterizer.parse(Data("<svg><g/></svg>".utf8)))
         XCTAssertTrue(SVGRasterizer.looksLikeSVG(Data("<?xml version=\"1.0\"?><svg viewBox=\"0 0 1 1\"></svg>".utf8)))

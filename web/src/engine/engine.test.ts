@@ -257,16 +257,19 @@ test("candidateUrls provides high-res sources and avoids unknown simpleicons", a
   const known = candidateUrls("apple.com");
   assert.equal(known.some((c) => c.source === "simpleicons"), true);
   assert.equal(known.some((c) => c.source === "ticker"), true);
-  assert.equal(known.some((c) => c.source === "brandfetch"), true);
-  assert.equal(known.some((c) => c.source === "logodev"), true);
+  // Brandfetch and Logo.dev are omitted unless their credential is configured,
+  // and none is in the test environment — see the credentials test in
+  // sources.test.ts for why an unusable candidate must not be ranked.
+  assert.equal(known.some((c) => c.source === "brandfetch"), false);
+  assert.equal(known.some((c) => c.source === "logodev"), false);
   assert.equal(known.some((c) => c.source === "clearbit"), true);
   assert.equal(known.some((c) => c.source === "google"), true);
 
   const unknown = candidateUrls("random-local-bakery.com");
   assert.equal(unknown.some((c) => c.source === "simpleicons"), false);
   assert.equal(unknown.some((c) => c.source === "ticker"), false);
-  assert.equal(unknown.some((c) => c.source === "brandfetch"), true);
-  assert.equal(unknown.some((c) => c.source === "logodev"), true);
+  assert.equal(unknown.some((c) => c.source === "brandfetch"), false);
+  assert.equal(unknown.some((c) => c.source === "logodev"), false);
   assert.equal(unknown.some((c) => c.source === "clearbit"), true);
   assert.equal(unknown.some((c) => c.source === "google"), true);
 });

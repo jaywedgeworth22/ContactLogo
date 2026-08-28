@@ -67,14 +67,26 @@ enum SVGRasterizer {
         let shapes: [Shape]
     }
 
+    /// The paint properties SVG inherits down the tree.  We carry them from the
+    /// root `<svg>` only, which is all our sources need: Simple Icons puts the
+    /// brand colour on the root and leaves the glyph's `<path>` bare, so without
+    /// this every one of those marks rasterizes black (ENGINE-CONTRACT R11.4 —
+    /// the preview and the written image must be the same picture).
+    struct Inherited {
+        var fill: String?
+        var fillOpacity: String?
+    }
+
     static func parse(_ data: Data) -> Document? {
         let text = String(decoding: data, as: UTF8.self)
         let ns = text as NSString
         let full = NSRange(location: 0, length: ns.length)
 
         var viewBox = CGRect(x: 0, y: 0, width: 0, height: 0)
+        var inherited = Inherited()
         if let root = rootRegex.firstMatch(in: text, range: full) {
             let attrs = attributes(in: ns.substring(with: root.range))
+            inherited = Inherited(fill: attrs["fill"], fillOpacity: attrs["fill-opacity"])
             if let box = attrs["viewbox"] {
                 let v = numbers(box)
                 if v.count == 4, v[2] > 0, v[3] > 0 {
@@ -93,7 +105,7 @@ enum SVGRasterizer {
         for match in elementRegex.matches(in: text, range: full) {
             let tag = ns.substring(with: match.range(at: 1)).lowercased()
             let attrs = attributes(in: ns.substring(with: match.range))
-            guard let fill = fillColor(attrs) else { continue }
+            guard let fill = fillColor(attrs, inheriting: inherited) else { continue }
             guard let path = path(forTag: tag, attributes: attrs) else { continue }
             shapes.append(Shape(path: path, fill: fill, evenOdd: (attrs["fill-rule"] ?? "") == "evenodd"))
         }
@@ -181,14 +193,18 @@ enum SVGRasterizer {
         "cyan": "#00ffff", "magenta": "#ff00ff", "fuchsia": "#ff00ff", "olive": "#808000"
     ]
 
-    /// The fill for an element, or nil when it paints nothing.  An absent
-    /// `fill` attribute means black, per SVG's initial value.
-    static func fillColor(_ attrs: [String: String]) -> CGColor? {
+    /// The fill for an element, or nil when it paints nothing.  `fill` and
+    /// `fill-opacity` fall back to whatever the root `<svg>` declared before
+    /// SVG's initial value of opaque black applies; `opacity` is a group
+    /// property and does not inherit.
+    static func fillColor(_ attrs: [String: String], inheriting inherited: Inherited = Inherited()) -> CGColor? {
         var alpha = 1.0
         if let o = numbers(attrs["opacity"] ?? "").first { alpha *= max(0, min(1, o)) }
-        if let o = numbers(attrs["fill-opacity"] ?? "").first { alpha *= max(0, min(1, o)) }
+        if let o = numbers(attrs["fill-opacity"] ?? inherited.fillOpacity ?? "").first {
+            alpha *= max(0, min(1, o))
+        }
         guard alpha > 0 else { return nil }
-        guard let raw = attrs["fill"] else {
+        guard let raw = attrs["fill"] ?? inherited.fill else {
             return CGColor(srgbRed: 0, green: 0, blue: 0, alpha: CGFloat(alpha))
         }
         return color(raw, alpha: alpha)

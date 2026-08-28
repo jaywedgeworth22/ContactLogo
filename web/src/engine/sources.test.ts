@@ -150,13 +150,14 @@ test("CL-18: isFallbackTile does not flag a normal-sized asset on byte size alon
   assert.equal(verdict.isTile, false);
 });
 
-test("CL-18: candidateUrls candidates are still ranked/labeled by source when a tile would be dropped", () => {
-  // Regression guard for the shared source list: dropping tiles must not
-  // remove brandfetch/logodev entries wholesale (see credentialMissing
-  // tests below) — only actual tile bytes returned at fetch time are
-  // dropped, and that happens in embedSrc/composeFromUrl below.
+test("CL-18: candidateUrls still returns a ranked list when a tile would be dropped", () => {
+  // Tile detection happens at fetch time in embedSrc/composeFromUrl, not here.
+  // Brandfetch is no longer offered without a credential, so clearbit leads for
+  // an unknown brand and is deliberately medium tier.
   const hits = candidateUrls("zzqx-nonexistent-brand-xyz.com");
-  assert.ok(hits.some((h) => h.source === "brandfetch"));
+  assert.ok(hits.length > 0);
+  assert.equal(hits[0]?.source, "clearbit");
+  assert.equal(hits.some((h) => h.source === "brandfetch"), false);
 });
 
 // ---------------------------------------------------------------------------
@@ -255,21 +256,30 @@ test("CL-11: composeFromUrl throws with a specific reason instead of silently de
 // CL-18 (CDN credentials) — Brandfetch/Logo.dev URLs must not silently 403.
 // ---------------------------------------------------------------------------
 
-test("CDN credentials: brandfetch/logodev candidates are flagged when no credential is configured", () => {
+test("CDN credentials: an unusable provider is not offered at all", () => {
   assert.equal(getBrandfetchClientId(), "", "no client id configured in this test environment");
   assert.equal(getLogoDevToken(), "", "no token configured in this test environment");
 
   const hits = candidateUrls("apple.com");
-  const brandfetch = hits.find((h) => h.source === "brandfetch");
-  const logodev = hits.find((h) => h.source === "logodev");
-  assert.ok(brandfetch);
-  assert.ok(logodev);
-  assert.equal(brandfetch?.credentialMissing, "VITE_BRANDFETCH_CLIENT_ID");
-  assert.equal(logodev?.credentialMissing, "VITE_LOGODEV_TOKEN");
-  // The URL must still be emitted (other engines/tests depend on the source
-  // list being stable) — just explicitly marked as doomed to 403, rather
-  // than silently advancing to the next candidate as if it were merely
-  // broken (docs/EVALUATION-2026-08.md CL-18).
-  assert.ok(brandfetch?.src.startsWith("https://cdn.brandfetch.io/"));
-  assert.ok(logodev?.src.startsWith("https://img.logo.dev/"));
+  assert.equal(hits.some((h) => h.source === "brandfetch"), false);
+  assert.equal(hits.some((h) => h.source === "logodev"), false);
+
+  // These used to be emitted and merely flagged `credentialMissing`, on the
+  // reasoning that the source list should stay stable. That put an unusable URL
+  // at index 0 for every domain with no Simple Icons or ticker hit, and R11.2
+  // rates Brandfetch high tier -- so the card was pre-checked at high.
+  //
+  // Probed 2026-08-28, both without credentials:
+  //   cdn.brandfetch.io/<domain>/w/512/h/512  302 -> docs.brandfetch.com,
+  //                                           200 text/html, 413 KB
+  //   img.logo.dev/<domain>?size=512          401 application/json
+  //
+  // Brandfetch is the dangerous one: it resolves, so nothing 404s and the card
+  // stays pre-checked while pointing at an HTML page.
+  //
+  // Consequence worth knowing: with no credentials, a domain with no curated
+  // mark now tops out at medium, because clearbit is deliberately not high
+  // tier. Fewer contacts are pre-checked, which is the honest outcome.
+  assert.equal(candidateUrls("apple.com")[0]?.source, "simpleicons");
+  assert.equal(candidateUrls("some-agency-with-no-icon.com")[0]?.source, "clearbit");
 });

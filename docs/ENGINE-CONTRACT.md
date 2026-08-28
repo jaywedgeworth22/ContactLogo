@@ -623,6 +623,12 @@ Stable sort: score descending, original order on ties. Keep the top 5.
 - SVG assets MUST be rasterized to a padded square PNG before write **and**
   before dimension measurement; otherwise the curated marks can never satisfy
   the square rule and are structurally locked out of `high` (CL-06).
+  Rasterizing MUST inherit `fill` and `fill-opacity` from the root `<svg>`:
+  `cdn.simpleicons.org` returns `<svg fill="#4D148C" ...><path d="..."/></svg>`
+  with the glyph itself bare, so a reader that only looks at per-element
+  attributes previews the brand colour and writes a black silhouette. Web and
+  Android get this from the browser and from Coil's SVG decoder; Swift's
+  hand-rolled `SVGRasterizer` implements it explicitly.
 
 **R11.5 `isFallbackTile(image) -> bool`** (CL-18)
 

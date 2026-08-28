@@ -458,7 +458,18 @@ async function syncToGoogleContacts() {
       state.notice = `Syncing photo to Google: ${done + 1}/${googleTargets.length} (${item.contact.displayName})…`;
       render();
       try {
-        const embedded = await embedSrc(hit.src);
+        // CL-11 / R11.5 — without the callback a detected fallback tile comes
+        // back as the original URL, gets squared into real bytes, and is written
+        // to the contact as its photo. A placeholder tile is a wrong logo, and
+        // this path writes to someone's address book, so it counts as a failure
+        // rather than a silent success.
+        let failure: string | undefined;
+        const embedded = await embedSrc(hit.src, (reason, detail) => {
+          failure = detail ? `${reason}: ${detail}` : reason;
+        });
+        if (failure !== undefined) {
+          throw new Error(`logo could not be embedded (${failure})`);
+        }
         const squared = await padAndSquareImage(embedded);
         await updateGoogleContactPhoto(item.contact.googleResourceName, squared, token);
         item.contact.hadExistingPhoto = true;

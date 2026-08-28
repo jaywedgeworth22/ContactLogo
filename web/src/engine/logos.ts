@@ -26,7 +26,6 @@ export type LogoHit = {
    * advancing to the next candidate as if this one were merely broken.
    * Holds the name of the missing env var.
    */
-  credentialMissing?: string;
 };
 
 function assertNever(value: never): never {
@@ -169,24 +168,34 @@ export function candidateUrls(domain: string): LogoHit[] {
       kind: "icon",
     });
   }
+  // R11.2 rates Brandfetch a high tier source, so an unusable Brandfetch URL at
+  // index 0 becomes the pre-checked winner for every domain without a Simple
+  // Icons or ticker hit.  Neither provider serves anything without its
+  // credential — probed 2026-08-28:
+  //
+  //   cdn.brandfetch.io/<domain>/w/512/h/512   302 -> docs.brandfetch.com,
+  //                                            200 text/html, 413 KB
+  //   img.logo.dev/<domain>?size=512           401 application/json
+  //
+  // The Brandfetch case is the worse one: it resolves, so nothing 404s and the
+  // card stays pre-checked at high while pointing at an HTML page.  A candidate
+  // that cannot be a logo does not belong in the ranked list at all.
   const brandfetchClientId = getBrandfetchClientId();
-  out.push({
-    src: brandfetchClientId
-      ? `https://cdn.brandfetch.io/${encodeURIComponent(domain)}/w/512/h/512?c=${encodeURIComponent(brandfetchClientId)}`
-      : `https://cdn.brandfetch.io/${encodeURIComponent(domain)}/w/512/h/512`,
-    source: "brandfetch",
-    kind: "icon",
-    credentialMissing: brandfetchClientId ? undefined : "VITE_BRANDFETCH_CLIENT_ID",
-  });
+  if (brandfetchClientId) {
+    out.push({
+      src: `https://cdn.brandfetch.io/${encodeURIComponent(domain)}/w/512/h/512?c=${encodeURIComponent(brandfetchClientId)}`,
+      source: "brandfetch",
+      kind: "icon",
+    });
+  }
   const logoDevToken = getLogoDevToken();
-  out.push({
-    src: logoDevToken
-      ? `https://img.logo.dev/${encodeURIComponent(domain)}?size=512&token=${encodeURIComponent(logoDevToken)}`
-      : `https://img.logo.dev/${encodeURIComponent(domain)}?size=512`,
-    source: "logodev",
-    kind: "icon",
-    credentialMissing: logoDevToken ? undefined : "VITE_LOGODEV_TOKEN",
-  });
+  if (logoDevToken) {
+    out.push({
+      src: `https://img.logo.dev/${encodeURIComponent(domain)}?size=512&token=${encodeURIComponent(logoDevToken)}`,
+      source: "logodev",
+      kind: "icon",
+    });
+  }
   out.push({
     src: `https://logo.clearbit.com/${encodeURIComponent(domain)}?size=512`,
     source: "clearbit",
@@ -294,8 +303,28 @@ const FALLBACK_TILE_MIN_BYTES = 512;
  * on a flat field. The pixel test needs a canvas; outside a browser (e.g. the
  * Node test run) only the byte floor applies.
  */
+/**
+ * R11.5 step 2 defines the byte floor for a "PNG/JPEG/GIF payload".  Applying it
+ * to everything drops real vector marks: `cdn.simpleicons.org/chase` is 377
+ * bytes and is the genuine article, so the floor rejected it as a tile and both
+ * `composeFromUrl` and `embedSrc` lost it.
+ *
+ * Checked by MIME type and, when the type is missing or unhelpful, by sniffing
+ * the first bytes for an XML/SVG prologue.  Anything that is not identifiably
+ * vector keeps the floor — a tiny unknown payload is still not a usable logo.
+ */
+async function looksVector(blob: Blob): Promise<boolean> {
+  if (/svg/i.test(blob.type)) return true;
+  try {
+    const head = (await blob.slice(0, 256).text()).trimStart().toLowerCase();
+    return head.startsWith("<svg") || head.startsWith("<?xml");
+  } catch {
+    return false;
+  }
+}
+
 export async function isFallbackTile(blob: Blob): Promise<FallbackTileVerdict> {
-  if (blob.size < FALLBACK_TILE_MIN_BYTES) {
+  if (blob.size < FALLBACK_TILE_MIN_BYTES && !(await looksVector(blob))) {
     return { isTile: true, reason: "byte-floor" };
   }
   if (typeof document === "undefined" || typeof Image === "undefined") {

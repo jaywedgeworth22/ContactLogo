@@ -181,6 +181,13 @@ function byClass(name: string): StubElement[] {
   return findAll(stubDocument.root, (n) => hasClass(n, name));
 }
 
+function ancestorWithClass(node: StubElement, name: string): StubElement | null {
+  for (let cursor: StubElement | null = node; cursor; cursor = cursor.parent) {
+    if (hasClass(cursor, name)) return cursor;
+  }
+  return null;
+}
+
 function cards(): StubElement[] {
   return byClass("card").filter((n) => n.tagName === "ARTICLE");
 }
@@ -222,9 +229,13 @@ test("a 300-contact book mounts a window of cards, not all of them", () => {
   const mounted = cards();
   assert.ok(mounted.length > 0, "nothing rendered");
   assert.ok(mounted.length <= 40, `mounted ${mounted.length} of 300 cards`);
-  const list = byClass("virtual-list")[0];
-  assert.ok(list, "no virtual-list viewport");
-  const spacer = byClass("virtual-list-spacer")[0];
+  // Which section the book lands in depends on the confidence its candidates
+  // earn, so the first viewport in the document is not necessarily the one
+  // holding cards.  Walk up from a card that actually mounted.
+  const list = ancestorWithClass(mounted[0], "virtual-list");
+  const spacer = ancestorWithClass(mounted[0], "virtual-list-spacer");
+  assert.ok(list, "mounted cards are not inside a virtual-list viewport");
+  assert.ok(spacer, "mounted cards are not inside a virtual-list spacer");
   assert.ok(parseFloat(spacer.style.height) > parseFloat(list.style.height), "spacer must reserve full height");
 });
 

@@ -276,6 +276,36 @@ test("a full backup keeps every card and every line", () => {
   assert.deepEqual(logicalLines(contactsToVcard(contacts)), [...RICH_CARD_LINES, ...second]);
 });
 
+/**
+ * "Download backup" is the promise the whole undo story rests on, so it must
+ * re-emit the card it was given.  Export normalizes a bare website to
+ * `https://` so synthesized cards stay clickable in Apple Contacts, and that
+ * normalization used to leak onto cards that already carried their own
+ * bare `URL:` line — rewriting a field nobody approved.
+ */
+test("a card's own bare URL is not rewritten by the backup export", () => {
+  const lines = ["BEGIN:VCARD", "VERSION:3.0", "FN:Acme Roofing", "ORG:Acme Roofing", "URL:acme.example", "END:VCARD"];
+  const contacts = parseVcard(lines.join("\r\n") + "\r\n");
+  assert.equal(contacts[0]?.website, "acme.example");
+  assert.deepEqual(logicalLines(contactsToVcard(contacts)), lines);
+});
+
+test("a website the app actually changed is written with a scheme", () => {
+  const contacts = parseVcard(
+    ["BEGIN:VCARD", "VERSION:3.0", "FN:Acme Roofing", "URL:old.example", "END:VCARD"].join("\r\n") + "\r\n",
+  );
+  contacts[0]!.website = "acme.example";
+  assert.ok(
+    logicalLines(contactsToVcard(contacts)).includes("URL:https://acme.example"),
+    "a replaced website still gets normalized",
+  );
+});
+
+test("a card with no URL at all gets a normalized one", () => {
+  const card = contactToVcard({ id: "1", displayName: "FedEx", organization: "FedEx", website: "fedex.com" });
+  assert.ok(logicalLines(card).includes("URL:https://fedex.com"));
+});
+
 // Mirrors "vcard round-trip keeps org and photo" in engine.test.ts, which this
 // lane must not break.
 test("synthesized cards still round-trip org and photo", () => {
