@@ -11,6 +11,33 @@ Swift and Gradle builds were not run — no Swift toolchain or Android SDK in th
 evaluation environment — so all native findings are marked *code read* and should
 be confirmed on a Mac.
 
+## Re-verification (2026-08-28)
+
+The three findings this document verified in a browser — CL-07, CL-08, CL-09 —
+were re-run against the built app on the remediation branch, in the same
+headless Chromium at 1280×900, with a twelve-contact vCard:
+
+| | audit (`a168fd7`) | now |
+| --- | --- | --- |
+| CL-07 | typing `wal` left `value: "w"`, `activeElement: BODY` | `value: "wal"`, `activeElement: INPUT` |
+| CL-08 | label froze at 2 until a forced re-render showed 4 | tracks check, uncheck, and both bulk controls |
+| CL-09 | 9,804px mobile page, every card in the DOM | 2,203px, 455 DOM nodes |
+
+The session is committed as `web/e2e/audit-repro.mjs` so these can be re-run
+rather than taken on trust. It is not in CI and `web` gained no Playwright
+dependency: the script says how to install one and run it.
+
+Two notes from re-running, both about the harness rather than the app. Counting
+every `input[type=checkbox]` includes the "Circle mask preview" toggle, which
+approves nothing — that produced an off-by-one and a false CL-08 failure on the
+first pass. And the button pluralizes (`app.ts:1490`), so a matcher for
+"Approved Updates" misses a count of exactly one. Both are guarded in the
+committed script.
+
+Not re-verified here: the native findings, which remain as the audit left them —
+now built by CI on every push, but still not exercised against a real address
+book.
+
 ## Verdict
 
 The premise is correct and unusually well-argued.  "A wrong logo is worse than
