@@ -532,8 +532,15 @@ Two readings of "domain agrees" are deliberately kept apart:
 - **R11.3's promotion uses resolved evidence** (`via != guess`), matching §6's
   "Catalog **or** contact-owned domain + square asset may also promote to HIGH".
 
-`via == email` may reach high. (The TypeScript engine currently caps email at
-medium; §2b ranks a work email second only to a website, so the cap is removed.)
+`via == email` is capped at `medium` (R10.1b).  An earlier draft of this contract
+removed the cap on the grounds that §2b ranks a work email second only to a
+website.  That was reversed: a work email domain identifies the contact but is
+routinely not the brand's own domain — subsidiaries, regional domains, resellers
+and consultants on a client domain all resolve to something the display name
+never names — and VISION.md's first principle is that a wrong logo is worse than
+none.  The Swift kit currently treats email as domain agreement and so may reach
+high; that engine is the one to TIGHTEN to this rule, not the reverse.  The
+committed test `email and guessed domains stay in review` asserts the cap.
 
 ---
 

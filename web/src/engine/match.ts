@@ -82,6 +82,13 @@ export function staticCeiling(item: {
   if (item.contactClass !== "businessCard" || !item.via) return "skip"; // R10.0
   let ceiling: Confidence = "high";
   if (item.via === "guess") ceiling = lower(ceiling, "medium"); // R10.1
+  // R10.1b — a work email domain is the contact's own data, but it is routinely
+  // not the brand's: subsidiaries, regional domains, resellers, and consultants
+  // on a client domain all resolve to something the display name never names.
+  // "A wrong logo is worse than none" (VISION.md), so email identifies but does
+  // not pre-check.  Keeping this cap is also what the committed engine.test.ts
+  // case "email and guessed domains stay in review" has always asserted.
+  if (item.via === "email") ceiling = lower(ceiling, "medium");
   if (item.flags.includes("homonym-risk") && !CONTACT_OWNED.has(item.via)) ceiling = lower(ceiling, "medium"); // R10.2
   if (item.flags.includes("brand-tail")) ceiling = lower(ceiling, "medium"); // R10.3
   if (item.flags.includes("replace-existing")) ceiling = lower(ceiling, "medium"); // R10.4

@@ -9,6 +9,7 @@ import {
   readDatadogPublicEnv,
   resolveDatadogSite,
 } from "./config.ts";
+import { errorKind } from "./datadog.ts";
 
 test("production hostnames require Datadog", () => {
   assert.equal(productionHostname("contactlogo.com"), true);
@@ -82,4 +83,25 @@ test("unsupported DD_SITE stays dark", () => {
   });
   assert.equal(config, null);
   assert.deepEqual(missing, ["DD_SITE"]);
+});
+
+// CL-23: reportClientError must never let a contact-derived string (a Google
+// resourceName, a display name embedded in a fetch failure, ...) leave the
+// browser inside a telemetry payload.  It only ever forwards error.name, and
+// only when that name is drawn from a closed, non-message-derived alphabet.
+test("errorKind never forwards raw error message text", () => {
+  assert.equal(errorKind(new Error("Failed to update photo for people/c123456789: 403 denied")), "Error");
+  assert.equal(errorKind(new TypeError("boom")), "TypeError");
+  assert.equal(errorKind("a plain string, not an Error"), "UnknownError");
+  assert.equal(errorKind(undefined), "UnknownError");
+});
+
+test("errorKind falls back to UnknownError when the name itself looks attacker-controlled", () => {
+  const spoofed = new Error("irrelevant");
+  spoofed.name = "people/c123456789 Jane Doe";
+  assert.equal(errorKind(spoofed), "UnknownError");
+
+  const withSlash = new Error("irrelevant");
+  withSlash.name = "Contact/Import";
+  assert.equal(errorKind(withSlash), "UnknownError");
 });

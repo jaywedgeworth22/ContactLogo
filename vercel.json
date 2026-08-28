@@ -1,0 +1,39 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "headers": [
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'none'; base-uri 'none'; script-src 'self' https://accounts.google.com; worker-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data: blob: https://cdn.simpleicons.org https://cdn.brandfetch.io https://logo.clearbit.com https://t1.gstatic.com; connect-src 'self' https://people.googleapis.com https://www.googleapis.com https://oauth2.googleapis.com https://accounts.google.com https://browser-intake-datadoghq.com https://browser-intake-us3-datadoghq.com https://browser-intake-us5-datadoghq.com https://browser-intake-datadoghq.eu https://browser-intake-ddog-gov.com https://browser-intake-ap1-datadoghq.com; frame-src https://accounts.google.com; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+        }
+      ]
+    }
+  ]
+}

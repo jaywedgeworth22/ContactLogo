@@ -33,6 +33,22 @@ function hostname(): string {
  * Start RUM + browser logs.  Missing or partial public keys stay dark
  * (including contactlogo.com).  Session Replay stays off.  Contact
  * payloads are never sent.
+ *
+ * trackUserInteractions is deliberately off (CL-23): Datadog derives click
+ * action names from the clicked element's text/aria-label/alt, and the
+ * clickable logo thumbnail is rendered as `<img alt="{contact display
+ * name}">`.  `defaultPrivacyLevel: "mask-user-input"` only scrubs form
+ * inputs, not derived action names, so leaving interaction tracking on
+ * would ship contact names to Datadog RUM.  Rather than rely on a privacy
+ * mode we cannot verify masks alt-derived names, the feature that derives
+ * them stays disabled.
+ *
+ * Sample rates are non-100% on purpose: every page view still gets basic
+ * RUM view/resource timing at a 20% session rate, which is enough to spot
+ * regressions without shipping a browser-monitoring bill that scales
+ * linearly with traffic.  Logs are sampled at 50%: `forwardErrorsToLogs`
+ * only fires on actual errors, so this still leaves most incidents
+ * visible while capping worst-case volume during an error storm.
  */
 export function startDatadog(): DatadogPublicConfig | null {
   if (started) return started;
@@ -46,11 +62,11 @@ export function startDatadog(): DatadogPublicConfig | null {
     service: config.service,
     env: config.env,
     version: config.version,
-    sessionSampleRate: 100,
+    sessionSampleRate: 20,
     sessionReplaySampleRate: 0,
     trackResources: true,
     trackLongTasks: true,
-    trackUserInteractions: true,
+    trackUserInteractions: false,
     defaultPrivacyLevel: "mask-user-input",
     allowedTracingUrls: [window.location.origin],
   });
@@ -61,7 +77,7 @@ export function startDatadog(): DatadogPublicConfig | null {
     service: config.service,
     env: config.env,
     version: config.version,
-    sessionSampleRate: 100,
+    sessionSampleRate: 50,
     forwardErrorsToLogs: true,
   });
 
@@ -73,8 +89,28 @@ export function datadogStarted(): boolean {
   return started !== null;
 }
 
+/**
+ * Error messages thrown inside this app routinely interpolate identifiers
+ * that came from the user's address book (Google `resourceName`s, contact
+ * display names embedded in fetch failures, etc. — see CL-23).  Rather than
+ * try to enumerate every place that could happen, `reportClientError` never
+ * forwards raw `error.message` text.  It forwards only the error's
+ * constructor name (an allow-listed, closed set of built-in strings like
+ * "TypeError" or "RangeError" — never derived from message content) plus
+ * the caller-supplied, static `operation` label.  That is enough to triage
+ * *where* something broke without risking *what* broke leaving the browser.
+ */
+const SAFE_ERROR_KIND = /^[A-Za-z][A-Za-z0-9]{0,63}$/;
+
+export function errorKind(error: unknown): string {
+  if (error instanceof Error && SAFE_ERROR_KIND.test(error.name)) {
+    return error.name;
+  }
+  return "UnknownError";
+}
+
 export function reportClientError(error: unknown, context: ClientErrorContext): void {
-  const message = error instanceof Error ? error.message : String(error);
   if (!started) return;
-  datadogLogs.logger.error(message, { operation: context.operation });
+  const kind = errorKind(error);
+  datadogLogs.logger.error(`Client error (${kind})`, { operation: context.operation });
 }

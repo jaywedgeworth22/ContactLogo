@@ -17,6 +17,16 @@ export type LogoHit = {
   src: string;
   source: LogoSourceName;
   kind: "icon" | "unknown";
+  /**
+   * Set when this candidate's CDN requires a credential ContactLogo does not
+   * have configured (e.g. Brandfetch's `c=` client id, Logo.dev's `token`).
+   * The URL is still emitted — some deployments do configure the key, and the
+   * source list itself must stay stable — but callers can use this to warn
+   * the user or skip the doomed request instead of silently hitting a 403 and
+   * advancing to the next candidate as if this one were merely broken.
+   * Holds the name of the missing env var.
+   */
+  credentialMissing?: string;
 };
 
 function assertNever(value: never): never {
@@ -120,6 +130,18 @@ export function simpleIconsSlug(domain: string): string | undefined {
   return SIMPLE_SLUGS[domain];
 }
 
+/** Brandfetch's Logo Link CDN 403s without a client id (`?c=`).  See docs/HANDOFF-LOCAL.md. */
+export function getBrandfetchClientId(): string {
+  const viteEnv = (import.meta as { env?: { VITE_BRANDFETCH_CLIENT_ID?: string } }).env;
+  return String(viteEnv?.VITE_BRANDFETCH_CLIENT_ID ?? "").trim();
+}
+
+/** Logo.dev's image CDN 403s without a token (`?token=`).  See docs/HANDOFF-LOCAL.md. */
+export function getLogoDevToken(): string {
+  const viteEnv = (import.meta as { env?: { VITE_LOGODEV_TOKEN?: string } }).env;
+  return String(viteEnv?.VITE_LOGODEV_TOKEN ?? "").trim();
+}
+
 export function candidateUrls(domain: string): LogoHit[] {
   const out: LogoHit[] = [];
   const svg = PREFERRED[domain];
@@ -146,15 +168,23 @@ export function candidateUrls(domain: string): LogoHit[] {
       kind: "icon",
     });
   }
+  const brandfetchClientId = getBrandfetchClientId();
   out.push({
-    src: `https://cdn.brandfetch.io/${encodeURIComponent(domain)}/w/512/h/512`,
+    src: brandfetchClientId
+      ? `https://cdn.brandfetch.io/${encodeURIComponent(domain)}/w/512/h/512?c=${encodeURIComponent(brandfetchClientId)}`
+      : `https://cdn.brandfetch.io/${encodeURIComponent(domain)}/w/512/h/512`,
     source: "brandfetch",
     kind: "icon",
+    credentialMissing: brandfetchClientId ? undefined : "VITE_BRANDFETCH_CLIENT_ID",
   });
+  const logoDevToken = getLogoDevToken();
   out.push({
-    src: `https://img.logo.dev/${encodeURIComponent(domain)}?size=512`,
+    src: logoDevToken
+      ? `https://img.logo.dev/${encodeURIComponent(domain)}?size=512&token=${encodeURIComponent(logoDevToken)}`
+      : `https://img.logo.dev/${encodeURIComponent(domain)}?size=512`,
     source: "logodev",
     kind: "icon",
+    credentialMissing: logoDevToken ? undefined : "VITE_LOGODEV_TOKEN",
   });
   out.push({
     src: `https://logo.clearbit.com/${encodeURIComponent(domain)}?size=512`,
@@ -247,6 +277,163 @@ export function readAsDataUrl(blob: Blob): Promise<string> {
   });
 }
 
+export type FallbackTileVerdict = { isTile: boolean; reason?: string };
+
+const FALLBACK_TILE_MIN_BYTES = 512;
+
+/**
+ * docs/ENGINE-CONTRACT.md R11.5 — detect a provider's colored single-letter
+ * fallback tile (what Brandfetch, Logo.dev and Clearbit return for a domain
+ * they don't recognize) so the caller can treat it as "not found" instead of
+ * a real match, exactly as CL-18 requires.
+ *
+ * Step 1 of R11.5 (the provider's own `fallback`/`letter` JSON flag) needs the
+ * API response, not just the CDN image bytes we have here, so only steps 2–3
+ * are implemented: a byte floor, then a pixel test for a single centred glyph
+ * on a flat field. The pixel test needs a canvas; outside a browser (e.g. the
+ * Node test run) only the byte floor applies.
+ */
+export async function isFallbackTile(blob: Blob): Promise<FallbackTileVerdict> {
+  if (blob.size < FALLBACK_TILE_MIN_BYTES) {
+    return { isTile: true, reason: "byte-floor" };
+  }
+  if (typeof document === "undefined" || typeof Image === "undefined") {
+    return { isTile: false };
+  }
+  try {
+    return await pixelFallbackTileTest(blob);
+  } catch {
+    return { isTile: false };
+  }
+}
+
+function loadImageElement(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("Could not decode image"));
+    img.src = src;
+  });
+}
+
+async function pixelFallbackTileTest(blob: Blob): Promise<FallbackTileVerdict> {
+  const dataUrl = await readAsDataUrl(blob);
+  const img = await loadImageElement(dataUrl);
+  const w = Math.max(1, Math.min(64, img.naturalWidth || img.width || 64));
+  const h = Math.max(1, Math.min(64, img.naturalHeight || img.height || 64));
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return { isTile: false };
+  ctx.drawImage(img, 0, 0, w, h);
+
+  let pixels: ImageData;
+  try {
+    pixels = ctx.getImageData(0, 0, w, h);
+  } catch {
+    return { isTile: false }; // tainted canvas — can't inspect pixels
+  }
+  const { data } = pixels;
+  const at = (x: number, y: number): readonly [number, number, number] => {
+    const i = (y * w + x) * 4;
+    return [data[i], data[i + 1], data[i + 2]];
+  };
+  const cornerMean = (x0: number, y0: number): readonly [number, number, number] => {
+    const bw = Math.min(8, w);
+    const bh = Math.min(8, h);
+    let r = 0;
+    let g = 0;
+    let b = 0;
+    let n = 0;
+    for (let y = y0; y < y0 + bh && y < h; y += 1) {
+      for (let x = x0; x < x0 + bw && x < w; x += 1) {
+        const [pr, pg, pb] = at(x, y);
+        r += pr;
+        g += pg;
+        b += pb;
+        n += 1;
+      }
+    }
+    return n ? [r / n, g / n, b / n] : [0, 0, 0];
+  };
+  const corners = [
+    cornerMean(0, 0),
+    cornerMean(Math.max(0, w - 8), 0),
+    cornerMean(0, Math.max(0, h - 8)),
+    cornerMean(Math.max(0, w - 8), Math.max(0, h - 8)),
+  ];
+  const bg = corners[0];
+  for (const c of corners) {
+    if (Math.abs(c[0] - bg[0]) > 8 || Math.abs(c[1] - bg[1]) > 8 || Math.abs(c[2] - bg[2]) > 8) {
+      return { isTile: false, reason: "corners-not-flat" };
+    }
+  }
+
+  let ink = 0;
+  let sumX = 0;
+  let sumY = 0;
+  let minX = w;
+  let maxX = 0;
+  let minY = h;
+  let maxY = 0;
+  const quantized = new Set<string>();
+  for (let y = 0; y < h; y += 1) {
+    for (let x = 0; x < w; x += 1) {
+      const [r, g, b] = at(x, y);
+      if (Math.abs(r - bg[0]) > 32 || Math.abs(g - bg[1]) > 32 || Math.abs(b - bg[2]) > 32) {
+        ink += 1;
+        sumX += x;
+        sumY += y;
+        minX = Math.min(minX, x);
+        maxX = Math.max(maxX, x);
+        minY = Math.min(minY, y);
+        maxY = Math.max(maxY, y);
+        quantized.add(`${r >> 3},${g >> 3},${b >> 3}`);
+      }
+    }
+  }
+  const inkFraction = ink / (w * h);
+  if (inkFraction < 0.02 || inkFraction > 0.22) {
+    return { isTile: false, reason: "ink-fraction" };
+  }
+  const centerXFrac = Math.abs(sumX / ink - w / 2) / w;
+  const centerYFrac = Math.abs(sumY / ink - h / 2) / h;
+  if (centerXFrac > 0.12 || centerYFrac > 0.12) {
+    return { isTile: false, reason: "off-center" };
+  }
+  const bboxWFrac = (maxX - minX + 1) / w;
+  const bboxHFrac = (maxY - minY + 1) / h;
+  if (bboxWFrac > 0.55 || bboxHFrac > 0.55) {
+    return { isTile: false, reason: "bbox-too-large" };
+  }
+  if (quantized.size > 2) {
+    return { isTile: false, reason: "too-many-colors" };
+  }
+  return { isTile: true, reason: "pixel-test" };
+}
+
+/**
+ * Reasons `embedSrc` / `padAndSquareImage` fell back to their input instead
+ * of producing an embedded/composited image — CL-11's "make the failure
+ * detectable by the caller".  Passed to an optional callback rather than
+ * folded into the return type, so existing callers (which treat the return
+ * value as the best-effort src) keep compiling and keep working, while a
+ * caller that wants to surface the failure (e.g. warn instead of reporting
+ * unconditional success) can opt in.
+ */
+export type LogoFallbackReason =
+  | "fetch-failed"
+  | "http-error"
+  | "too-small"
+  | "too-large"
+  | "fallback-tile"
+  | "canvas-tainted"
+  | "decode-failed";
+
+export type LogoFallbackHandler = (reason: LogoFallbackReason, detail?: string) => void;
+
 export async function composeFromFile(file: File): Promise<string> {
   if (!file.type.startsWith("image/") && file.type !== "image/svg+xml") {
     throw new Error("Choose an image file");
@@ -258,26 +445,68 @@ export async function composeFromFile(file: File): Promise<string> {
 export async function composeFromUrl(raw: string): Promise<string> {
   const trimmed = raw.trim();
   if (!/^https?:\/\//i.test(trimmed)) throw new Error("Paste an http(s) image URL");
-  const res = await fetch(trimmed, { mode: "cors" });
-  if (!res.ok) throw new Error("Could not fetch that image");
+  let res: Response;
+  try {
+    res = await fetch(trimmed, { mode: "cors" });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(`Could not reach that URL (network error or the host blocks cross-origin requests): ${detail}`);
+  }
+  if (!res.ok) throw new Error(`Could not fetch that image (HTTP ${res.status})`);
   const blob = await res.blob();
   if (!blob.type.startsWith("image/") && blob.type !== "image/svg+xml") {
     throw new Error("That URL is not an image");
   }
   if (blob.size > 3_000_000) throw new Error("Keep images under 3 MB");
+  const tile = await isFallbackTile(blob);
+  if (tile.isTile) {
+    throw new Error("That URL looks like a placeholder tile, not a real logo — try another source.");
+  }
   return readAsDataUrl(blob);
 }
 
-/** Embed a remote logo as a data URL so the downloaded vCard is self-contained. */
-export async function embedSrc(src: string): Promise<string> {
+/**
+ * Embed a remote logo as a data URL so the downloaded vCard is self-contained.
+ * On any failure to do that — network, HTTP, size, or a detected fallback
+ * tile — falls back to returning `src` unchanged (as before, so existing
+ * callers keep working) but, when given `onFallback`, reports *why*, so a
+ * caller can stop reporting the export as an unqualified success (CL-11).
+ */
+export async function embedSrc(src: string, onFallback?: LogoFallbackHandler): Promise<string> {
   if (src.startsWith("data:image/")) return src;
+  let res: Response;
   try {
-    const res = await fetch(src, { mode: "cors" });
-    if (!res.ok) return src;
-    const blob = await res.blob();
-    if (blob.size < 40 || blob.size > 1_500_000) return src;
-    return await readAsDataUrl(blob);
+    res = await fetch(src, { mode: "cors" });
+  } catch (err) {
+    onFallback?.("fetch-failed", err instanceof Error ? err.message : String(err));
+    return src;
+  }
+  if (!res.ok) {
+    onFallback?.("http-error", String(res.status));
+    return src;
+  }
+  const blob = await res.blob();
+  if (blob.size < 40) {
+    onFallback?.("too-small", `${blob.size} bytes`);
+    return src;
+  }
+  if (blob.size > 1_500_000) {
+    onFallback?.("too-large", `${blob.size} bytes`);
+    return src;
+  }
+  try {
+    const tile = await isFallbackTile(blob);
+    if (tile.isTile) {
+      onFallback?.("fallback-tile", tile.reason);
+      return src;
+    }
   } catch {
+    /* inconclusive — proceed to embed rather than block on a heuristic that errored */
+  }
+  try {
+    return await readAsDataUrl(blob);
+  } catch (err) {
+    onFallback?.("decode-failed", err instanceof Error ? err.message : String(err));
     return src;
   }
 }
@@ -291,6 +520,10 @@ export type PadAndSquareOptions = {
   panY?: number;
   backgroundColor?: string;
   circleClip?: boolean;
+  /** See `LogoFallbackHandler` on `embedSrc` — called instead of silently
+   *  returning `src` unchanged when the canvas can't be read back (tainted
+   *  by a non-CORS image) or the source image fails to decode (CL-11). */
+  onFallback?: LogoFallbackHandler;
 };
 
 export function isVectorSource(src: string): boolean {
@@ -391,11 +624,15 @@ export async function padAndSquareImage(
 
       try {
         resolve(canvas.toDataURL("image/png"));
-      } catch {
+      } catch (err) {
+        options.onFallback?.("canvas-tainted", err instanceof Error ? err.message : String(err));
         resolve(src);
       }
     };
-    img.onerror = () => resolve(src);
+    img.onerror = () => {
+      options.onFallback?.("decode-failed");
+      resolve(src);
+    };
     img.src = src;
   });
 }
