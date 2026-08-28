@@ -57,6 +57,18 @@ android {
     }
 }
 
+// A CI log that says only "see the HTML report" cannot be diagnosed from a CI
+// log.  Print the failing test, its assertion, and the stack.
+tasks.withType<Test>().configureEach {
+    testLogging {
+        events("failed", "skipped")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        showExceptions = true
+        showCauses = true
+        showStackTraces = true
+    }
+}
+
 dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")

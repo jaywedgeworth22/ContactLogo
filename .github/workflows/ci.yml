@@ -117,3 +117,11 @@ jobs:
 
       - name: Unit tests
         run: ./gradlew testDebugUnitTest --no-daemon
+
+      - name: Upload test report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-test-report
+          path: Apps/ContactLogoAndroid/app/build/reports/tests/testDebugUnitTest
+          retention-days: 7
