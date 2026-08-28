@@ -161,7 +161,9 @@ public final class ReviewSession: ObservableObject {
             let contacts = try await provider.fetchCandidates()
             names = Dictionary(uniqueKeysWithValues: contacts.map { ($0.id, $0.displayName) })
             let pipeline = configuredPipeline()
-            let skipPhotos = settings?.skipContactsWithExistingPhoto ?? true
+            // Default off: a business card with a photo stays in the queue as
+            // `replace-existing` (MATCHING-ENGINE section 1, CONTACTLOGO.md:53).
+            let skipPhotos = settings?.skipContactsWithExistingPhoto ?? false
             // R7.6: person and non-brand contacts are never looked up at all.
             let targets = contacts.filter {
                 pipeline.classify($0) == .businessCard && !(skipPhotos && $0.hasImage)
