@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
+  <!-- Concept 2 app icon: card on ink tile -->
+  <rect width="96" height="96" rx="21" fill="#1c1917"/>
+  <rect x="12" y="23" width="72" height="50" rx="8" fill="#f5f0e8"/>
+  <circle cx="32" cy="48" r="9.5" fill="none" stroke="#c4a574" stroke-width="3.5"/>
+  <circle cx="32" cy="48" r="4" fill="#1c1917"/>
+  <rect x="46" y="41" width="24" height="5.5" rx="2.75" fill="#1c1917"/>
+  <rect x="46" y="51" width="16" height="5" rx="2.5" fill="#b6ab9a"/>
+</svg>

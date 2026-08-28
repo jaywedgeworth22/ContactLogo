@@ -1,0 +1,75 @@
+# ContactLogo — logo concepts
+
+Four logo directions for ContactLogo, drawn as hand-authored SVGs.  All four
+build on the identity the product already ships: warm cream (`#f5f0e8`),
+near-black ink (`#1c1917`), gold (`#c4a574`), and the serif, letterpress
+feel of the web app (Iowan Old Style / Palatino).
+
+Open `preview.html` in a browser to see every concept at app-icon sizes
+(128/64/32/16), on light and dark, plus the wordmark treatment.
+
+## Palette
+
+| Token | Hex | Role |
+| --- | --- | --- |
+| Ink | `#1c1917` | Primary mark color, dark tiles |
+| Cream | `#f5f0e8` | Background, reversed marks |
+| Gold | `#c4a574` | The "logo" accent — always marks the brand moment |
+| Grey | `#ddd6c9` / `#a89d8d` | The "before" state: unbranded contacts |
+
+The system rule across all four: **grey is the generic contact, gold is the
+matched logo.** That is the product story in two colors.
+
+## Concepts
+
+### 01 — The Swap (`01-swap.svg`)
+
+A contact tile split on the diagonal: the top half is the grey monogram
+silhouette every address book shows today; the bottom half is ink with a
+gold spark — the moment ContactLogo replaces it with a real brand mark.
+Most literal telling of the before/after.  Works directly as an app icon.
+
+### 02 — Card & Badge (`02-card.svg`, `02-card-icon.svg`)
+
+A business card whose avatar spot holds a gold-ring badge.  "A clean,
+recognizable logo on every business card" as a picture.  The ringed circle
+is a direct evolution of the current favicon, so it keeps continuity with
+what is already deployed.  Strong at tiny sizes.
+
+### 03 — C Aperture (`03-seal.svg`, `03-seal-icon.svg`)
+
+A heavy letter C — ContactLogo's monogram — whose open mouth receives a
+gold dot: the C accepting a logo.  The most abstract and most scalable of
+the four; still legible at 16 px, works one-color, and doubles as a
+favicon, watermark, or stamp.  Pairs naturally with the wordmark below.
+
+### 04 — The Grid Lights Up (`04-grid.svg`, `04-grid-icon.svg`)
+
+A 2×2 address-book grid: three grey contacts, one lit up in ink and gold.
+Tells the scanning/matching story — out of a book full of grey monograms,
+ContactLogo finds the brands.  Best at medium and large sizes (marketing,
+splash screens); the person glyphs soften below 32 px.
+
+## Wordmark
+
+`ContactLog` set in the product serif (Iowan Old Style / Palatino /
+Georgia), with the final **o** replaced by the gold-ring badge — the same
+badge as the favicon and Concept 2.  Shown in `preview.html`.  If adopted,
+the letterforms should be converted to outlines so the wordmark does not
+depend on installed fonts.
+
+## Recommendation
+
+**03 (C Aperture) as the primary mark** — most distinctive, scales from
+16 px favicon to splash screen, and works in one color — with the
+**Concept 2 badge + wordmark** as the lockup, since the ring badge is
+already the favicon.  01 and 04 work well as marketing/illustration
+motifs (empty states, onboarding, the review screen) even if not chosen
+as the logo.
+
+## Next steps once a direction is picked
+
+- Reversed (cream-on-ink) and one-color variants of the chosen mark.
+- Replace `web/public/favicon.svg` and the PWA manifest icons.
+- macOS/iOS `AppIcon` asset catalogs rendered from the SVG.
+- Wordmark converted to outlined paths.
