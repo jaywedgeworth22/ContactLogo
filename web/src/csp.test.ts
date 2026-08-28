@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { candidateUrls } from "./engine/logos.ts";
@@ -89,4 +89,43 @@ test("the directives that keep the CSP worth having are still strict", () => {
   assert.ok(!script.includes("'unsafe-inline'") && !script.includes("'unsafe-eval'"),
     "script-src must not allow inline or eval — it is what makes the rest meaningful");
   assert.ok(!script.includes("https:"), "script-src must stay an allowlist");
+});
+
+/**
+ * The CSP covers every file Vercel serves, not just the app bundle — and the
+ * static pages in `web/public` are hand-written HTML that nothing typechecks or
+ * bundles. `style-src 'self'` silently reduced `privacy.html` and
+ * `privacy-policy.html` to unstyled Times New Roman in production: the app was
+ * clean, so no other check noticed.
+ *
+ * This asserts the policy still permits whatever those pages actually do, and
+ * fails if a future page introduces something the policy forbids.
+ */
+function publicHtml(): { name: string; body: string }[] {
+  const dir = join(here, "..", "public");
+  return readdirSync(dir)
+    .filter((f) => f.endsWith(".html"))
+    .map((name) => ({ name, body: readFileSync(join(dir, name), "utf8") }));
+}
+
+test("the CSP permits what the static pages in web/public actually do", () => {
+  const csp = directives();
+  const style = csp.get("style-src") ?? [];
+  const script = csp.get("script-src") ?? [];
+
+  for (const { name, body } of publicHtml()) {
+    if (/<style[\s>]/i.test(body) || /\sstyle="/i.test(body)) {
+      assert.ok(
+        style.includes("'unsafe-inline'"),
+        `${name} uses inline CSS, which style-src would block — the page would render unstyled in production`,
+      );
+    }
+    // Inline script is a different matter: script-src stays an allowlist, so a
+    // page that needs one has to be fixed rather than the policy loosened.
+    assert.ok(
+      !/<script(?![^>]*\ssrc=)[^>]*>[\s\S]*?\S[\s\S]*?<\/script>/i.test(body),
+      `${name} has an inline <script>; script-src deliberately forbids that — give the page an external script instead of weakening the policy`,
+    );
+    assert.ok(!script.includes("'unsafe-inline'"), "script-src must never allow inline");
+  }
 });
