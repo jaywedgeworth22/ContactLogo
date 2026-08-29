@@ -1,6 +1,7 @@
 import {
   classifyContact,
   type BookContact,
+  type Confidence,
 } from "./engine/classify.ts";
 import { looksLikeContactCsv, parseGoogleCsv } from "./engine/csv.ts";
 import {
@@ -13,18 +14,18 @@ import {
   composeFromUrl,
   embedSrc,
   isVectorSource,
-  nextCandidateIndex,
   padAndSquareImage,
   sourceLabel,
   viaLabel,
+  type LogoHit,
 } from "./engine/logos.ts";
-import { bucket, matchBook, type ReviewItem } from "./engine/match.ts";
+import { assetTier, bucket, matchBook, type ReviewItem } from "./engine/match.ts";
 import { canPickDeviceContacts, pickDeviceContacts } from "./engine/picker.ts";
 import { getGoogleClientId, setGoogleClientId } from "./engine/settings.ts";
 import { backupFilename, contactsToVcard, downloadText, parseVcard } from "./engine/vcard.ts";
 import { reportClientError } from "./observability/datadog.ts";
 
-type FilterStatus = "all" | "ready" | "review" | "notfound" | "missingphoto";
+export type FilterStatus = "all" | "ready" | "review" | "notfound" | "missingphoto";
 
 type State = {
   contacts: BookContact[];
@@ -48,6 +49,10 @@ const state: State = {
   showCircleMask: true,
 };
 
+/** Derived once per import instead of per keystroke — the book can hold 14k cards. */
+let peopleCount = 0;
+let hasGoogleContacts = false;
+
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   attrs: Record<string, string> = {},
@@ -62,17 +67,235 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
-function adopt(contacts: BookContact[], label: string) {
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+function noLogoIcon(): SVGElement {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("class", "noimg-icon");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", "28");
+  svg.setAttribute("height", "28");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "1.6");
+  svg.setAttribute("stroke-linecap", "round");
+  const circle = document.createElementNS(SVG_NS, "circle");
+  circle.setAttribute("cx", "12");
+  circle.setAttribute("cy", "12");
+  circle.setAttribute("r", "9");
+  const slash = document.createElementNS(SVG_NS, "line");
+  slash.setAttribute("x1", "5.6");
+  slash.setAttribute("y1", "5.6");
+  slash.setAttribute("x2", "18.4");
+  slash.setAttribute("y2", "18.4");
+  svg.append(circle, slash);
+  return svg;
+}
+
+/* ------------------------------------------------------------------ *
+ * Presentation rules (pure — unit tested)
+ * ------------------------------------------------------------------ */
+
+/** Engine flags never reach the DOM verbatim; anything missing here is dropped. */
+const FLAG_PHRASES: Record<string, string> = {
+  "homonym-risk": "name is also a common word",
+  "brand-tail": "matched a partial name",
+  "replace-existing": "replaces an existing photo",
+};
+
+const KNOWN_VIA: ReadonlySet<string> = new Set(["website", "email", "catalog", "phone", "guess"]);
+
+export const GUESSED_DOMAIN_NOTE = "Domain guessed — check before applying";
+
+export function humanFlagPhrases(flags: readonly string[]): string[] {
+  const out: string[] = [];
+  for (const flag of flags) {
+    const phrase = FLAG_PHRASES[flag];
+    if (phrase && !out.includes(phrase)) out.push(phrase);
+  }
+  return out;
+}
+
+export function badgeText(confidence: Confidence): string | undefined {
+  switch (confidence) {
+    case "high":
+      return "High confidence";
+    case "medium":
+      return "Needs a look";
+    case "low":
+      return "Low confidence";
+    case "skip":
+      return undefined;
+    default: {
+      const _never: never = confidence;
+      void _never;
+      return undefined;
+    }
+  }
+}
+
+/** Source · via · human flag phrases.  Confidence lives in the badge, not here. */
+export function metaLine(item: ReviewItem): string {
+  const hit = item.candidates[item.chosenIndex];
+  const parts: string[] = [];
+  if (hit) parts.push(sourceLabel(hit.source));
+  if (item.via && KNOWN_VIA.has(item.via)) {
+    const via = viaLabel(item.via);
+    if (via) parts.push(via);
+  }
+  parts.push(...humanFlagPhrases(item.flags));
+  return parts.join(" · ");
+}
+
+/** "This contact is not a business" — a different fact from "no logo was found". */
+export function isNonBrandItem(item: ReviewItem): boolean {
+  if (item.flags.includes("non-brand")) return true;
+  if (item.flags.includes("person") || item.flags.includes("photo-protected")) return true;
+  return item.contactClass !== "businessCard";
+}
+
+/** A business card that has run out of viable candidates: terminal, never "ready". */
+export function isExhaustedItem(item: ReviewItem): boolean {
+  return item.candidates.length === 0 && !isNonBrandItem(item);
+}
+
+export type SectionKey = "ready" | "review" | "nonbrand" | "notfound";
+
+export function partitionSections(items: ReviewItem[]): Record<SectionKey, ReviewItem[]> {
+  const groups = bucket(items);
+  return {
+    ready: groups.auto,
+    review: groups.review,
+    nonbrand: groups.notFound.filter(isNonBrandItem),
+    notfound: groups.notFound.filter((i) => !isNonBrandItem(i)),
+  };
+}
+
+export function itemMatchesQuery(item: ReviewItem, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  const fields = [
+    item.contact.displayName,
+    item.contact.organization ?? "",
+    item.domain ?? "",
+    item.query,
+    item.contact.phone ?? "",
+  ];
+  return fields.some((f) => f.toLowerCase().includes(q));
+}
+
+export function itemMatchesFilter(item: ReviewItem, filter: FilterStatus): boolean {
+  switch (filter) {
+    case "all":
+      return true;
+    case "ready":
+      return item.confidence === "high";
+    case "review":
+      return item.confidence === "medium" || item.confidence === "low";
+    case "notfound":
+      return item.confidence === "skip" && !isNonBrandItem(item);
+    case "missingphoto":
+      return !item.contact.hadExistingPhoto;
+    default: {
+      const _never: never = filter;
+      void _never;
+      return true;
+    }
+  }
+}
+
+export function filterItems(items: ReviewItem[], query: string, filter: FilterStatus): ReviewItem[] {
+  return items.filter((i) => itemMatchesFilter(i, filter) && itemMatchesQuery(i, query));
+}
+
+/**
+ * Drop a candidate whose image 404'd or came back as a 16px favicon.  Removing
+ * (rather than advancing an index) is what makes exhaustion terminal: the list
+ * shrinks on every failure, so it always reaches empty instead of livelocking.
+ */
+export function removeCandidate(item: ReviewItem, src: string): boolean {
+  const index = item.candidates.findIndex((c) => c.src === src);
+  if (index === -1) return false;
+  const shown = item.candidates[item.chosenIndex]?.src;
+  item.candidates.splice(index, 1);
+  if (item.chosenIndex > index) item.chosenIndex -= 1;
+  if (item.chosenIndex >= item.candidates.length) {
+    item.chosenIndex = Math.max(0, item.candidates.length - 1);
+  }
+  if (item.candidates.length === 0) {
+    item.selected = false;
+    item.confidence = "skip";
+    return true;
+  }
+
+  // R11.2 — the tier belongs to the candidate the card is showing, not to the
+  // card.  When that candidate is removed and a weaker one takes over — a
+  // Simple Icons image that 404s and Clearbit stepping in behind it is the
+  // ordinary case — the `high` it earned does not transfer, or the replacement
+  // is exported under an automatic approval the user never gave *it*.
+  //
+  // Narrow on purpose.  Only when the shown candidate actually changed, and
+  // only away from `high`, which is the one tier the app assigns by itself and
+  // therefore the only one safe to take away: a medium card the user checked by
+  // hand keeps its check, and so does a pasted or uploaded image.
+  const next = item.candidates[item.chosenIndex];
+  if (next && shown !== next.src && item.confidence === "high" && item.via) {
+    const tier = assetTier(next, item.via);
+    if (tier !== "high") {
+      item.confidence = tier;
+      item.selected = false;
+    }
+  }
+  return true;
+}
+
+export type Slice = { start: number; end: number; offsetY: number; totalHeight: number };
+
+/** Which cards a virtualized section has to mount for the current scroll offset. */
+export function visibleSlice(
+  count: number,
+  columns: number,
+  rowHeight: number,
+  scrollTop: number,
+  viewportHeight: number,
+  overscan = 2,
+): Slice {
+  const cols = Math.max(1, Math.floor(columns));
+  const rh = Math.max(1, rowHeight);
+  const rows = Math.ceil(Math.max(0, count) / cols);
+  if (rows === 0) return { start: 0, end: 0, offsetY: 0, totalHeight: 0 };
+  const top = Math.max(0, scrollTop);
+  const height = Math.max(0, viewportHeight);
+  const firstRow = Math.max(0, Math.floor(top / rh) - overscan);
+  const lastRow = Math.min(rows - 1, Math.ceil((top + height) / rh) + overscan);
+  return {
+    start: Math.min(count, firstRow * cols),
+    end: Math.min(count, (lastRow + 1) * cols),
+    offsetY: firstRow * rh,
+    totalHeight: rows * rh,
+  };
+}
+
+/* ------------------------------------------------------------------ *
+ * Import / export
+ * ------------------------------------------------------------------ */
+
+/** Entry point for every import path (and the DOM test harness). */
+export function adoptContacts(contacts: BookContact[], label: string) {
   if (contacts.length === 0) {
     state.notice = "No contacts found.";
     render();
     return;
   }
+  cardViews.clear();
+  mountedBySection.clear();
   state.contacts = contacts;
   state.items = matchBook(contacts);
   state.stage = "review";
   state.searchQuery = "";
   state.filterStatus = "all";
+  peopleCount = contacts.filter((c) => classifyContact(c) === "person").length;
+  hasGoogleContacts = contacts.some((c) => Boolean(c.googleResourceName));
   state.notice = `${label}: ${contacts.length} contact${contacts.length === 1 ? "" : "s"}.  Review every logo before download.`;
   render();
 }
@@ -82,7 +305,7 @@ function importText(name: string, text: string) {
     ? parseGoogleCsv(text)
     : parseVcard(text);
   for (const c of contacts) c.importSource = "file";
-  adopt(contacts, `Imported ${name}`);
+  adoptContacts(contacts, `Imported ${name}`);
 }
 
 async function importFile(file: File) {
@@ -106,7 +329,7 @@ async function importFromGoogle() {
       state.notice = `Reading Google Contacts · ${n}`;
       render();
     });
-    adopt(contacts, "Google Contacts");
+    adoptContacts(contacts, "Google Contacts");
   } catch (err) {
     reportClientError(err, { operation: "import-google" });
     const message = err instanceof Error ? err.message : "Google import failed";
@@ -124,12 +347,16 @@ async function importFromDevice() {
     state.notice = "Opening the device address book…";
     render();
     const contacts = await pickDeviceContacts();
-    adopt(contacts, "This phone");
+    adoptContacts(contacts, "This phone");
   } catch (err) {
     reportClientError(err, { operation: "import-device" });
     state.notice = err instanceof Error ? err.message : "Could not read contacts";
     render();
   }
+}
+
+function selectedCount(): number {
+  return state.items.filter((i) => i.selected && i.candidates[i.chosenIndex]).length;
 }
 
 function applySelected(onlySelected: boolean = true): BookContact[] {
@@ -155,24 +382,79 @@ function downloadBackup() {
   downloadText(backupFilename(), contactsToVcard(state.contacts), "text/vcard;charset=utf-8");
 }
 
+/**
+ * CL-11 — embed the logos for an export and report the ones that could not be
+ * embedded.  `embedSrc` falls back to returning the remote URL, and
+ * `contactToVcard` serializes only `data:image/...` photos, so a failure here
+ * silently drops the logo from the file.  The callback existed for this and was
+ * wired into the tests but not into either download path, so the export still
+ * announced an unqualified success.
+ *
+ * The contact is still exported — its other fields are fine and a missing logo
+ * is not a reason to withhold them — but its name comes back so the notice can
+ * say what did not make it.
+ */
+async function embedLogosForExport(
+  contacts: BookContact[],
+  shouldEmbed: (contact: BookContact) => boolean,
+): Promise<string[]> {
+  const skipped: string[] = [];
+  for (const contact of contacts) {
+    if (!contact.photoDataUrl || !shouldEmbed(contact)) continue;
+    let failure: string | undefined;
+    const embedded = await embedSrc(contact.photoDataUrl, (reason, detail) => {
+      failure = detail ? `${reason}: ${detail}` : reason;
+    });
+    if (failure !== undefined) {
+      skipped.push(contact.displayName);
+      reportClientError(new Error(`logo embed failed (${failure})`), {
+        operation: "export-embed-logo",
+      });
+      continue;
+    }
+    // Padding fails the same silent way embedding did: `padAndSquareImage`
+    // resolves to the *unpadded* source on `decode-failed` or `canvas-tainted`.
+    // Bytes that a 200 delivered but no decoder accepts get that far, so without
+    // the collector the export writes an unpadded — possibly corrupt — PHOTO and
+    // the notice still reports an unqualified success.
+    const padded = await padAndSquareImage(embedded, {
+      onFallback: (reason, detail) => {
+        failure = detail ? `${reason}: ${detail}` : reason;
+      },
+    });
+    if (failure !== undefined) {
+      skipped.push(contact.displayName);
+      reportClientError(new Error(`logo padding failed (${failure})`), {
+        operation: "export-pad-logo",
+      });
+      continue; // leave the candidate URL in place; the writer refuses to emit it
+    }
+    contact.photoDataUrl = padded;
+  }
+  return skipped;
+}
+
+/** The tail of an export notice naming the logos that did not make it. */
+export function skippedNotice(skipped: string[]): string {
+  if (skipped.length === 0) return "";
+  const shown = skipped.slice(0, 3).join(", ");
+  const rest = skipped.length > 3 ? ` and ${skipped.length - 3} more` : "";
+  return ` ${skipped.length} logo${skipped.length === 1 ? "" : "s"} could not be embedded and ${skipped.length === 1 ? "is" : "are"} missing from the file: ${shown}${rest}.`;
+}
+
 async function downloadApproved() {
-  const selectedCount = state.items.filter((i) => i.selected && i.candidates[i.chosenIndex]).length;
-  if (selectedCount === 0) {
+  const count = selectedCount();
+  if (count === 0) {
     state.notice = "No approved logos selected to export. Check the contacts you want to update first.";
     render();
     return;
   }
-  state.notice = `Embedding and formatting ${selectedCount} approved logo${selectedCount === 1 ? "" : "s"}…`;
+  state.notice = `Embedding and formatting ${count} approved logo${count === 1 ? "" : "s"}…`;
   render();
   const updated = applySelected(true);
-  for (const contact of updated) {
-    if (contact.photoDataUrl) {
-      const embedded = await embedSrc(contact.photoDataUrl);
-      contact.photoDataUrl = await padAndSquareImage(embedded);
-    }
-  }
+  const skipped = await embedLogosForExport(updated, () => true);
   downloadText("contactlogo-approved-updates.vcf", contactsToVcard(updated), "text/vcard;charset=utf-8");
-  state.notice = `Downloaded ${updated.length} updated contact${updated.length === 1 ? "" : "s"}. Import this file into Contacts to safely update only these cards.`;
+  state.notice = `Downloaded ${updated.length} updated contact${updated.length === 1 ? "" : "s"}. Import this file into Contacts to safely update only these cards.${skippedNotice(skipped)}`;
   render();
 }
 
@@ -180,14 +462,10 @@ async function downloadFull() {
   state.notice = "Embedding approved logos into full address book…";
   render();
   const updated = applySelected(false);
-  for (const contact of updated) {
-    if (contact.photoDataUrl && state.items.some((i) => i.selected && i.contact.id === contact.id)) {
-      const embedded = await embedSrc(contact.photoDataUrl);
-      contact.photoDataUrl = await padAndSquareImage(embedded);
-    }
-  }
+  const skipped = await embedLogosForExport(updated, (contact) =>
+    state.items.some((i) => i.selected && i.contact.id === contact.id));
   downloadText("contactlogo-full-addressbook.vcf", contactsToVcard(updated), "text/vcard;charset=utf-8");
-  state.notice = `Downloaded full address book (${updated.length} contacts).`;
+  state.notice = `Downloaded full address book (${updated.length} contacts).${skippedNotice(skipped)}`;
   render();
 }
 
@@ -218,8 +496,28 @@ async function syncToGoogleContacts() {
       state.notice = `Syncing photo to Google: ${done + 1}/${googleTargets.length} (${item.contact.displayName})…`;
       render();
       try {
-        const embedded = await embedSrc(hit.src);
-        const squared = await padAndSquareImage(embedded);
+        // CL-11 / R11.5 — without the callback a detected fallback tile comes
+        // back as the original URL, gets squared into real bytes, and is written
+        // to the contact as its photo. A placeholder tile is a wrong logo, and
+        // this path writes to someone's address book, so it counts as a failure
+        // rather than a silent success.
+        let failure: string | undefined;
+        const embedded = await embedSrc(hit.src, (reason, detail) => {
+          failure = detail ? `${reason}: ${detail}` : reason;
+        });
+        if (failure !== undefined) {
+          throw new Error(`logo could not be embedded (${failure})`);
+        }
+        // Same for padding: a fallback here would push unpadded, undecodable
+        // bytes into someone's real address book and count it as a success.
+        const squared = await padAndSquareImage(embedded, {
+          onFallback: (reason, detail) => {
+            failure = detail ? `${reason}: ${detail}` : reason;
+          },
+        });
+        if (failure !== undefined) {
+          throw new Error(`logo could not be prepared (${failure})`);
+        }
         await updateGoogleContactPhoto(item.contact.googleResourceName, squared, token);
         item.contact.hadExistingPhoto = true;
         done += 1;
@@ -271,6 +569,27 @@ async function pasteUrlFor(item: ReviewItem) {
   }
 }
 
+function tryAnother(item: ReviewItem) {
+  if (item.candidates.length < 2) return;
+  item.chosenIndex = (item.chosenIndex + 1) % item.candidates.length;
+  item.selected = true;
+  render();
+}
+
+/** A candidate image failed to load, or loaded too small to be a real mark. */
+function candidateFailed(item: ReviewItem, src: string) {
+  if (removeCandidate(item, src)) render();
+}
+
+function isTooSmall(img: HTMLImageElement, src: string): boolean {
+  if (isVectorSource(src)) return false;
+  return img.naturalWidth > 0 && (img.naturalWidth < 48 || img.naturalHeight < 48);
+}
+
+/* ------------------------------------------------------------------ *
+ * Crop modal
+ * ------------------------------------------------------------------ */
+
 type CropModalState = {
   item: ReviewItem | null;
   imgSrc: string;
@@ -291,9 +610,12 @@ const cropState: CropModalState = {
   bgColor: "transparent",
 };
 
+let cropOpener: HTMLElement | null = null;
+
 function openCropFor(item: ReviewItem) {
   const hit = item.candidates[item.chosenIndex];
   if (!hit) return;
+  cropOpener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   cropState.item = item;
   cropState.imgSrc = hit.src;
   cropState.zoom = 1.0;
@@ -313,13 +635,24 @@ async function applyCrop() {
   if (!cropState.item || !cropState.imgSrc) return;
   const item = cropState.item;
   try {
+    // `crop` is a high-tier source, so the result of this call goes in at index
+    // 0, pre-checked, labelled as a crop the user made.  Without the collector a
+    // failed render resolves to the *uncropped* original and gets all of that
+    // anyway — the one outcome a review-first app must not produce.
+    let failure: string | undefined;
     const croppedSrc = await padAndSquareImage(cropState.imgSrc, {
       zoom: cropState.zoom,
       panX: cropState.panX,
       panY: cropState.panY,
       addBadgeForDarkAlpha: cropState.addBadge,
       backgroundColor: cropState.bgColor,
+      onFallback: (reason, detail) => {
+        failure = detail ? `${reason}: ${detail}` : reason;
+      },
     });
+    if (failure !== undefined) {
+      throw new Error(`crop could not be rendered (${failure})`);
+    }
     item.candidates = [{ src: croppedSrc, source: "crop", kind: "icon" }, ...item.candidates];
     item.chosenIndex = 0;
     item.selected = true;
@@ -330,25 +663,42 @@ async function applyCrop() {
   } catch (err) {
     reportClientError(err, { operation: "apply-crop" });
     cropState.item = null;
+    state.notice = `Could not render the crop for ${item.contact.displayName}. The contact is unchanged.`;
     render();
   }
 }
 
-function cropModal(): HTMLElement {
-  const item = cropState.item;
-  if (!item) return el("div", { class: "hidden" });
+function focusableWithin(root: HTMLElement): HTMLElement[] {
+  const selector = 'button, input, select, textarea, a[href], [tabindex]:not([tabindex="-1"])';
+  return [...root.querySelectorAll<HTMLElement>(selector)].filter(
+    (node) => !node.hasAttribute("disabled") && node.tabIndex !== -1,
+  );
+}
 
+type ModalView = { node: HTMLElement; destroy: () => void };
+
+/**
+ * Built once per open and torn down on close — every listener it registers on
+ * `window`/`document` is removed by `destroy()`, and no re-render can replace
+ * the canvas (or the drag state) while the modal is on screen.
+ */
+function buildCropModal(item: ReviewItem): ModalView {
   const backdrop = el("div", { class: "modal-backdrop" });
   backdrop.addEventListener("click", (e) => {
     if (e.target === backdrop) closeCrop();
   });
 
-  const modal = el("div", { class: "crop-modal" });
+  const modal = el("div", {
+    class: "crop-modal",
+    role: "dialog",
+    "aria-modal": "true",
+    "aria-labelledby": "crop-modal-title",
+  });
 
   const header = el(
     "div",
     { class: "crop-header" },
-    el("h3", {}, `Crop & Adjust — ${item.contact.displayName}`),
+    el("h3", { id: "crop-modal-title" }, `Crop & Adjust — ${item.contact.displayName}`),
     el("p", { class: "meta" }, "Drag the image to center it and adjust the zoom slider for circular contact framing."),
   );
 
@@ -425,18 +775,19 @@ function cropModal(): HTMLElement {
     initialPanY = cropState.panY;
   });
 
-  window.addEventListener("mousemove", (e) => {
+  const onMouseMove = (e: MouseEvent) => {
     if (!isDragging) return;
     const dx = e.clientX - startX;
     const dy = e.clientY - startY;
     cropState.panX = initialPanX + dx * (512 / 280);
     cropState.panY = initialPanY + dy * (512 / 280);
     drawPreview();
-  });
-
-  window.addEventListener("mouseup", () => {
+  };
+  const onMouseUp = () => {
     isDragging = false;
-  });
+  };
+  window.addEventListener("mousemove", onMouseMove);
+  window.addEventListener("mouseup", onMouseUp);
 
   canvas.addEventListener("wheel", (e) => {
     e.preventDefault();
@@ -477,6 +828,7 @@ function cropModal(): HTMLElement {
     step: "0.05",
     value: String(cropState.zoom),
     class: "zoom-slider",
+    "aria-label": "Zoom",
   }) as HTMLInputElement;
   zoomInput.addEventListener("input", () => {
     cropState.zoom = parseFloat(zoomInput.value);
@@ -511,83 +863,132 @@ function cropModal(): HTMLElement {
   cancelBtn.addEventListener("click", () => closeCrop());
   const actions = el("div", { class: "crop-actions" }, cancelBtn, applyBtn);
 
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeCrop();
+      return;
+    }
+    if (e.key !== "Tab") return;
+    const focusable = focusableWithin(modal);
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = document.activeElement;
+    if (!modal.contains(active)) {
+      e.preventDefault();
+      (e.shiftKey ? last : first).focus();
+      return;
+    }
+    if (e.shiftKey && active === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && active === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
+  document.addEventListener("keydown", onKeyDown, true);
+
   modal.append(header, canvas, controls, actions);
   backdrop.append(modal);
-  return backdrop;
+
+  return {
+    node: backdrop,
+    destroy() {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+      document.removeEventListener("keydown", onKeyDown, true);
+      img.onload = null;
+      backdrop.remove();
+    },
+  };
 }
 
-function tryAnother(item: ReviewItem) {
-  if (item.candidates.length < 2) return;
-  item.chosenIndex = (item.chosenIndex + 1) % item.candidates.length;
-  item.selected = true;
-  render();
-}
+let modalView: ModalView | null = null;
 
-function card(item: ReviewItem): HTMLElement {
-  const hit = item.candidates[item.chosenIndex];
-  const thumbClass = `thumb${state.showCircleMask ? " circle-mask" : ""}${hit ? " clickable" : ""}`;
-  const thumb = hit
-    ? el("img", { class: thumbClass, src: hit.src, alt: item.contact.displayName })
-    : el("div", { class: "noimg" }, "?");
-
-  if (hit) {
-    thumb.setAttribute("title", "Click to crop and adjust logo");
-    thumb.addEventListener("click", () => openCropFor(item));
-    (thumb as HTMLImageElement).addEventListener("error", () => {
-      const next = nextCandidateIndex(item.chosenIndex, item.candidates.length);
-      if (next !== undefined) {
-        item.chosenIndex = next;
-        render();
-      }
-    });
-    (thumb as HTMLImageElement).addEventListener("load", () => {
-      const isVector = isVectorSource(hit.src);
-      const imgEl = thumb as HTMLImageElement;
-      if (!isVector && imgEl.naturalWidth > 0 && (imgEl.naturalWidth < 48 || imgEl.naturalHeight < 48)) {
-        const next = nextCandidateIndex(item.chosenIndex, item.candidates.length);
-        if (next !== undefined) {
-          item.chosenIndex = next;
-          render();
-        }
-      }
-    });
+function syncCropModal(root: HTMLElement) {
+  if (cropState.item && !modalView) {
+    modalView = buildCropModal(cropState.item);
+    root.append(modalView.node);
+    const focusable = focusableWithin(modalView.node);
+    focusable[0]?.focus();
+    return;
   }
+  if (!cropState.item && modalView) {
+    modalView.destroy();
+    modalView = null;
+    cropOpener?.focus();
+    cropOpener = null;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Cards — built once per review item, updated in place afterwards
+ * ------------------------------------------------------------------ */
+
+type CardView = { node: HTMLElement; update: () => void };
+
+const cardViews = new Map<ReviewItem, CardView>();
+
+function buildCard(item: ReviewItem): CardView {
+  const name = item.contact.displayName;
 
   const check = el("input", { type: "checkbox" }) as HTMLInputElement;
-  check.checked = item.selected;
-  check.disabled = item.candidates.length === 0;
   check.addEventListener("change", () => {
     item.selected = check.checked;
+    render();
   });
 
+  // Decorative: the card name is adjacent text and "Crop" is the keyboard path,
+  // so the thumbnail carries no name of its own.
+  const thumb = el("img", { class: "thumb", alt: "", "aria-hidden": "true", title: "Click to crop and adjust logo" }) as HTMLImageElement;
+  thumb.addEventListener("click", () => openCropFor(item));
+  thumb.addEventListener("error", () => {
+    const src = thumb.getAttribute("src");
+    if (src) candidateFailed(item, src);
+  });
+  thumb.addEventListener("load", () => {
+    const src = thumb.getAttribute("src");
+    if (src && isTooSmall(thumb, src)) candidateFailed(item, src);
+  });
+
+  const noimg = el("div", { class: "noimg", "aria-hidden": "true" });
+  let noimgMode: "unknown" | "empty" | "exhausted" = "unknown";
+
+  const badge = el("span", { class: "confidence-badge" });
+  const badgeNote = el("span", { class: "confidence-badge-note" }, GUESSED_DOMAIN_NOTE);
+  const nameEl = el("div", { class: "name" }, name);
+  const exhaustedLabel = el("p", { class: "exhausted-label" }, "No logo found");
+  const meta = el("div", { class: "meta" });
   const alts = el("div", { class: "alts" });
-  item.candidates.forEach((cand, i) => {
-    const b = el("button", { class: i === item.chosenIndex ? "on" : "", type: "button", title: sourceLabel(cand.source) });
-    const cImg = el("img", { src: cand.src, alt: cand.source }) as HTMLImageElement;
-    cImg.addEventListener("error", () => {
-      b.style.display = "none";
+  const altButtons = new Map<string, HTMLButtonElement>();
+
+  function altButtonFor(cand: LogoHit): HTMLButtonElement {
+    const cached = altButtons.get(cand.src);
+    if (cached) return cached;
+    const button = el("button", {
+      class: "alts-btn",
+      type: "button",
+      "aria-label": `Use ${sourceLabel(cand.source)} logo`,
+      "aria-pressed": "false",
     });
-    cImg.addEventListener("load", () => {
-      const isVector = isVectorSource(cand.src);
-      if (!isVector && cImg.naturalWidth > 0 && (cImg.naturalWidth < 48 || cImg.naturalHeight < 48)) {
-        b.style.display = "none";
-        if (item.chosenIndex === i) {
-          const next = nextCandidateIndex(i, item.candidates.length);
-          if (next !== undefined) {
-            item.chosenIndex = next;
-            render();
-          }
-        }
-      }
+    const image = el("img", { src: cand.src, alt: "" }) as HTMLImageElement;
+    image.addEventListener("error", () => candidateFailed(item, cand.src));
+    image.addEventListener("load", () => {
+      if (isTooSmall(image, cand.src)) candidateFailed(item, cand.src);
     });
-    b.append(cImg);
-    b.addEventListener("click", () => {
-      item.chosenIndex = i;
+    button.append(image);
+    button.addEventListener("click", () => {
+      const index = item.candidates.findIndex((c) => c.src === cand.src);
+      if (index === -1) return;
+      item.chosenIndex = index;
       item.selected = true;
       render();
     });
-    alts.append(b);
-  });
+    altButtons.set(cand.src, button);
+    return button;
+  }
 
   const upload = el("input", { type: "file", accept: "image/*", class: "hidden" }) as HTMLInputElement;
   upload.addEventListener("change", () => {
@@ -599,83 +1000,323 @@ function card(item: ReviewItem): HTMLElement {
   uploadBtn.addEventListener("click", () => upload.click());
 
   const cropBtn = el("button", { class: "btn secondary", type: "button" }, "Crop");
-  cropBtn.disabled = !hit;
   cropBtn.addEventListener("click", () => openCropFor(item));
 
   const pasteBtn = el("button", { class: "btn secondary", type: "button" }, "Paste URL");
   pasteBtn.addEventListener("click", () => void pasteUrlFor(item));
+
   const retry = el("button", { class: "btn secondary", type: "button" }, "Try another");
-  retry.disabled = item.candidates.length < 2;
   retry.addEventListener("click", () => tryAnother(item));
+
   const skip = el("button", { class: "btn ghost", type: "button" }, "Skip");
   skip.addEventListener("click", () => {
     item.selected = false;
     render();
   });
 
-  const via = viaLabel(item.via);
-  const source = hit ? sourceLabel(hit.source) : "none";
-
-  const cardEl = el(
-    "article",
-    { class: `card ${item.confidence}` },
-    check,
-    thumb,
-    el(
-      "div",
-      { class: "card-content" },
-      el("div", { class: "name" }, item.contact.displayName),
-      el(
-        "div",
-        { class: "meta" },
-        `${item.confidence} · ${source}${via ? ` · ${via}` : ""}${item.flags.length ? ` · ${item.flags.join(", ")}` : ""}`,
-      ),
-      alts,
-      el("div", { class: "actions" }, retry, cropBtn, uploadBtn, pasteBtn, skip, upload),
-    ),
+  const content = el(
+    "div",
+    { class: "card-content" },
+    badge,
+    badgeNote,
+    nameEl,
+    exhaustedLabel,
+    meta,
+    alts,
+    el("div", { class: "actions" }, retry, cropBtn, uploadBtn, pasteBtn, skip, upload),
   );
 
+  const node = el("article", { class: "card" }, check, thumb, noimg, content);
+
   // Drag-and-drop directly onto this contact card
-  cardEl.addEventListener("dragenter", (e) => {
+  node.addEventListener("dragenter", (e) => {
     e.preventDefault();
-    cardEl.classList.add("drag-over");
+    node.classList.add("drag-over");
   });
-  cardEl.addEventListener("dragover", (e) => {
+  node.addEventListener("dragover", (e) => {
     e.preventDefault();
-    cardEl.classList.add("drag-over");
+    node.classList.add("drag-over");
   });
-  cardEl.addEventListener("dragleave", (e) => {
-    if (!cardEl.contains(e.relatedTarget as Node)) {
-      cardEl.classList.remove("drag-over");
+  node.addEventListener("dragleave", (e) => {
+    if (!node.contains(e.relatedTarget as Node)) {
+      node.classList.remove("drag-over");
     }
   });
-  cardEl.addEventListener("drop", (e) => {
+  node.addEventListener("drop", (e) => {
     e.preventDefault();
-    cardEl.classList.remove("drag-over");
+    node.classList.remove("drag-over");
     const file = e.dataTransfer?.files?.[0];
     if (file && (file.type.startsWith("image/") || file.type === "image/svg+xml")) {
       void uploadFor(item, file);
     }
   });
 
-  return cardEl;
+  function update() {
+    const hit = item.candidates[item.chosenIndex];
+    const exhausted = isExhaustedItem(item);
+
+    node.className = `card ${item.confidence}${exhausted ? " card--exhausted" : ""}`;
+
+    check.checked = item.selected;
+    check.disabled = item.candidates.length === 0;
+    check.setAttribute(
+      "aria-label",
+      check.disabled ? `No logo available for ${name}` : `Apply logo to ${name}`,
+    );
+
+    if (hit && thumb.getAttribute("src") !== hit.src) thumb.setAttribute("src", hit.src);
+    thumb.className = hit
+      ? `thumb${state.showCircleMask ? " circle-mask" : ""} clickable`
+      : "thumb hidden";
+
+    noimg.classList.toggle("hidden", Boolean(hit));
+    const wantedMode = exhausted ? "exhausted" : "empty";
+    if (!hit && noimgMode !== wantedMode) {
+      noimgMode = wantedMode;
+      noimg.className = exhausted ? "noimg noimg--exhausted" : "noimg";
+      if (exhausted) noimg.replaceChildren(noLogoIcon());
+      else noimg.replaceChildren("?");
+    }
+
+    const badgeCopy = badgeText(item.confidence);
+    badge.classList.toggle("hidden", badgeCopy === undefined);
+    if (badgeCopy) {
+      badge.className = `confidence-badge confidence-badge--${item.confidence}`;
+      if (badge.textContent !== badgeCopy) badge.textContent = badgeCopy;
+    }
+    const showNote = badgeCopy !== undefined && item.flags.includes("guessed-domain");
+    badgeNote.classList.toggle("hidden", !showNote);
+
+    exhaustedLabel.classList.toggle("hidden", !exhausted);
+
+    const metaCopy = metaLine(item);
+    if (meta.textContent !== metaCopy) meta.textContent = metaCopy;
+    meta.classList.toggle("hidden", metaCopy === "");
+
+    const wantedAlts = item.candidates.map(altButtonFor);
+    if (!sameChildren(alts, wantedAlts)) alts.replaceChildren(...wantedAlts);
+    item.candidates.forEach((cand, i) => {
+      const button = altButtons.get(cand.src);
+      if (!button) return;
+      const on = i === item.chosenIndex;
+      button.classList.toggle("on", on);
+      button.setAttribute("aria-pressed", String(on));
+    });
+
+    retry.disabled = item.candidates.length < 2;
+    cropBtn.disabled = !hit;
+  }
+
+  return { node, update };
 }
 
-function section(title: string, items: ReviewItem[]): HTMLElement {
-  const wrap = el("section", { class: "section" }, el("h2", {}, `${title} (${items.length})`));
+/**
+ * CL-09 — bound the card-view cache instead of letting it grow to the whole
+ * address book.
+ *
+ * `cardViews` only ever grew: a card built once was kept for the life of the
+ * session with its article, listeners, thumbnail and every alternate-image
+ * element, so scrolling a long queue walked memory and loaded-image count toward
+ * the full contact count — the scale problem the virtualizer exists to avoid.
+ *
+ * A cap rather than "evict everything not mounted", because reuse is the other
+ * half of CL-09: re-rendering must not rebuild visible cards and re-request
+ * their logos. Strict eviction breaks that whenever the mounted window comes
+ * back empty — a zero-height viewport during first layout, a hidden grid, a
+ * filter that matches nothing — by clearing the cache on every paint. Mounted
+ * views are never evicted; beyond them the least-recently-used go first, which
+ * `cardFor` maintains by re-inserting on a hit.
+ */
+export function trimViewCache<K, V>(cache: Map<K, V>, mounted: readonly K[], cap: number): number {
+  const live = new Set(mounted);
+  let evicted = 0;
+  for (const key of [...cache.keys()]) {
+    if (cache.size <= cap) break;
+    if (live.has(key)) continue;
+    cache.delete(key);
+    evicted += 1;
+  }
+  return evicted;
+}
+
+/** Enough to survive a degenerate measurement without holding a whole book. */
+const MIN_CACHED_VIEWS = 60;
+
+/**
+ * What each section currently has mounted.
+ *
+ * `cardViews` is shared by every section but `paint` runs per section, so
+ * trimming against one section's window treated the other sections' *attached*
+ * views as evictable.  Once the combined windows passed the cap, painting a
+ * later section tore down still-visible cards in an earlier one and the next
+ * render rebuilt them and re-requested their thumbnails — the repeated network
+ * and DOM work the cap was added to stop, now triggered by an ordinary checkbox
+ * click.  Trimming against the union fixes that; a view is evictable only when
+ * no section has it on screen.
+ */
+const mountedBySection = new Map<SectionKey, readonly ReviewItem[]>();
+
+function trimSharedViewCache(key: SectionKey, mountedItems: readonly ReviewItem[]): void {
+  mountedBySection.set(key, mountedItems);
+  const union: ReviewItem[] = [];
+  for (const section of mountedBySection.values()) union.push(...section);
+  trimViewCache(cardViews, union, Math.max(MIN_CACHED_VIEWS, union.length * 3));
+}
+
+function cardFor(item: ReviewItem): HTMLElement {
+  let view = cardViews.get(item);
+  if (!view) {
+    view = buildCard(item);
+  } else {
+    // Re-insert so Map order is least-recently-used first, which is what
+    // `trimViewCache` evicts by.
+    cardViews.delete(item);
+  }
+  cardViews.set(item, view);
+  view.update();
+  return view.node;
+}
+
+function sameChildren(parent: Element, nodes: readonly Element[]): boolean {
+  if (parent.children.length !== nodes.length) return false;
+  for (let i = 0; i < nodes.length; i += 1) {
+    if (parent.children[i] !== nodes[i]) return false;
+  }
+  return true;
+}
+
+/* ------------------------------------------------------------------ *
+ * Virtualized sections
+ * ------------------------------------------------------------------ */
+
+const ESTIMATED_ROW_HEIGHT = 260;
+const OVERSCAN_ROWS = 2;
+let measuredRowHeight = 0;
+
+function maxViewportHeight(): number {
+  return Math.max(360, Math.round(window.innerHeight * 0.72));
+}
+
+function gridColumns(grid: HTMLElement): number {
+  const tracks = getComputedStyle(grid).gridTemplateColumns;
+  if (!tracks || tracks === "none") return 1;
+  return Math.max(1, tracks.split(" ").filter(Boolean).length);
+}
+
+/** A single shared row height keeps every section's scrollbar honest. */
+function measureRowHeight(grid: HTMLElement): boolean {
+  const first = grid.firstElementChild as HTMLElement | null;
+  if (!first) return false;
+  const gap = parseFloat(getComputedStyle(grid).rowGap) || 16;
+  const height = Math.min(720, Math.round(first.getBoundingClientRect().height + gap));
+  if (height <= gap) return false;
+  if (height <= measuredRowHeight + 2) return false;
+  measuredRowHeight = height;
+  return true;
+}
+
+type SectionView = {
+  node: HTMLElement;
+  setItems(items: ReviewItem[]): void;
+  repaint(): void;
+};
+
+function buildSection(title: string, key: SectionKey): SectionView {
+  const heading = el("h2", {}, `${title} (0)`);
   const grid = el("div", { class: "grid" });
-  for (const item of items) grid.append(card(item));
-  wrap.append(grid);
-  return wrap;
+  const spacer = el("div", { class: "virtual-list-spacer" }, grid);
+  const viewport = el("div", { class: "virtual-list" }, spacer);
+  const node = el("section", { class: `section section--${key}` }, heading, viewport);
+
+  let items: ReviewItem[] = [];
+  let frame = 0;
+  let remeasuring = false;
+
+  function paint() {
+    if (node.classList.contains("hidden")) return;
+    const columns = gridColumns(grid);
+    const rowHeight = measuredRowHeight || ESTIMATED_ROW_HEIGHT;
+    const rows = Math.ceil(items.length / columns);
+    const totalHeight = rows * rowHeight;
+    const height = Math.min(totalHeight, maxViewportHeight());
+    viewport.style.height = `${height}px`;
+    spacer.style.height = `${totalHeight}px`;
+
+    const slice = visibleSlice(items.length, columns, rowHeight, viewport.scrollTop, height, OVERSCAN_ROWS);
+    grid.style.transform = `translateY(${slice.offsetY}px)`;
+    const mountedItems = items.slice(slice.start, slice.end);
+    const mounted = mountedItems.map(cardFor);
+    if (!sameChildren(grid, mounted)) grid.replaceChildren(...mounted);
+    trimSharedViewCache(key, mountedItems);
+
+    if (!remeasuring && measureRowHeight(grid)) {
+      remeasuring = true;
+      paint();
+      remeasuring = false;
+    }
+  }
+
+  function schedulePaint() {
+    if (frame) return;
+    frame = requestAnimationFrame(() => {
+      frame = 0;
+      paint();
+    });
+  }
+
+  viewport.addEventListener("scroll", schedulePaint, { passive: true });
+
+  return {
+    node,
+    setItems(next) {
+      items = next;
+      heading.textContent = `${title} (${next.length})`;
+      if (viewport.scrollTop > 0 && next.length === 0) viewport.scrollTop = 0;
+      paint();
+    },
+    repaint: schedulePaint,
+  };
 }
 
-function settingsPanel(): HTMLElement {
+/* ------------------------------------------------------------------ *
+ * Shell — built once, then updated in place
+ * ------------------------------------------------------------------ */
+
+type Shell = {
+  root: HTMLElement;
+  settings: HTMLElement;
+  settingsInput: HTMLInputElement;
+  landing: HTMLElement;
+  notice: HTMLElement;
+  review: HTMLElement;
+  searchInput: HTMLInputElement;
+  maskCheckbox: HTMLInputElement;
+  chips: Map<FilterStatus, HTMLButtonElement>;
+  stats: Record<"ready" | "review" | "nonbrand" | "notfound" | "people", HTMLElement>;
+  approvedBtn: HTMLButtonElement;
+  exportFullBtn: HTMLButtonElement;
+  googleSyncBtn: HTMLButtonElement;
+  sections: Record<SectionKey, SectionView>;
+};
+
+let shell: Shell | null = null;
+
+const CHIP_LABELS: [FilterStatus, string][] = [
+  ["all", "All"],
+  ["ready", "Ready to apply"],
+  ["review", "Needs review"],
+  ["notfound", "Not found"],
+  ["missingphoto", "Missing photo"],
+];
+
+function buildSettingsPanel(): { node: HTMLElement; input: HTMLInputElement } {
   const input = el("input", {
     type: "text",
     class: "settings-input",
     placeholder: "Google OAuth client id",
     value: getGoogleClientId(),
     autocomplete: "off",
+    "aria-label": "Google OAuth client id",
   }) as HTMLInputElement;
   const save = el("button", { class: "btn secondary", type: "button" }, "Save");
   save.addEventListener("click", () => {
@@ -684,9 +1325,9 @@ function settingsPanel(): HTMLElement {
     state.showSettings = false;
     render();
   });
-  return el(
+  const node = el(
     "div",
-    { class: "settings" },
+    { class: "settings hidden" },
     el("h2", {}, "Settings"),
     el(
       "p",
@@ -696,14 +1337,85 @@ function settingsPanel(): HTMLElement {
     input,
     save,
   );
+  return { node, input };
 }
 
-export function render() {
-  const root = document.getElementById("app");
-  if (!root) return;
-  root.replaceChildren();
+function buildLanding(): HTMLElement {
+  const what = el(
+    "section",
+    { class: "section" },
+    el("h2", {}, "Every business in your contacts, with its real logo"),
+    el(
+      "p",
+      {},
+      "Your address book is full of grey initial circles.  ContactLogo finds the official mark for each business card in it — the pharmacy, the bank, the school, the plumber — so calls, messages and mail arrive with a face you recognise instead of two letters.",
+    ),
+    el(
+      "p",
+      { class: "meta" },
+      "People are left alone.  Contacts with a first or last name are never given a company logo, and a photo you already chose is never overwritten without you ticking the box.",
+    ),
+  );
 
+  const how = el(
+    "section",
+    { class: "section" },
+    el("h2", {}, "How it works"),
+    el(
+      "ol",
+      {},
+      el(
+        "li",
+        {},
+        el("strong", {}, "Import. "),
+        "Drop in a vCard or Google CSV export, connect Google Contacts, or pick straight from this phone.",
+      ),
+      el(
+        "li",
+        {},
+        el("strong", {}, "Review. "),
+        "Every match is scored.  Clear, square, official marks come pre-checked; guesses, look-alike names and existing photos wait for your glance.  Each card offers other candidates, your own upload, a pasted image, and a crop tool.",
+      ),
+      el(
+        "li",
+        {},
+        el("strong", {}, "Apply. "),
+        "Download a small file containing only the contacts you approved, export the whole address book, or push the approved photos straight to Google Contacts.",
+      ),
+    ),
+  );
+
+  const promise = el(
+    "section",
+    { class: "section" },
+    el("h2", {}, "Nothing changes without your approval"),
+    el(
+      "p",
+      {},
+      "There is no automatic apply.  A logo reaches your address book only after you tick its box and press the download or sync button — and one click saves an untouched copy of the original first, so you can always go back.",
+    ),
+    el("h2", {}, "Your contacts stay in this browser"),
+    el(
+      "p",
+      {},
+      "The address book is read and matched on this device.  It is never uploaded to a server, never stored between visits, and closing the tab leaves nothing behind.  Logo images are fetched from public brand sources by domain name only.",
+    ),
+    el(
+      "p",
+      { class: "meta" },
+      "A wrong logo is worse than none.  Generic names like “Hospital” or “Gift Card”, and names that double as ordinary words, are never matched automatically.",
+    ),
+  );
+
+  return el("div", {}, what, how, promise);
+}
+
+function mountShell(root: HTMLElement): Shell {
+  if (shell && shell.root === root && root.firstChild) return shell;
+
+  root.replaceChildren();
   const app = el("div", { class: "app" });
+
   const settingsBtn = el("button", { class: "btn ghost", type: "button" }, "Settings");
   settingsBtn.addEventListener("click", () => {
     state.showSettings = !state.showSettings;
@@ -722,7 +1434,8 @@ export function render() {
     ),
   );
 
-  if (state.showSettings) app.append(settingsPanel());
+  const settings = buildSettingsPanel();
+  app.append(settings.node);
 
   const file = el("input", { type: "file", accept: ".vcf,.vcard,.csv,text/vcard,text/csv", class: "hidden" }) as HTMLInputElement;
   file.addEventListener("change", () => {
@@ -734,18 +1447,18 @@ export function render() {
   pick.addEventListener("click", () => file.click());
   const google = el("button", { class: "btn secondary", type: "button" }, "Import Google Contacts");
   google.addEventListener("click", () => void importFromGoogle());
-  const actions: HTMLElement[] = [pick, google];
+  const importActions: HTMLElement[] = [pick, google];
   if (canPickDeviceContacts()) {
     const device = el("button", { class: "btn secondary", type: "button" }, "Import from this phone");
     device.addEventListener("click", () => void importFromDevice());
-    actions.push(device);
+    importActions.push(device);
   }
 
   const drop = el(
     "div",
     { class: "drop" },
     el("div", {}, el("strong", {}, "Import an address book"), el("span", {}, "Contacts stay in this browser.  Nothing is uploaded to a server.")),
-    ...actions,
+    ...importActions,
     file,
   );
   drop.addEventListener("dragover", (e) => e.preventDefault());
@@ -755,121 +1468,207 @@ export function render() {
     if (f) void importFile(f);
   });
   app.append(drop);
-  if (state.notice) app.append(el("p", { class: "meta notice-banner" }, state.notice));
 
-  if (state.stage === "review") {
-    const groups = bucket(state.items);
-    const people = state.contacts.filter((c) => classifyContact(c) === "person").length;
+  const notice = el("p", {
+    class: "meta notice-banner hidden",
+    role: "status",
+    "aria-live": "polite",
+    "aria-atomic": "true",
+  });
+  app.append(notice);
 
-    // Filter items based on searchQuery & filterStatus
-    const query = state.searchQuery.trim().toLowerCase();
-    const matchesSearch = (item: ReviewItem) => {
-      if (!query) return true;
-      const d = item.contact.displayName.toLowerCase();
-      const org = (item.contact.organization || "").toLowerCase();
-      const dom = (item.domain || "").toLowerCase();
-      const q = item.query.toLowerCase();
-      const ph = (item.contact.phone || "").toLowerCase();
-      return d.includes(query) || org.includes(query) || dom.includes(query) || q.includes(query) || ph.includes(query);
-    };
+  const landing = buildLanding();
+  app.append(landing);
 
-    const searchInput = el("input", {
-      type: "search",
-      class: "search-input",
-      placeholder: "Search contacts by brand, domain, phone…",
-      value: state.searchQuery,
-    }) as HTMLInputElement;
-    searchInput.addEventListener("input", () => {
-      state.searchQuery = searchInput.value;
+  // ---- review stage ------------------------------------------------
+  const review = el("div", { class: "hidden" });
+
+  const searchInput = el("input", {
+    type: "search",
+    class: "search-input",
+    placeholder: "Search contacts by brand, domain, phone…",
+    "aria-label": "Search contacts",
+  }) as HTMLInputElement;
+  searchInput.addEventListener("input", () => {
+    state.searchQuery = searchInput.value;
+    render();
+  });
+
+  const maskCheckbox = el("input", { type: "checkbox" }) as HTMLInputElement;
+  maskCheckbox.checked = state.showCircleMask;
+  maskCheckbox.addEventListener("change", () => {
+    state.showCircleMask = maskCheckbox.checked;
+    render();
+  });
+  const maskToggle = el("label", { class: "mask-toggle" }, maskCheckbox, el("span", {}, "Circle mask preview"));
+  review.append(el("div", { class: "search-bar" }, searchInput, maskToggle));
+
+  const chips = new Map<FilterStatus, HTMLButtonElement>();
+  const chipRow = el("div", { class: "filter-chips", role: "group", "aria-label": "Filter contacts by status" });
+  for (const [value, label] of CHIP_LABELS) {
+    const chip = el("button", {
+      class: "chip",
+      type: "button",
+      "data-filter": value,
+      "aria-pressed": String(state.filterStatus === value),
+    }, label);
+    chip.addEventListener("click", () => {
+      state.filterStatus = value;
       render();
     });
-
-    const circleMaskToggle = el("label", { class: "mask-toggle" });
-    const maskCheckbox = el("input", { type: "checkbox" }) as HTMLInputElement;
-    maskCheckbox.checked = state.showCircleMask;
-    maskCheckbox.addEventListener("change", () => {
-      state.showCircleMask = maskCheckbox.checked;
-      render();
-    });
-    circleMaskToggle.append(maskCheckbox, el("span", {}, "Circle mask preview"));
-
-    const searchBar = el("div", { class: "search-bar" }, searchInput, circleMaskToggle);
-    app.append(searchBar);
-
-    app.append(
-      el(
-        "div",
-        { class: "stats" },
-        el("div", { class: "stat high" }, el("b", {}, String(groups.auto.length)), " Ready to apply"),
-        el("div", { class: "stat medium" }, el("b", {}, String(groups.review.length)), " Needs review"),
-        el("div", { class: "stat skip" }, el("b", {}, String(groups.notFound.length)), " Not a brand / not found"),
-        el("div", { class: "stat" }, el("b", {}, String(people)), " People left alone"),
-      ),
-    );
-
-    const selectHigh = el("button", { class: "btn secondary", type: "button" }, "Select all high-confidence");
-    selectHigh.addEventListener("click", () => setAllHigh(true));
-    const clearHigh = el("button", { class: "btn ghost", type: "button" }, "Clear high-confidence");
-    clearHigh.addEventListener("click", () => setAllHigh(false));
-
-    const selectedCount = state.items.filter((i) => i.selected && i.candidates[i.chosenIndex]).length;
-    const saveApproved = el(
-      "button",
-      {
-        class: "btn",
-        type: "button",
-        title: "Export ONLY modified business contacts as a delta vCard to safely import into Apple Contacts without touching other cards",
-      },
-      `Download ${selectedCount} Approved Update${selectedCount === 1 ? "" : "s"}`,
-    );
-    saveApproved.addEventListener("click", () => void downloadApproved());
-
-    const exportFull = el(
-      "button",
-      {
-        class: "btn secondary",
-        type: "button",
-        title: "Export full address book with all contacts merged",
-      },
-      `Export full address book (${state.contacts.length})`,
-    );
-    exportFull.addEventListener("click", () => void downloadFull());
-
-    const backup = el(
-      "button",
-      { class: "btn ghost", type: "button", title: "Download untouched original address book backup" },
-      "Download backup",
-    );
-    backup.addEventListener("click", downloadBackup);
-
-    const toolbarItems = [selectHigh, clearHigh, saveApproved, exportFull, backup];
-    const hasGoogleContacts = state.contacts.some((c) => Boolean(c.googleResourceName));
-    if (hasGoogleContacts) {
-      const googleSyncBtn = el("button", { class: "btn secondary google-sync-btn", type: "button" }, "⚡ Apply to Google Contacts");
-      googleSyncBtn.addEventListener("click", () => void syncToGoogleContacts());
-      toolbarItems.push(googleSyncBtn);
-    }
-    app.append(el("div", { class: "toolbar" }, ...toolbarItems));
-
-    const filteredAuto = groups.auto.filter(matchesSearch);
-    const filteredReview = groups.review.filter(matchesSearch);
-    const filteredNotFound = groups.notFound.filter(matchesSearch);
-
-    if (filteredAuto.length > 0 || !query) app.append(section("Ready to apply", filteredAuto));
-    if (filteredReview.length > 0 || !query) app.append(section("Needs review", filteredReview));
-    if (filteredNotFound.length > 0 || !query) app.append(section("Not found / not a brand", filteredNotFound));
+    chips.set(value, chip);
+    chipRow.append(chip);
   }
+  review.append(chipRow);
+
+  const statValue = () => el("b", {}, "0");
+  const stats = {
+    ready: statValue(),
+    review: statValue(),
+    nonbrand: statValue(),
+    notfound: statValue(),
+    people: statValue(),
+  };
+  review.append(
+    el(
+      "div",
+      { class: "stats" },
+      el("div", { class: "stat high" }, stats.ready, " Ready to apply"),
+      el("div", { class: "stat medium" }, stats.review, " Needs review"),
+      el("div", { class: "stat skip" }, stats.nonbrand, " Not a brand"),
+      el("div", { class: "stat skip" }, stats.notfound, " Not found"),
+      el("div", { class: "stat" }, stats.people, " People left alone"),
+    ),
+  );
+
+  const selectHigh = el("button", { class: "btn secondary", type: "button" }, "Select all high-confidence");
+  selectHigh.addEventListener("click", () => setAllHigh(true));
+  const clearHigh = el("button", { class: "btn ghost", type: "button" }, "Clear high-confidence");
+  clearHigh.addEventListener("click", () => setAllHigh(false));
+
+  const approvedBtn = el("button", {
+    class: "btn",
+    type: "button",
+    title: "Export ONLY modified business contacts as a delta vCard to safely import into Apple Contacts without touching other cards",
+  }, "Download 0 Approved Updates");
+  approvedBtn.addEventListener("click", () => void downloadApproved());
+
+  const exportFullBtn = el("button", {
+    class: "btn secondary",
+    type: "button",
+    title: "Export full address book with all contacts merged",
+  }, "Export full address book (0)");
+  exportFullBtn.addEventListener("click", () => void downloadFull());
+
+  const backup = el(
+    "button",
+    { class: "btn ghost", type: "button", title: "Download untouched original address book backup" },
+    "Download backup",
+  );
+  backup.addEventListener("click", downloadBackup);
+
+  const googleSyncBtn = el("button", { class: "btn secondary google-sync-btn hidden", type: "button" }, "⚡ Apply to Google Contacts");
+  googleSyncBtn.addEventListener("click", () => void syncToGoogleContacts());
+
+  review.append(el("div", { class: "toolbar" }, selectHigh, clearHigh, approvedBtn, exportFullBtn, backup, googleSyncBtn));
+
+  const sections: Record<SectionKey, SectionView> = {
+    ready: buildSection("Ready to apply", "ready"),
+    review: buildSection("Needs review", "review"),
+    nonbrand: buildSection("Not a brand", "nonbrand"),
+    notfound: buildSection("Not found", "notfound"),
+  };
+  for (const key of ["ready", "review", "nonbrand", "notfound"] as SectionKey[]) {
+    review.append(sections[key].node);
+  }
+  app.append(review);
 
   app.append(
     el(
       "p",
       { class: "footer" },
-      "Review-first: high-confidence matches are pre-checked; guessed domains, favicons, and existing business photos stay in review.  Native macOS and iOS apps use the same rules in ContactLogoKit.  Frozen originals of BadgeBook and Crest live in backups/.",
+      "Review-first: clear, official marks are pre-checked; guessed domains, favicons and photos you already have wait for your review.  The Mac and iPhone apps follow the same rules.",
     ),
   );
+
   root.append(app);
-  if (cropState.item) {
-    root.append(cropModal());
+
+  const built: Shell = {
+    root,
+    settings: settings.node,
+    settingsInput: settings.input,
+    landing,
+    notice,
+    review,
+    searchInput,
+    maskCheckbox,
+    chips,
+    stats,
+    approvedBtn,
+    exportFullBtn,
+    googleSyncBtn,
+    sections,
+  };
+  shell = built;
+
+  window.addEventListener("resize", () => {
+    for (const key of ["ready", "review", "nonbrand", "notfound"] as SectionKey[]) {
+      built.sections[key].repaint();
+    }
+  });
+
+  return built;
+}
+
+function syncShell(s: Shell) {
+  s.settings.classList.toggle("hidden", !state.showSettings);
+  if (state.showSettings && s.settingsInput.value !== getGoogleClientId() && document.activeElement !== s.settingsInput) {
+    s.settingsInput.value = getGoogleClientId();
+  }
+
+  if (s.notice.textContent !== state.notice) s.notice.textContent = state.notice;
+  s.notice.classList.toggle("hidden", state.notice === "");
+
+  const reviewing = state.stage === "review";
+  s.landing.classList.toggle("hidden", reviewing);
+  s.review.classList.toggle("hidden", !reviewing);
+  if (!reviewing) return;
+
+  if (s.searchInput.value !== state.searchQuery) s.searchInput.value = state.searchQuery;
+  if (s.maskCheckbox.checked !== state.showCircleMask) s.maskCheckbox.checked = state.showCircleMask;
+
+  for (const [value, chip] of s.chips) {
+    const on = state.filterStatus === value;
+    chip.setAttribute("aria-pressed", String(on));
+    chip.classList.toggle("chip--active", on);
+  }
+
+  const groups = partitionSections(state.items);
+  s.stats.ready.textContent = String(groups.ready.length);
+  s.stats.review.textContent = String(groups.review.length);
+  s.stats.nonbrand.textContent = String(groups.nonbrand.length);
+  s.stats.notfound.textContent = String(groups.notfound.length);
+  s.stats.people.textContent = String(peopleCount);
+
+  const approved = selectedCount();
+  const approvedLabel = `Download ${approved} Approved Update${approved === 1 ? "" : "s"}`;
+  if (s.approvedBtn.textContent !== approvedLabel) s.approvedBtn.textContent = approvedLabel;
+  const fullLabel = `Export full address book (${state.contacts.length})`;
+  if (s.exportFullBtn.textContent !== fullLabel) s.exportFullBtn.textContent = fullLabel;
+  s.googleSyncBtn.classList.toggle("hidden", !hasGoogleContacts);
+
+  const narrowed = state.searchQuery.trim() !== "" || state.filterStatus !== "all";
+  for (const key of ["ready", "review", "nonbrand", "notfound"] as SectionKey[]) {
+    const visible = filterItems(groups[key], state.searchQuery, state.filterStatus);
+    s.sections[key].node.classList.toggle("hidden", visible.length === 0 && narrowed);
+    s.sections[key].setItems(visible);
   }
 }
 
+export function render() {
+  const root = document.getElementById("app");
+  if (!root) return;
+  const s = mountShell(root);
+  syncShell(s);
+  syncCropModal(root);
+}

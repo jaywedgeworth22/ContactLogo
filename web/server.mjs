@@ -53,7 +53,13 @@ const types = new Map([
 ]);
 
 function safeFile(urlPath) {
-  const raw = decodeURIComponent((urlPath || "/").split("?")[0] || "/");
+  const rawPath = (urlPath || "/").split("?")[0] || "/";
+  let raw;
+  try {
+    raw = decodeURIComponent(rawPath);
+  } catch {
+    return null;
+  }
   const relative = raw === "/" ? "index.html" : raw.replace(/^\/+/, "");
   const resolved = normalize(join(distDir, relative));
   if (!resolved.startsWith(distDir)) return null;
@@ -114,7 +120,7 @@ const server = createServer(async (req, res) => {
     if (!res.headersSent) {
       res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
     }
-    res.end(message);
+    res.end("internal server error");
   } finally {
     logLine({
       status: "info",

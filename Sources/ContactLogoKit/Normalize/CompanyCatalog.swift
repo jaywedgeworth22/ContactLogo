@@ -92,11 +92,13 @@ public enum CompanyCatalog {
         "gcx": "raise.com", "raise": "raise.com"
     ]
 
-    /// Location / store-number tail after a known brand ("Walgreens Mason Rd").
-    static let locationish = try! NSRegularExpression(
-        pattern: #"\b(rd|road|st|street|blvd|ave|avenue|dr|drive|ln|lane|hwy|fwy|pkwy|suite|ste|unit|store|shop|plaza|center|centre|mall|near|at|in|#\d*|\d{2,5}|cypress|houston|dallas|austin|tx|texas|usa)\b"#,
-        options: .caseInsensitive
-    )
+    /// R8.3 `CATALOG_TAIL_OK` — a location or sub-brand tail after a known
+    /// brand ("Walgreens Mason Rd", "H-E-B Pharmacy").  Trade words such as
+    /// "dental" are deliberately absent, so "Delta Dental" never reduces to
+    /// delta.com.
+    static func isAllowedTail(_ tail: String) -> Bool {
+        WordLists.isCatalogTailOK(tail)
+    }
 
     public static func domain(forName raw: String) -> String? {
         let key = NameNormalizer.companyKey(raw)
@@ -111,7 +113,7 @@ public enum CompanyCatalog {
             let head = words[..<i].joined(separator: " ")
             let tail = words[i...].joined(separator: " ")
             let hit = domains[head] ?? domains[head.replacingOccurrences(of: " ", with: "")]
-            if let hit, locationish.firstMatch(in: tail, range: NSRange(tail.startIndex..., in: tail)) != nil {
+            if let hit, isAllowedTail(tail) {
                 return hit
             }
         }

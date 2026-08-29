@@ -1,3 +1,18 @@
+/* ===========================================================================
+   Tokens — three-state theming per docs/UI-CONTRACT.md §3.
+   Light on bare :root, dark under a guarded prefers-color-scheme media query,
+   and dark again under an explicit [data-theme="dark"] so a manual toggle
+   always wins over the OS setting. Every token is defined all three times;
+   never add a color that lives only inside a media/[data-theme] block.
+
+   Deviation from the contract's literal table: --exhausted-ink is darkened
+   (light) / lightened (dark) from the contract's #8a8178/#7d766a to
+   #655e54/#9a917f. The literal values render 3.2–3.8:1 against --card and
+   --exhausted-bg — under the 4.5:1 AA text minimum for the small status line
+   that token paints. Nothing outside styles.css reads these hex values (app.ts
+   only ever sets class names, confirmed by grep), so the token *name* and its
+   role are unchanged, only its value is corrected for contrast. See report.
+   =========================================================================== */
 :root {
   color-scheme: light;
   --bg: #f4f0e8;
@@ -7,15 +22,118 @@
   --line: #e4dccf;
   --high: #2f7d4a;
   --medium: #b86b1a;
+  --low: #a3491f;
   --skip: #8a8178;
   --accent: #1c1917;
+  --accent-ink: #f8f4ec;
+  --focus-ring: #2563eb;
+  --danger: #b3261e;
+  --badge-high-bg: #e4f3e8;
+  --badge-high-ink: #1f5c34;
+  --badge-medium-bg: #f7e9d8;
+  --badge-medium-ink: #8a4a10;
+  --badge-low-bg: #f5ded2;
+  --badge-low-ink: #7a3312;
+  --chip-bg: #fffdf8;
+  --chip-ink: #6b635a;
+  --chip-active-bg: #1c1917;
+  --chip-active-ink: #f8f4ec;
+  --exhausted-bg: #f1ebe0;
+  --exhausted-ink: #655e54;
   font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #17140f;
+    --ink: #f2ece1;
+    --muted: #a89e90;
+    --card: #211d17;
+    --line: #3a342a;
+    --high: #57c17d;
+    --medium: #e0973f;
+    --low: #e08360;
+    --skip: #8a8178;
+    --accent: #f2ece1;
+    --accent-ink: #17140f;
+    --focus-ring: #6ea8ff;
+    --danger: #ff6b60;
+    --badge-high-bg: #1c3524;
+    --badge-high-ink: #8fe3ab;
+    --badge-medium-bg: #3a2a14;
+    --badge-medium-ink: #f0b871;
+    --badge-low-bg: #3a2116;
+    --badge-low-ink: #f0a37e;
+    --chip-bg: #211d17;
+    --chip-ink: #a89e90;
+    --chip-active-bg: #f2ece1;
+    --chip-active-ink: #17140f;
+    --exhausted-bg: #201c16;
+    --exhausted-ink: #9a917f;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #17140f;
+  --ink: #f2ece1;
+  --muted: #a89e90;
+  --card: #211d17;
+  --line: #3a342a;
+  --high: #57c17d;
+  --medium: #e0973f;
+  --low: #e08360;
+  --skip: #8a8178;
+  --accent: #f2ece1;
+  --accent-ink: #17140f;
+  --focus-ring: #6ea8ff;
+  --danger: #ff6b60;
+  --badge-high-bg: #1c3524;
+  --badge-high-ink: #8fe3ab;
+  --badge-medium-bg: #3a2a14;
+  --badge-medium-ink: #f0b871;
+  --badge-low-bg: #3a2116;
+  --badge-low-ink: #f0a37e;
+  --chip-bg: #211d17;
+  --chip-ink: #a89e90;
+  --chip-active-bg: #f2ece1;
+  --chip-active-ink: #17140f;
+  --exhausted-bg: #201c16;
+  --exhausted-ink: #9a917f;
 }
 
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--bg); color: var(--ink); }
 button, input { font: inherit; }
 button { cursor: pointer; }
+
+/* ===========================================================================
+   Focus visibility — docs/UI-CONTRACT.md §4. Ring shows on keyboard focus
+   only, never on mouse click, across every interactive control in the sheet.
+   =========================================================================== */
+.btn:focus-visible,
+.chip:focus-visible,
+.alts-btn:focus-visible,
+.search-input:focus-visible,
+.settings-input:focus-visible,
+.zoom-slider:focus-visible,
+input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* ===========================================================================
+   Reduced motion — docs/UI-CONTRACT.md §4, verbatim.
+   =========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 
 .app { max-width: 1080px; margin: 0 auto; padding: 32px 20px 80px; }
 .hero h1 { font-size: 2.2rem; letter-spacing: -0.03em; margin: 0 0 8px; }
@@ -24,7 +142,7 @@ button { cursor: pointer; }
 .hero-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .hero-row h1 { margin: 0; }
 .settings { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; margin: 0 0 18px; }
-.settings-input { width: min(100%, 28rem); padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); margin: 8px 12px 0 0; }
+.settings-input { width: min(100%, 28rem); padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); margin: 8px 12px 0 0; background: var(--card); color: var(--ink); }
 .drop {
   border: 1.5px dashed var(--line);
   background: var(--card);
@@ -38,16 +156,29 @@ button { cursor: pointer; }
 .drop strong { display: block; }
 .drop span { color: var(--muted); font-size: 0.95rem; }
 
+/* .btn variants keep their three-tier hierarchy (solid / outlined / text-only)
+   — this is what the audit's "no primary action" finding leans on: app.ts is
+   expected to mark exactly one action per card with the bare .btn class and
+   demote the rest to .secondary/.ghost. Every variant gets a real 44x44
+   minimum touch target regardless of its visual padding. */
 .btn {
   border: 0;
   border-radius: 999px;
   padding: 10px 16px;
   background: var(--accent);
-  color: #f8f4ec;
+  color: var(--accent-ink);
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 .btn.secondary { background: transparent; color: var(--ink); border: 1px solid var(--line); }
 .btn.ghost { background: transparent; color: var(--muted); }
-.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn:disabled,
+.chip:disabled,
+.alts-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .stats { display: flex; gap: 16px; margin: 28px 0 12px; flex-wrap: wrap; }
 .stat { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; min-width: 140px; }
@@ -58,39 +189,170 @@ button { cursor: pointer; }
 
 .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 20px; }
 
+/* ===========================================================================
+   Filter chip row — docs/UI-CONTRACT.md §1.2. Sits between .search-bar and
+   .stats. Exactly one chip carries aria-pressed="true" / .chip--active.
+   =========================================================================== */
+.filter-chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 16px; }
+.chip {
+  border: 1px solid var(--line);
+  background: var(--chip-bg);
+  color: var(--chip-ink);
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-size: 0.85rem;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.chip--active,
+.chip[aria-pressed="true"] {
+  background: var(--chip-active-bg);
+  color: var(--chip-active-ink);
+  border-color: var(--chip-active-bg);
+  font-weight: 600;
+}
+
 .section h2 { font-size: 1.15rem; margin: 28px 0 10px; }
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+
+/* ===========================================================================
+   Virtualized list container — docs/UI-CONTRACT.md §1.2. .virtual-list is the
+   fixed-height scroll viewport, .virtual-list-spacer reserves true scrollable
+   height, and .grid is repositioned per-frame via an inline
+   transform: translateY(...) that app.ts sets directly — this sheet must
+   never put a competing transform on .grid.
+   =========================================================================== */
+.virtual-list {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.virtual-list-spacer {
+  position: relative;
+}
+.virtual-list-spacer .grid {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+}
+
+/* Card content column is the scarce resource (audit CL: ~140px at the old
+   280px minimum). Widening the column minimum and trimming the fixed
+   checkbox/thumb columns gives .card-content real room without abandoning
+   the grid. */
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 16px; }
 .card {
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: 14px;
-  padding: 12px;
+  padding: 14px;
   display: grid;
-  grid-template-columns: 28px 72px 1fr;
-  gap: 10px;
+  grid-template-columns: 44px 56px 1fr;
+  gap: 12px;
   align-items: start;
 }
-.card.high { outline: 2px solid #2f7d4a55; }
-.card.medium { outline: 2px solid #b86b1a55; }
+.card.high { outline: 2px solid color-mix(in srgb, var(--high) 33%, transparent); }
+.card.medium { outline: 2px solid color-mix(in srgb, var(--medium) 33%, transparent); }
+.card.low { outline: 2px solid color-mix(in srgb, var(--low) 33%, transparent); }
+.card.skip { outline: 2px solid color-mix(in srgb, var(--skip) 33%, transparent); }
+
+/* Exhausted terminal state — docs/UI-CONTRACT.md §1.2. Presentation only;
+   the checkbox's disabled/unselected state is app.ts's state-machine fix. */
+.card--exhausted { background: var(--card); }
+
 .thumb {
-  width: 72px; height: 72px; border-radius: 10px;
-  background: #f7f3ec; object-fit: contain; display: block;
+  width: 56px; height: 56px; border-radius: 10px;
+  background: var(--line); object-fit: contain; display: block;
 }
 .noimg {
-  width: 72px; height: 72px; border-radius: 10px; background: #f7f3ec;
-  display: grid; place-items: center; color: #c4bbb0; font-size: 1.4rem;
+  width: 56px; height: 56px; border-radius: 10px; background: var(--line);
+  display: grid; place-items: center; color: var(--muted); font-size: 1.3rem;
 }
+.noimg--exhausted {
+  background: var(--exhausted-bg);
+}
+.noimg-icon {
+  width: 26px;
+  height: 26px;
+  color: var(--exhausted-ink);
+  fill: none;
+  stroke: currentColor;
+}
+.exhausted-label {
+  margin: 2px 0 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--exhausted-ink);
+}
+
+/* Confidence badge — docs/UI-CONTRACT.md §1.2. Carries the signal via a
+   distinct label per tier plus a tinted pill, not hue on its own; it sits
+   alongside the existing card.high/medium/low/skip border tint, not instead
+   of it. */
+.confidence-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  padding: 3px 10px;
+  border-radius: 999px;
+  margin-bottom: 6px;
+  width: fit-content;
+}
+.confidence-badge--high { background: var(--badge-high-bg); color: var(--badge-high-ink); }
+.confidence-badge--medium { background: var(--badge-medium-bg); color: var(--badge-medium-ink); }
+.confidence-badge--low { background: var(--badge-low-bg); color: var(--badge-low-ink); }
+
+/* Secondary note under a badge for the guessed-domain flag (§5 of the
+   contract). The contract specifies the copy and that it lives "in the
+   badge, not the meta line" but does not name a class for it; this name
+   follows the sheet's existing `<parent>-note`/`<parent>-label` pattern.
+   Flagged in the handoff report as an assumption to confirm with app.ts. */
+.confidence-badge-note {
+  display: block;
+  margin: -2px 0 6px;
+  font-size: 0.74rem;
+  color: var(--muted);
+  font-style: italic;
+}
+
 .name { font-weight: 650; }
 .meta { color: var(--muted); font-size: 0.82rem; margin-top: 2px; }
-.alts { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
-.alts button {
-  width: 36px; height: 36px; padding: 0; border: 1px solid var(--line);
-  border-radius: 8px; background: #fff; overflow: hidden;
+
+.alts { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.alts-btn {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card);
+  overflow: hidden;
 }
-.alts button.on { outline: 2px solid var(--ink); }
-.alts img { width: 100%; height: 100%; object-fit: contain; }
-.actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
-.actions button { font-size: 0.82rem; padding: 6px 10px; }
+.alts-btn.on,
+.alts-btn[aria-pressed="true"] {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+}
+.alts-btn img { width: 34px; height: 34px; object-fit: contain; }
+
+/* Actions hierarchy: a bare .btn (no .secondary/.ghost modifier) is the
+   card's single primary action and takes the full row; secondary/ghost
+   actions stay compact and wrap below it instead of competing for the same
+   visual weight. */
+.actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.actions .btn { font-size: 0.82rem; padding: 8px 14px; flex: 0 1 auto; }
+.actions > .btn:not(.secondary):not(.ghost) {
+  flex-basis: 100%;
+  font-weight: 600;
+}
 
 .footer { margin-top: 40px; color: var(--muted); font-size: 0.85rem; }
 .hidden { display: none; }
@@ -110,12 +372,14 @@ button { cursor: pointer; }
   border-radius: 10px;
   border: 1px solid var(--line);
   background: var(--card);
+  color: var(--ink);
   font-size: 0.95rem;
 }
 .mask-toggle {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-height: 44px;
   font-size: 0.9rem;
   color: var(--muted);
   cursor: pointer;
@@ -146,7 +410,7 @@ button { cursor: pointer; }
 /* Drag-and-drop feedback on contact cards */
 .card.drag-over {
   border-color: #2563eb;
-  background: #f0f7ff;
+  background: color-mix(in srgb, #2563eb 8%, var(--card));
   outline: 2px dashed #2563eb;
   transform: scale(1.01);
   transition: transform 0.15s ease, background 0.15s ease;
@@ -166,6 +430,22 @@ button { cursor: pointer; }
 }
 .thumb.clickable:hover {
   transform: scale(1.05);
+}
+
+/* Card checkbox — first grid child of .card, not label-wrapped in today's
+   markup, so a real 44x44 hit target is set directly on the control rather
+   than via padding (padding on a native, non-appearance:none checkbox is not
+   reliably honored across browsers). Scoped to cards only so the crop
+   modal's unrelated checkbox (already inside a full-row clickable label,
+   see .crop-check-row below) doesn't inherit this size. */
+.card > input[type="checkbox"] {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  margin: 0;
+  accent-color: var(--ink);
+  flex-shrink: 0;
 }
 
 /* Crop & Adjust Modal */
@@ -211,7 +491,7 @@ button { cursor: pointer; }
   width: 280px;
   height: 280px;
   border-radius: 14px;
-  background: #f7f3ec;
+  background: var(--line);
   border: 1px solid var(--line);
   cursor: grab;
   touch-action: none;
@@ -247,6 +527,7 @@ button { cursor: pointer; }
   display: flex;
   align-items: center;
   gap: 8px;
+  min-height: 44px;
   font-size: 0.88rem;
   color: var(--ink);
   cursor: pointer;
@@ -262,7 +543,7 @@ button { cursor: pointer; }
 }
 
 .btn.small {
-  padding: 4px 10px;
+  padding: 6px 12px;
   font-size: 0.8rem;
 }
 
@@ -270,4 +551,3 @@ button { cursor: pointer; }
   from { opacity: 0; }
   to { opacity: 1; }
 }
-

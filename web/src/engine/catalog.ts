@@ -1,6 +1,6 @@
 /** Offline name → domain table ported from `vendor/crest/src/lib/contacts.ts`. */
 
-import { companyKey } from "./normalize.ts";
+import { companyKey, isOrgSignalWord, GEO_WORDS_LITERAL } from "./normalize.ts";
 
 const DOMAINS: Record<string, string> = {
   apple: "apple.com",
@@ -137,8 +137,47 @@ const DOMAINS: Record<string, string> = {
   raise: "raise.com",
 };
 
-const LOCATIONISH =
-  /\b(rd|road|st|street|blvd|ave|avenue|dr|drive|ln|lane|hwy|fwy|pkwy|suite|ste|unit|store|shop|plaza|center|centre|mall|near|at|in|#\d*|\d{2,5}|cypress|houston|dallas|austin|tx|texas|usa)\b/i;
+/**
+ * R8.3 `CATALOG_TAIL_OK` = GEO_WORDS (R6.6) ∪ SUBBRAND_TAIL.  A department or
+ * format tail is still the parent brand: "H-E-B Pharmacy" is H-E-B.
+ *
+ * `dental` and the other ORG_SIGNAL trade words are deliberately absent — a
+ * trade word makes a *different* business, so "Delta Dental" must never reduce
+ * to delta.com.  That is why the tail is tested word by word below rather than
+ * searched for a match anywhere in it: a substring search let "Delta Dental
+ * Center" through on `center` alone.
+ */
+const SUBBRAND_TAIL: ReadonlySet<string> = new Set([
+  "pharmacy", "deli", "bakery", "fuel", "gas", "market", "marketplace", "optical", "photo",
+  "curbside", "drive", "thru", "corporate", "hq", "distribution", "warehouse",
+]);
+
+export function isTailOkWord(word: string): boolean {
+  const w = word.toLowerCase();
+  if (GEO_WORDS_LITERAL.has(w) || SUBBRAND_TAIL.has(w)) return true;
+  return /^#\d*$/.test(w) || /^\d{2,5}$/.test(w);
+}
+
+/**
+ * R8.3 — may this tail be dropped, leaving the head brand?
+ *
+ * Two conditions, and both are needed.  Requiring only that *some* word be
+ * tail-ok reduced "Delta Dental Center" to delta.com on the strength of
+ * `center` alone — an airline's logo on a dental practice.  Requiring that
+ * *every* word be tail-ok instead rejected "Walgreens Mason Rd", because a
+ * street name is not on any list and never can be.
+ *
+ * So: something must positively mark the tail as a place or department, and
+ * nothing in it may name a different trade.  An unrecognised word ("mason") is
+ * tolerated as part of an address; an ORG_SIGNAL word ("dental") is not, since
+ * it makes the tail a business of its own.  SUBBRAND_TAIL wins where the two
+ * lists overlap — "pharmacy" and "bakery" are H-E-B departments here.
+ */
+export function isCatalogTailOK(tail: readonly string[]): boolean {
+  if (tail.length === 0) return false;
+  if (!tail.some(isTailOkWord)) return false;
+  return tail.every((w) => isTailOkWord(w) || !isOrgSignalWord(w));
+}
 
 const DOMAIN_TO_TICKER: Record<string, string> = {
   "apple.com": "AAPL",
@@ -239,9 +278,9 @@ export function lookupCompanyDomain(name: string): string | undefined {
   const words = key.split(" ").filter(Boolean);
   for (let i = words.length - 1; i >= 1; i -= 1) {
     const head = words.slice(0, i).join(" ");
-    const tail = words.slice(i).join(" ");
+    const tail = words.slice(i);
     const domain = DOMAINS[head] ?? DOMAINS[head.replace(/\s+/g, "")];
-    if (domain && LOCATIONISH.test(tail)) return domain;
+    if (domain && isCatalogTailOK(tail)) return domain;
   }
   return undefined;
 }

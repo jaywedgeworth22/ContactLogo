@@ -92,6 +92,22 @@ public enum Confidence: Int, Comparable, Sendable {
     }
 }
 
+/// A source that failed during a run (ENGINE-CONTRACT R11.6).  A source that
+/// errored is not the same as a source that found nothing, and neither may be
+/// silent: a contact whose search was incomplete is retryable, not "not found".
+public struct SourceFailure: Sendable, Hashable {
+    public let source: SourceKind
+    public let reason: String
+    /// The source gave up after exhausting its 429 backoff budget.
+    public let rateLimited: Bool
+
+    public init(source: SourceKind, reason: String, rateLimited: Bool = false) {
+        self.source = source
+        self.reason = reason
+        self.rateLimited = rateLimited
+    }
+}
+
 public struct MatchResult: Sendable {
     public let contactID: String
     public var contactClass: ContactClass
@@ -100,14 +116,23 @@ public struct MatchResult: Sendable {
     public var confidence: Confidence
     /// Trap flags for the review UI ("homonym-risk", "fallback-tile", ...).
     public var flags: [String]
+    /// Sources that errored while matching this contact. Non-empty means the
+    /// search was incomplete — the row belongs in a retryable state.
+    public var sourceErrors: [SourceFailure]
+
+    /// True when nothing was found *and* at least one source failed, i.e. the
+    /// answer is "we do not know yet", not "there is no logo".
+    public var isRetryable: Bool { candidates.isEmpty && !sourceErrors.isEmpty }
 
     public init(contactID: String, contactClass: ContactClass,
-                candidates: [LogoCandidate], confidence: Confidence, flags: [String] = []) {
+                candidates: [LogoCandidate], confidence: Confidence, flags: [String] = [],
+                sourceErrors: [SourceFailure] = []) {
         self.contactID = contactID
         self.contactClass = contactClass
         self.candidates = candidates
         self.confidence = confidence
         self.flags = flags
+        self.sourceErrors = sourceErrors
     }
 }
 

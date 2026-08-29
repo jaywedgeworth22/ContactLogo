@@ -1,6 +1,9 @@
 <resources>
-    <style name="Theme.ContactLogo" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:statusBarColor">@android:color/transparent</item>
-        <item name="android:navigationBarColor">@android:color/transparent</item>
-    </style>
+    <!--
+      statusBarColor/navigationBarColor used to be set here, but both are
+      deprecated and ignored once the app targets API 35 (edge-to-edge is
+      enforced regardless of theme). MainActivity.enableEdgeToEdge() now owns
+      system-bar styling across every supported API level (CL-24).
+    -->
+    <style name="Theme.ContactLogo" parent="android:Theme.Material.Light.NoActionBar" />
 </resources>

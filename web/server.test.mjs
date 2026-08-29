@@ -67,3 +67,23 @@ test("Coolify host starts without DD_API_KEY in production", async () => {
     await stopServer(child);
   }
 });
+
+test("malformed percent-escape returns 400 with a fixed body, not the raw URIError", async () => {
+  const port = 18000 + Math.floor(Math.random() * 1000);
+  const { child } = await startServer({
+    NODE_ENV: "production",
+    DD_ENV: "production",
+    DD_API_KEY: "",
+    DD_AGENT_HOST: "",
+    PORT: String(port),
+  });
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/%`);
+    assert.equal(response.status, 400);
+    const text = await response.text();
+    assert.equal(text, "bad request");
+    assert.doesNotMatch(text, /URI malformed/i);
+  } finally {
+    await stopServer(child);
+  }
+});

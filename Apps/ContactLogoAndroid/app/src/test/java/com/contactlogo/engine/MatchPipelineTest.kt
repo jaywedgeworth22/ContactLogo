@@ -60,6 +60,12 @@ class MatchPipelineTest {
 
     @Test
     fun catalogBusinessWithoutPhotoIsReady() {
+        // FedEx reaches HIGH for the right reason under ENGINE-CONTRACT R10/R11:
+        // the static ceiling is high (catalog identity, no caps), AND the winning
+        // candidate is a real curated Simple Icons glyph (R13), not a favicon.
+        // Before the CL-04 fix, confidence was HIGH purely from catalog membership
+        // — see catalogHitWithoutCuratedAssetStaysInReview below for the case that
+        // exposed the bug: a catalog hit with no Simple Icons entry.
         val fedex = ContactIdentity(
             id = "4",
             displayName = "FedEx",
@@ -69,6 +75,29 @@ class MatchPipelineTest {
         assertEquals(Confidence.HIGH, result.confidence)
         assertTrue(result.approved)
         assertEquals("fedex.com", result.matchedDomain)
+        assertEquals("catalog", result.via)
+        assertEquals("simpleIcons", result.selectedLogo?.source)
+    }
+
+    @Test
+    fun catalogHitWithoutCuratedAssetStaysInReview() {
+        // ENGINE-CONTRACT R11.4 (CL-04b): a favicon winner is NEVER high, however
+        // confident the static ceiling is. Exxon's static ceiling is high (a clean
+        // catalog hit, no caps) but this pipeline has no Simple Icons entry for
+        // exxon.com, so the only real candidate is a favicon — confidence must be
+        // capped at medium and the contact must not be auto-approved. Before this
+        // fix, google.com/s2/favicons sat at candidate index 0 for every domain and
+        // was auto-approved at HIGH regardless of source.
+        val exxon = ContactIdentity(
+            id = "6",
+            displayName = "Exxon",
+            organization = "Exxon"
+        )
+        val result = MatchPipeline.match(exxon)
+        assertEquals("exxon.com", result.matchedDomain)
+        assertEquals(Confidence.MEDIUM, result.confidence)
+        assertFalse(result.approved)
+        assertEquals("favicon", result.selectedLogo?.source)
     }
 
     @Test

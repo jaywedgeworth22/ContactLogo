@@ -81,6 +81,44 @@ export async function requestAccessToken(clientId: string, requireWrite = false)
   });
 }
 
+/**
+ * docs/ENGINE-CONTRACT.md R11.6 — retry a rate-limited (429) request with
+ * exponential backoff and full jitter: base 500ms, doubling, 4 attempts,
+ * cap 8s, honoring `Retry-After` when present and larger than the computed
+ * wait. A 429 that survives every attempt is returned as-is so the caller's
+ * existing `!res.ok` handling still surfaces it — retries make 429 rarer,
+ * they must never make it silent.
+ */
+const RETRY_BASE_MS = 500;
+const RETRY_MAX_ATTEMPTS = 4;
+const RETRY_CAP_MS = 8000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function parseRetryAfterMs(header: string | null): number | undefined {
+  if (!header) return undefined;
+  const seconds = Number(header);
+  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
+  const when = Date.parse(header);
+  return Number.isNaN(when) ? undefined : Math.max(0, when - Date.now());
+}
+
+async function fetchWithRetry(input: string | URL, init?: RequestInit): Promise<Response> {
+  let attempt = 0;
+  for (;;) {
+    const res = await fetch(input, init);
+    if (res.status !== 429 || attempt >= RETRY_MAX_ATTEMPTS - 1) return res;
+    const computed = Math.min(RETRY_CAP_MS, RETRY_BASE_MS * 2 ** attempt);
+    const jittered = Math.random() * computed;
+    const retryAfterMs = parseRetryAfterMs(res.headers.get("Retry-After"));
+    const waitMs = retryAfterMs !== undefined && retryAfterMs > jittered ? Math.min(retryAfterMs, RETRY_CAP_MS) : jittered;
+    await sleep(waitMs);
+    attempt += 1;
+  }
+}
+
 export type Person = {
   resourceName?: string;
   names?: Array<{ displayName?: string; givenName?: string; familyName?: string }>;
@@ -91,22 +129,41 @@ export type Person = {
   photos?: Array<{ url?: string; default?: boolean }>;
 };
 
-async function fetchConnections(token: string, onProgress?: (n: number) => void): Promise<Person[]> {
+/**
+ * Not a real expectation of the address book's size — a sanity backstop
+ * against an API bug that never stops returning `nextPageToken` (e.g. a
+ * cycle). 200,000 contacts is far past any real personal or org address
+ * book. If it is ever hit, that is reported to the caller as an error
+ * (CL-10) rather than silently truncating the import the way the old
+ * `page < 12` cap did.
+ */
+const MAX_CONNECTION_PAGES = 200;
+
+export async function fetchConnections(token: string, onProgress?: (n: number) => void): Promise<Person[]> {
   const people: Person[] = [];
   let pageToken = "";
-  for (let page = 0; page < 12; page += 1) {
+  let page = 0;
+  for (;;) {
+    if (page >= MAX_CONNECTION_PAGES) {
+      throw new Error(
+        `Google Contacts import stopped after ${people.length.toLocaleString()} contacts (${MAX_CONNECTION_PAGES} pages) — more remain on the account. This is a safety limit, not expected; please report it.`,
+      );
+    }
     const url = new URL("https://people.googleapis.com/v1/people/me/connections");
     url.searchParams.set("personFields", PERSON_FIELDS);
     url.searchParams.set("pageSize", "1000");
     url.searchParams.set("sortOrder", "LAST_MODIFIED_DESCENDING");
     if (pageToken) url.searchParams.set("pageToken", pageToken);
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    const res = await fetchWithRetry(url, { headers: { Authorization: `Bearer ${token}` } });
     if (!res.ok) {
-      throw new Error(res.status === 403 ? "Google did not allow Contacts access." : "Could not read Google Contacts");
+      if (res.status === 403) throw new Error("Google did not allow Contacts access.");
+      if (res.status === 429) throw new Error("Google Contacts is rate-limiting this import; wait a moment and try again.");
+      throw new Error(`Could not read Google Contacts (HTTP ${res.status})`);
     }
     const data = (await res.json()) as { connections?: Person[]; nextPageToken?: string };
     people.push(...(data.connections ?? []));
     onProgress?.(people.length);
+    page += 1;
     if (!data.nextPageToken) break;
     pageToken = data.nextPageToken;
   }
@@ -154,7 +211,12 @@ export async function updateGoogleContactPhoto(
     ? photoDataUrlOrBase64.split(",")[1]
     : photoDataUrlOrBase64;
   const url = `https://people.googleapis.com/v1/${encodeURIComponent(resourceName)}:updateContactPhoto`;
-  const res = await fetch(url, {
+  // Bulk photo sync walks every selected contact sequentially; on a large
+  // book the People API 429s partway through (CL-10). fetchWithRetry backs
+  // off and retries in place so a transient rate limit doesn't fail the
+  // contact outright; a 429 that survives every attempt still surfaces here
+  // as a per-contact error, which callers already catch per-item.
+  const res = await fetchWithRetry(url, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
