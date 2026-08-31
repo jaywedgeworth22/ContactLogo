@@ -21,6 +21,7 @@
 		1C98B7BB5F995C29D1B31B93 /* BrandfetchSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10FE0C32FC2442090989354 /* BrandfetchSource.swift */; };
 		1E41FAE9CACFEFEB66CE1A4E /* CompaniesLogoSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = F54AE3ACB7FFE84AB4A3AC6C /* CompaniesLogoSource.swift */; };
 		20D8713A71E4172F6F4AAF2D /* UndoLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7391AC474DA50FB01E0BF294 /* UndoLog.swift */; };
+		290B0165116D8C7B9BEE8C41 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCF41B30625237952CE7D3A8 /* KeychainStore.swift */; };
 		2CE8F74A2766F2F4E0866C15 /* MatchPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22FEC6F6504CCE6E79E4CAFF /* MatchPipeline.swift */; };
 		30E08547A52BFFFA601404CA /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = F820656E4A3ABCD04FC49168 /* Models.swift */; };
 		3386BC5AE4329A706961FEAC /* BrandfetchSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10FE0C32FC2442090989354 /* BrandfetchSource.swift */; };
@@ -54,6 +55,7 @@
 		AF21F526EEBF2C188B8380AB /* ManualOverrideSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A52EDB8D876C3D24B6B18B8E /* ManualOverrideSheet.swift */; };
 		B0134F899AFBEB466F5E7207 /* SimpleIconsSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9BD9F60D43A4D56E72EFC4F /* SimpleIconsSource.swift */; };
 		BC20A6717455195B46563FB7 /* WikimediaSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 061D3C49F1AFEF23ED131B95 /* WikimediaSource.swift */; };
+		BEC0119834F61C6E09A8553C /* CandidateFileName.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39EEECF2529DD56CDDB234FC /* CandidateFileName.swift */; };
 		BF638B49139C82EBAB895417 /* ReviewSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8104FB0F5DF9282B24180F0 /* ReviewSession.swift */; };
 		BF8CB02FA75136D08147A3E7 /* ContactLogoMacApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5740648826FBF7D7003C356 /* ContactLogoMacApp.swift */; };
 		C119D905FD834F5F99CFC119 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = F820656E4A3ABCD04FC49168 /* Models.swift */; };
@@ -61,6 +63,7 @@
 		C1FCCD7148A8844104DE19AC /* DefaultSources.swift in Sources */ = {isa = PBXBuildFile; fileRef = E363321D372087081BC5666C /* DefaultSources.swift */; };
 		C2508AE86F24A9C06767E1E9 /* UndoLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7391AC474DA50FB01E0BF294 /* UndoLog.swift */; };
 		C363DBA04A219A74EF97535A /* PreferredMarksSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F9CD8E8CE34EC75A0104A85 /* PreferredMarksSource.swift */; };
+		C6BFAE917D3F8761478E8259 /* CandidateFileName.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39EEECF2529DD56CDDB234FC /* CandidateFileName.swift */; };
 		C963AA407E3D6C2CA3819674 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19B063D75543B34805CD5F1C /* SettingsView.swift */; };
 		CA91FC9CFC2D73B6A9E770E7 /* LogoSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F13C914BB55CC5108C409D4 /* LogoSource.swift */; };
 		CD0E7DCE7500AB2379551539 /* ReviewSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8104FB0F5DF9282B24180F0 /* ReviewSession.swift */; };
@@ -74,6 +77,7 @@
 		E85E9844A8255B7CF6827FD3 /* WikimediaSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 061D3C49F1AFEF23ED131B95 /* WikimediaSource.swift */; };
 		E9FFB36BD4D88F42DE084600 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56605D3FFDA7F1FA949DABF3 /* ContentView.swift */; };
 		F35330A13FBDC551DF76936B /* ManualOverrideSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 257BEC55D3F30E12E865F73F /* ManualOverrideSheet.swift */; };
+		F8EA2C9D6F06FEDC2F89AC22 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCF41B30625237952CE7D3A8 /* KeychainStore.swift */; };
 		FCEA914F2D6184C263662049 /* ImagePreparer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D286008B1C88DA56ECD4BC34 /* ImagePreparer.swift */; };
 		FE5B722094DE4FE2C89CDA56 /* LogoSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F13C914BB55CC5108C409D4 /* LogoSource.swift */; };
 /* End PBXBuildFile section */
@@ -131,6 +135,7 @@
 		257BEC55D3F30E12E865F73F /* ManualOverrideSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualOverrideSheet.swift; sourceTree = "<group>"; };
 		2F13C914BB55CC5108C409D4 /* LogoSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogoSource.swift; sourceTree = "<group>"; };
 		31BCB449DF697F691F3899EC /* ContactLogoKit.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = ContactLogoKit.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		39EEECF2529DD56CDDB234FC /* CandidateFileName.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CandidateFileName.swift; sourceTree = "<group>"; };
 		4969E286A152FDE73909DD81 /* NameNormalizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NameNormalizer.swift; sourceTree = "<group>"; };
 		50D298FD00C310D0EF60F799 /* IdentityResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentityResolver.swift; sourceTree = "<group>"; };
 		56605D3FFDA7F1FA949DABF3 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -155,6 +160,7 @@
 		C8104FB0F5DF9282B24180F0 /* ReviewSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewSession.swift; sourceTree = "<group>"; };
 		C8225B32D4FCAB226233A5B9 /* WordLists.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WordLists.swift; sourceTree = "<group>"; };
 		C98D5B3CD005C6DA5DB36B57 /* HTTPRetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPRetry.swift; sourceTree = "<group>"; };
+		CCF41B30625237952CE7D3A8 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
 		D286008B1C88DA56ECD4BC34 /* ImagePreparer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImagePreparer.swift; sourceTree = "<group>"; };
 		D79CC86B84746C889E1B7462 /* FaviconSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FaviconSource.swift; sourceTree = "<group>"; };
 		E04865AB793CE93A696E583A /* CandidateRanker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CandidateRanker.swift; sourceTree = "<group>"; };
@@ -215,7 +221,9 @@
 			isa = PBXGroup;
 			children = (
 				EBAD4842EA4D40654FEFC94B /* BackgroundMatchRunner.swift */,
+				39EEECF2529DD56CDDB234FC /* CandidateFileName.swift */,
 				D286008B1C88DA56ECD4BC34 /* ImagePreparer.swift */,
+				CCF41B30625237952CE7D3A8 /* KeychainStore.swift */,
 				C8104FB0F5DF9282B24180F0 /* ReviewSession.swift */,
 				B93FC49350414117E0A9F619 /* SettingsStore.swift */,
 				5ED8D6C0517E1AE6081E879C /* SVGRasterizer.swift */,
@@ -493,6 +501,7 @@
 			files = (
 				0E31DC19E24B4432088056AC /* BackgroundMatchRunner.swift in Sources */,
 				3386BC5AE4329A706961FEAC /* BrandfetchSource.swift in Sources */,
+				C6BFAE917D3F8761478E8259 /* CandidateFileName.swift in Sources */,
 				02848CAA91730AA6A8CD9AA4 /* CandidateRanker.swift in Sources */,
 				6AE8A1498C59CB7B58305D0E /* CompaniesLogoSource.swift in Sources */,
 				879E4773057DAEE3D22F1911 /* CompanyCatalog.swift in Sources */,
@@ -505,6 +514,7 @@
 				001568AA1D5D1562A015B3C6 /* IdentityResolver.swift in Sources */,
 				D6DBC704AE63CBA3589F1C94 /* ImageFlags.swift in Sources */,
 				044A5E3E5D8C15654D298DDF /* ImagePreparer.swift in Sources */,
+				290B0165116D8C7B9BEE8C41 /* KeychainStore.swift in Sources */,
 				FE5B722094DE4FE2C89CDA56 /* LogoSource.swift in Sources */,
 				2CE8F74A2766F2F4E0866C15 /* MatchPipeline.swift in Sources */,
 				30E08547A52BFFFA601404CA /* Models.swift in Sources */,
@@ -527,6 +537,7 @@
 			files = (
 				785EABE71FF9B24DDA7B1259 /* BackgroundMatchRunner.swift in Sources */,
 				1C98B7BB5F995C29D1B31B93 /* BrandfetchSource.swift in Sources */,
+				BEC0119834F61C6E09A8553C /* CandidateFileName.swift in Sources */,
 				66A6BA19C6F3EB06181C2A0E /* CandidateRanker.swift in Sources */,
 				1E41FAE9CACFEFEB66CE1A4E /* CompaniesLogoSource.swift in Sources */,
 				09E79A9F1F1ECE8DA660D31A /* CompanyCatalog.swift in Sources */,
@@ -539,6 +550,7 @@
 				80090D43A6352486FD717F9E /* IdentityResolver.swift in Sources */,
 				46F369E68DCFF497DB8076DD /* ImageFlags.swift in Sources */,
 				FCEA914F2D6184C263662049 /* ImagePreparer.swift in Sources */,
+				F8EA2C9D6F06FEDC2F89AC22 /* KeychainStore.swift in Sources */,
 				CA91FC9CFC2D73B6A9E770E7 /* LogoSource.swift in Sources */,
 				3BC0131CA87BEA135FAC7140 /* MatchPipeline.swift in Sources */,
 				C119D905FD834F5F99CFC119 /* Models.swift in Sources */,
