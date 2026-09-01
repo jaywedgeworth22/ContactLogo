@@ -23,6 +23,7 @@ Protocol: /Users/jay/apps/EFFORT-LOG-PROTOCOL.md (canonical). Live board: this f
 ## In Progress
 - **2026-09-01 — GROK — IN PROGRESS — Native shells: surface retryable match rows instead of Not found (board 0eceafd5, issue #33, worktree `~/apps/contactlogo-grok-retryable` @ `grok/native-retryable-rows`).**  Badge + Retry on the Not-found row. Web copy `No logo found` for true misses. No fourth bucket. PR #50.
 - **2026-09-01 — GROK — IN PROGRESS — Android P1: undo last batch, stop candidate wrap, Select High, brand mipmaps (board 79e358ef, issue #43, worktree `~/apps/contactlogo-grok-android-p1` @ `grok/android-p1-gaps`).**  Port kit UndoLog to app-private storage, Ready chip filters only, no `%` candidate wrap, Swap launcher mipmaps, versionName 1.0.1.
+- **2026-09-01 — GROK — IN PROGRESS — Web review UX: lock card height + human triage chrome (board efe8cdfb, issue #35, worktree `~/apps/contactlogo-grok-review-ux` @ `grok/web-review-ux`).**  Virtualizer assumes uniform rows; CSS locks `.card` height and truncates.  Approve is primary; Crop/Upload/Paste sit behind Choose your own.  J/K/A/S/U triage.  Settings HD-key empty-state.
 - **2026-09-01 — GROK — IN PROGRESS — Domain-keyed first-party logo cache on Vercel (board 72a48e35, issue #44, worktree `~/apps/contactlogo-grok-logo-cache` @ `grok/first-party-logo-cache`).**  `GET /api/logo/:registrableDomain`.  No address books.  Web engine tries the cache first; native stays on live CDNs this PR.
 - **2026-09-01 — GROK — IN PROGRESS — Full-stack audit + remediations (board 1d89d23b, issue #41, worktree `~/apps/contactlogo-grok-audit` @ `grok/full-stack-audit`).**  Trust surfaces, Simple Icons liveness, PWA/SEO, and native follow-ups from the 2026-09-01 owner audit.
 - **2026-08-27 — GROK — IN PROGRESS — Pickup Monet PR #24 local compile (board 30af32b2, issue #30, worktree `~/apps/contactlogo-grok-eval` @ `claude/full-app-evaluation-wwwwk1`).**  Native Swift/Android compiled for the first time.  Golden corpus now runs in Swift, TypeScript, and Kotlin.  `UIBackgroundModes=processing` is in the built iOS Info.plist.  PR #24 merged 2026-08-29.  Remaining owner decisions (logo licensing, store listings) are not merge blockers.
@@ -35,6 +36,7 @@ Protocol: /Users/jay/apps/EFFORT-LOG-PROTOCOL.md (canonical). Live board: this f
 ## Changelog of this log
 - 2026-09-01 — GROK — claimed issue #33 retryable native rows (board 0eceafd5).
 - 2026-09-01 — GROK — claimed Android P1 gaps (issue #43, board 79e358ef).
+- 2026-09-01 — GROK — claimed web review UX (issue #35, board efe8cdfb).
 - 2026-09-01 — GROK — claimed domain-keyed first-party logo cache (issue #44, board 72a48e35).
 - 2026-08-27 — GROK — local compile pickup of Monet PR #24 (issue #30, board 30af32b2).
 - 2026-08-21 — KIMI — file created during owner-requested fleet setup audit.

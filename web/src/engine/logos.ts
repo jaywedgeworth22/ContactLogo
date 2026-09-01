@@ -1,4 +1,5 @@
 import { lookupCompanyDomain, lookupCompanyTicker } from "./catalog.ts";
+import { getBrandfetchClientId, getLogoDevToken } from "./settings.ts";
 
 export type LogoSourceName =
   | "cache"
@@ -117,24 +118,8 @@ export function simpleIconsSlug(domain: string): string | undefined {
   return SIMPLE_SLUGS[domain];
 }
 
-function readEnv(name: string): string {
-  const proc = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process;
-  const fromProc = proc?.env?.[name] ?? proc?.env?.[`VITE_${name}`];
-  if (fromProc) return String(fromProc).trim();
-  const viteEnv = (import.meta as unknown as { env?: Record<string, string | undefined> }).env;
-  const fromVite = viteEnv?.[name] ?? viteEnv?.[`VITE_${name}`];
-  return String(fromVite ?? "").trim();
-}
-
 /** Brandfetch's Logo Link CDN 403s without a client id (`?c=`).  See docs/HANDOFF-LOCAL.md. */
-export function getBrandfetchClientId(): string {
-  return readEnv("BRANDFETCH_CLIENT_ID") || readEnv("VITE_BRANDFETCH_CLIENT_ID");
-}
-
-/** Logo.dev's image CDN 403s without a token (`?token=`).  See docs/HANDOFF-LOCAL.md. */
-export function getLogoDevToken(): string {
-  return readEnv("LOGODEV_TOKEN") || readEnv("VITE_LOGODEV_TOKEN");
-}
+export { getBrandfetchClientId, getLogoDevToken };
 
 /** Same-origin path for the domain-keyed first-party cache.  Never a contact key. */
 export function firstPartyLogoPath(domain: string): string {

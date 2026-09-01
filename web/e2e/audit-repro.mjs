@@ -22,11 +22,41 @@
  * BASE_URL overrides the target if the server is not on :3000.
  */
 import { chromium } from "playwright";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const BASE = process.env.BASE_URL ?? "http://localhost:3000/";
-const VCF = join(dirname(fileURLToPath(import.meta.url)), "audit-repro.vcf");
+
+/** *.vcf is gitignored (AddressBook PII).  The fixture is generated here. */
+function writeFixture() {
+  const cards = [
+    ["Walgreens", "Walgreens", "https://walgreens.com", "hello@walgreens.com"],
+    ["FedEx", "FedEx", "https://fedex.com", "hello@fedex.com"],
+    [
+      "Bayou City Sprinkler And Fire Protection Services Of Greater Houston LLC Doing Business As The Very Long Name That Used To Wrap",
+      "Bayou City Sprinkler And Fire Protection Services Of Greater Houston LLC",
+      "https://bayoucity.example",
+      "office@bayoucity.example",
+    ],
+  ];
+  for (let i = 0; i < 36; i += 1) {
+    const name = `Acme ${i} ${"Roofing Plumbing Electrical And Landscape ".repeat(2)}Co`;
+    cards.push([name, name, `https://acme${i}.example`, `info@acme${i}.example`]);
+  }
+  const body = cards
+    .map(
+      ([fn, org, url, email]) =>
+        `BEGIN:VCARD\r\nVERSION:3.0\r\nFN:${fn}\r\nORG:${org}\r\nURL:${url}\r\nEMAIL:${email}\r\nEND:VCARD`,
+    )
+    .join("\r\n");
+  const dir = mkdtempSync(join(tmpdir(), "contactlogo-e2e-"));
+  const path = join(dir, "audit-repro.vcf");
+  writeFileSync(path, body);
+  return path;
+}
+
+const VCF = writeFixture();
 
 /**
  * The "Circle mask preview" toggle and the crop dialog's backing toggle are
@@ -111,6 +141,73 @@ await page.waitForTimeout(400);
 const reselected = await approved();
 if (reselected !== (await checkedCards())) ok = false;
 rec("CL-08", ok, `check/uncheck track; after clear label=${cleared}, after select-all label=${reselected}, both equal to the checked boxes`);
+
+// Issue #35 — heterogeneous rows (long names, Choose your own menu) must not
+// break the uniform-height virtualizer: no overlap, last card reachable.
+const cardBoxes = await page.locator("article.card").evaluateAll((nodes) =>
+  nodes.map((n) => {
+    const r = n.getBoundingClientRect();
+    return { top: r.top, bottom: r.bottom, height: r.height, left: r.left, right: r.right };
+  }),
+);
+const heights = cardBoxes.map((b) => b.height);
+const heightSpread = heights.length ? Math.max(...heights) - Math.min(...heights) : 99;
+let overlap = false;
+for (let i = 0; i < cardBoxes.length; i += 1) {
+  for (let j = i + 1; j < cardBoxes.length; j += 1) {
+    const a = cardBoxes[i];
+    const b = cardBoxes[j];
+    const x = a.left < b.right && a.right > b.left;
+    const y = a.top < b.bottom - 1 && a.bottom > b.top + 1;
+    if (x && y) overlap = true;
+  }
+}
+const firstCard = page.locator("article.card").first();
+const heightBeforeMenu = (await firstCard.boundingBox())?.height ?? 0;
+await firstCard.getByRole("button", { name: "Choose your own", exact: true }).click();
+await firstCard.getByRole("menuitem", { name: "Paste URL", exact: true }).waitFor({ state: "visible" });
+const heightAfterMenu = (await firstCard.boundingBox())?.height ?? 0;
+await page.keyboard.press("Escape");
+
+const listIndex = await page.locator(".virtual-list").evaluateAll((lists) => {
+  let best = 0;
+  let bestH = -1;
+  lists.forEach((el, i) => {
+    const h = el.querySelector(".virtual-list-spacer")?.getBoundingClientRect().height ?? 0;
+    if (h > bestH) {
+      bestH = h;
+      best = i;
+    }
+  });
+  return best;
+});
+const list = page.locator(".virtual-list").nth(listIndex);
+await list.evaluate((el) => {
+  el.scrollTop = el.scrollHeight;
+});
+await page.waitForTimeout(400);
+const reach = await list.evaluate((el) => {
+  const spacer = el.querySelector(".virtual-list-spacer");
+  const cards = [...el.querySelectorAll("article.card")];
+  if (!spacer || cards.length === 0) return { ok: false, reason: "no spacer or cards" };
+  const last = cards[cards.length - 1].getBoundingClientRect();
+  const view = el.getBoundingClientRect();
+  const spacerH = spacer.getBoundingClientRect().height;
+  const mounted = cards.length;
+  return {
+    ok: last.bottom <= view.bottom + 8 && spacerH >= el.clientHeight && spacerH > 800 && mounted < 40,
+    lastBottom: Math.round(last.bottom),
+    viewBottom: Math.round(view.bottom),
+    spacerH: Math.round(spacerH),
+    scrollH: el.scrollHeight,
+    mounted,
+  };
+});
+rec(
+  "CL-35",
+  heightSpread <= 2 && !overlap && Math.abs(heightAfterMenu - heightBeforeMenu) <= 2 && reach.ok,
+  `heightSpread=${heightSpread}px overlap=${overlap} menuDelta=${Math.round(heightAfterMenu - heightBeforeMenu)}px reach=${JSON.stringify(reach)} (long names + Choose your own must keep uniform rows)`,
+);
 
 await browser.close();
 const failed = results.filter((r) => !r.pass);
