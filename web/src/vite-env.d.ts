@@ -1,4 +1,5 @@
 interface ImportMetaEnv {
+  readonly MODE?: string;
   readonly DD_APPLICATION_ID?: string;
   readonly DD_CLIENT_TOKEN?: string;
   readonly DD_SITE?: string;
@@ -11,6 +12,10 @@ interface ImportMetaEnv {
   readonly VITE_LOGODEV_TOKEN?: string;
   readonly VITE_SENTRY_DSN?: string;
   readonly VITE_SENTRY_ENV?: string;
+  readonly VITE_SENTRY_TRACES_SAMPLE_RATE?: string;
+  readonly VITE_SENTRY_REPLAY_ENABLED?: string;
+  readonly VITE_SENTRY_REPLAY_SESSION_SAMPLE_RATE?: string;
+  readonly VITE_SENTRY_REPLAY_ERROR_SAMPLE_RATE?: string;
 }
 
 interface ImportMeta {

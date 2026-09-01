@@ -21,6 +21,7 @@ Protocol: /Users/jay/apps/EFFORT-LOG-PROTOCOL.md (canonical). Live board: this f
 - **2026-08-25 — AG — COMPLETED — High-res logo sources (Google 256px, Clearbit 512px), quality baseline filter, 404 error prevention, review-first safety refinement, direct card drag-drop upload, and interactive crop/zoom studio modal.**  Upgraded web candidate sources (Clearbit 512px, Google 256px, Preferred SVGs); prevented SimpleIcons 404 question mark SVGs via strict slug validation; kept email and guessed domains in review; added card-level image drag & drop; and added in-browser interactive circle-mask crop/zoom/pan modal.  PR #19 merged to `main`.
 
 ## In Progress
+- **2026-09-01 — GROK — IN PROGRESS — Web Sentry SDK (`@sentry/browser`, DealDex Vite helper pattern) + `logo.match` metric (board 86902ab6, PR #52, worktree `~/apps/contactlogo-grok-sentry-adopt` @ `grok/sentry-fleet-adoption`).**  Replay 100% error / 10% session, feedback widget on, sendDefaultPii false.  Android Sentry is iOS-only until Android ships.
 - **2026-09-01 — GROK — IN PROGRESS — Native shells: surface retryable match rows instead of Not found (board 0eceafd5, issue #33, worktree `~/apps/contactlogo-grok-retryable` @ `grok/native-retryable-rows`).**  Badge + Retry on the Not-found row. Web copy `No logo found` for true misses. No fourth bucket. PR #50.
 - **2026-09-01 — GROK — IN PROGRESS — Persist the iOS background review queue before notifying (board f91039fc, issue #32, PR #45, worktree `~/apps/contactlogo-grok-issue32` @ `grok/persist-review-queue`).**  Codable `MatchResult`, `ReviewQueueStore` JSON in Application Support, write in `BackgroundMatchRunner.run()` before `setTaskCompleted` and before the notification, restore on `ReviewSession` init, discard on contact-store change-token mismatch.
 - **2026-09-01 — GROK — IN PROGRESS — Android P1: undo last batch, stop candidate wrap, Select High, brand mipmaps (board 79e358ef, issue #43, worktree `~/apps/contactlogo-grok-android-p1` @ `grok/android-p1-gaps`).**  Port kit UndoLog to app-private storage, Ready chip filters only, no `%` candidate wrap, Swap launcher mipmaps, versionName 1.0.1.
@@ -35,6 +36,7 @@ Protocol: /Users/jay/apps/EFFORT-LOG-PROTOCOL.md (canonical). Live board: this f
 - **2026-08-22 — CURSOR — PLANNED — Attach contactlogo.com to Coolify + Cloudflare.**  Domain is owned (Grok tapspin log).  Zone not in Cloudflare yet.  Do not use Render.
 
 ## Changelog of this log
+- 2026-09-01 — GROK — claimed web Sentry SDK (board 86902ab6).
 - 2026-09-01 — GROK — claimed issue #33 retryable native rows (board 0eceafd5).
 - 2026-09-01 — GROK — claimed issue #32 persist-before-notify (board f91039fc).
 - 2026-09-01 — GROK — claimed Android P1 gaps (issue #43, board 79e358ef).
