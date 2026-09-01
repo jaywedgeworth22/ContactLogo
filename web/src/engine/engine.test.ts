@@ -220,6 +220,7 @@ test("companies logo slug picker matches Swift", async () => {
 
 test("source labels cover every logo source", async () => {
   const { sourceLabel } = await import("./logos.ts");
+  assert.equal(sourceLabel("cache"), "ContactLogo cache");
   assert.equal(sourceLabel("preferred"), "Iconic mark");
   assert.equal(sourceLabel("simpleicons"), "Simple Icons");
   assert.equal(sourceLabel("ticker"), "Stock Ticker Pack (HD)");
@@ -255,6 +256,8 @@ test("nextCandidateIndex never wraps past the last source", async () => {
 test("candidateUrls provides high-res sources and avoids unknown simpleicons", async () => {
   const { candidateUrls } = await import("./logos.ts");
   const known = candidateUrls("apple.com");
+  assert.equal(known[0]?.source, "cache");
+  assert.equal(known[0]?.proxied, "simpleicons");
   assert.equal(known.some((c) => c.source === "simpleicons"), true);
   assert.equal(known.some((c) => c.source === "ticker"), true);
   // Brandfetch and Logo.dev are omitted unless their credential is configured,

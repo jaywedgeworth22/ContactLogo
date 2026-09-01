@@ -106,8 +106,10 @@ export function staticCeiling(item: {
  * Google faviconV2 URL on any catalog or website identity.
  */
 export function assetTier(best: RankedHit, via: IdentityVia): Confidence {
-  if (isFavicon(best)) return via === "guess" ? "low" : "medium";
-  if (best.kind === "icon" && HIGH_TIER_SOURCES.has(best.source)) return "high";
+  const source = best.source === "cache" ? (best.proxied ?? "clearbit") : best.source;
+  const hit: RankedHit = { ...best, source };
+  if (isFavicon(hit)) return via === "guess" ? "low" : "medium";
+  if (hit.kind === "icon" && HIGH_TIER_SOURCES.has(source)) return "high";
   return "medium";
 }
 
