@@ -12,6 +12,7 @@ struct ContactLogoiOSApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
+        SentryTelemetry.start()
         let settings = SettingsStore()
         let session = ReviewSession(settings: settings)
         _settingsStore = StateObject(wrappedValue: settings)
