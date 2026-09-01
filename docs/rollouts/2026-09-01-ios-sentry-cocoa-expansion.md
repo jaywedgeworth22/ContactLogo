@@ -24,4 +24,5 @@ Integrates native Sentry Cocoa SDK into ContactLogo iOS to capture native crashe
 - `xcodebuild -project ContactLogo.xcodeproj -scheme ContactLogoiOS -showdestinations` — resolved Sentry Cocoa SPM package cleanly.
 
 ## Next Steps & Blockers
-- None.
+- Android Sentry SDK is **out of scope until Android ships** as a real track.  iOS Cocoa only for native.
+- Web Sentry (`@sentry/browser`) is a sibling rollout: `docs/rollouts/2026-09-01-web-sentry-sdk.md`.

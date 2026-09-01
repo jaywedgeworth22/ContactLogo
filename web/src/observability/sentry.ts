@@ -1,30 +1,26 @@
 /**
- * Lightweight browser Sentry client observability for ContactLogo Web.
+ * Sentry client observability for ContactLogo.
  *
- * Gated on VITE_SENTRY_DSN. Inert in dev/CI when unset.
- * Captures unhandled window errors and promise rejections with URL and
- * credential sanitization.
+ * Gated on VITE_SENTRY_DSN (inlined by Vite at build time).
+ * Completely inert in dev/CI when no DSN is provided.
+ *
+ * Vanilla Vite (not React) — same helper pattern as DealDex/BotFleet
+ * using @sentry/browser.
+ *
+ * - Session Replay 100% on error, 10% baseline session
+ * - maskAllText / blockAllMedia (address-book UI)
+ * - User Feedback widget (consumer web UI)
+ * - sendDefaultPii false; no contact names in telemetry
  */
+
+import * as Sentry from "@sentry/browser";
 
 let initialized = false;
 
-function parseDsn(dsn: string): { host: string; projectId: string; publicKey: string } | null {
-  try {
-    const url = new URL(dsn);
-    const publicKey = url.username;
-    const pathParts = url.pathname.split("/").filter(Boolean);
-    const projectId = pathParts[pathParts.length - 1];
-    if (!publicKey || !projectId) return null;
-    return { host: url.host, projectId, publicKey };
-  } catch {
-    return null;
-  }
-}
-
-function sanitizeText(text: string): string {
-  return text
-    .replace(/(?:key|secret|token|auth|password|api[_-]?key)=([^\s&]+)/gi, "$1=[REDACTED]")
-    .replace(/(?:bearer\s+)[a-zA-Z0-9_\-\.]{20,}/gi, "Bearer [REDACTED]");
+function stripQuery(url: string | undefined): string | undefined {
+  if (!url) return url;
+  const cut = url.indexOf("?");
+  return cut === -1 ? url : url.slice(0, cut);
 }
 
 export function startSentry(): void {
@@ -33,71 +29,94 @@ export function startSentry(): void {
   const dsn = (import.meta.env.VITE_SENTRY_DSN as string | undefined)?.trim();
   if (!dsn) return;
 
-  const parsed = parseDsn(dsn);
-  if (!parsed) return;
+  const env =
+    (import.meta.env.VITE_SENTRY_ENV as string | undefined)?.trim() ||
+    (import.meta.env.MODE as string | undefined) ||
+    "production";
 
-  const env = (import.meta.env.VITE_SENTRY_ENV as string | undefined)?.trim() || "production";
-  const endpoint = `https://${parsed.host}/api/${parsed.projectId}/envelope/?sentry_key=${parsed.publicKey}&sentry_version=7`;
+  const tracesSampleRate = Number(
+    (import.meta.env.VITE_SENTRY_TRACES_SAMPLE_RATE as string | undefined)?.trim() ??
+      "0.2",
+  );
+  const replayRaw = (
+    import.meta.env.VITE_SENTRY_REPLAY_ENABLED as string | undefined
+  )?.trim();
+  const replayDisabled = replayRaw
+    ? /^(false|0|off|no)$/i.test(replayRaw)
+    : false;
+  const replaysSessionSampleRate = Number(
+    (
+      import.meta.env.VITE_SENTRY_REPLAY_SESSION_SAMPLE_RATE as string | undefined
+    )?.trim() ?? "0.1",
+  );
+  const replaysOnErrorSampleRate = Number(
+    (
+      import.meta.env.VITE_SENTRY_REPLAY_ERROR_SAMPLE_RATE as string | undefined
+    )?.trim() ?? "1.0",
+  );
 
-  const sendError = (error: Error | string, mechanism = "onerror") => {
-    try {
-      const message = typeof error === "string" ? error : error.message || "Unknown error";
-      const stack = error instanceof Error ? error.stack : undefined;
-      const eventId = crypto.randomUUID().replace(/-/g, "");
-
-      const header = JSON.stringify({
-        event_id: eventId,
-        sent_at: new Date().toISOString(),
-        dsn,
-      });
-
-      const itemHeader = JSON.stringify({
-        type: "event",
-        content_type: "application/json",
-      });
-
-      const eventPayload = JSON.stringify({
-        event_id: eventId,
-        timestamp: Date.now() / 1000,
-        platform: "javascript",
-        environment: env,
-        level: "error",
-        exception: {
-          values: [
-            {
-              type: error instanceof Error ? error.name : "Error",
-              value: sanitizeText(message),
-              stacktrace: stack ? { frames: [{ filename: sanitizeText(stack) }] } : undefined,
-              mechanism: { handled: false, type: mechanism },
-            },
-          ],
-        },
-      });
-
-      const envelope = `${header}\n${itemHeader}\n${eventPayload}`;
-
-      if (navigator.sendBeacon) {
-        navigator.sendBeacon(endpoint, envelope);
-      } else {
-        fetch(endpoint, {
-          method: "POST",
-          body: envelope,
-          mode: "cors",
-          keepalive: true,
-        }).catch(() => {});
+  Sentry.init({
+    dsn,
+    environment: env,
+    sendDefaultPii: false,
+    tracesSampleRate: Number.isFinite(tracesSampleRate)
+      ? Math.min(Math.max(tracesSampleRate, 0), 1)
+      : 0.2,
+    enableLogs: true,
+    replaysSessionSampleRate:
+      !replayDisabled && Number.isFinite(replaysSessionSampleRate)
+        ? replaysSessionSampleRate
+        : 0,
+    replaysOnErrorSampleRate:
+      !replayDisabled && Number.isFinite(replaysOnErrorSampleRate)
+        ? replaysOnErrorSampleRate
+        : 0,
+    beforeSend(event) {
+      delete event.extra;
+      if (event.request) {
+        event.request = {
+          url: stripQuery(event.request.url),
+          method: event.request.method,
+        };
       }
-    } catch {
-      // Fail-soft
-    }
-  };
-
-  window.addEventListener("error", (event) => {
-    sendError(event.error || event.message, "onerror");
-  });
-
-  window.addEventListener("unhandledrejection", (event) => {
-    sendError(event.reason instanceof Error ? event.reason : String(event.reason), "onunhandledrejection");
+      return event;
+    },
+    integrations: [
+      Sentry.browserTracingIntegration(),
+      Sentry.feedbackIntegration({
+        colorScheme: "system",
+        autoInject: true,
+      }),
+      ...(!replayDisabled
+        ? [
+            Sentry.replayIntegration({
+              maskAllText: true,
+              blockAllMedia: true,
+            }),
+          ]
+        : []),
+    ],
   });
 
   initialized = true;
 }
+
+export function sentryStarted(): boolean {
+  return initialized;
+}
+
+/**
+ * Count a finished logo match pass.  `n` is the number of contacts that
+ * produced a suggestion (not skip).  Never sends names, emails, or domains.
+ */
+export function countLogoMatch(n: number): void {
+  if (!initialized || n <= 0) return;
+  try {
+    Sentry.metrics.count("logo.match", n);
+  } catch {
+    // Telemetry must never break matching.
+  }
+}
+
+export const captureException = Sentry.captureException;
+export const captureMessage = Sentry.captureMessage;

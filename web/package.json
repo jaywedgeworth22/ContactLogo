@@ -2,7 +2,7 @@
   "name": "contactlogo-web",
   "private": true,
   "license": "Apache-2.0",
-  "description": "ContactLogo Web \u2014 review-first logo matching for a vCard or Google CSV",
+  "description": "ContactLogo Web — review-first logo matching for a vCard or Google CSV",
   "homepage": "https://contactlogo.com",
   "type": "module",
   "scripts": {
@@ -16,6 +16,7 @@
   "dependencies": {
     "@datadog/browser-logs": "^6.33.0",
     "@datadog/browser-rum-slim": "^6.33.0",
+    "@sentry/browser": "^10.73.0",
     "dd-trace": "^5.80.0"
   },
   "devDependencies": {

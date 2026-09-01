@@ -33,6 +33,7 @@ import {
 } from "./engine/settings.ts";
 import { backupFilename, contactsToVcard, downloadText, parseVcard } from "./engine/vcard.ts";
 import { reportClientError } from "./observability/datadog.ts";
+import { countLogoMatch } from "./observability/sentry.ts";
 
 export type FilterStatus = "all" | "ready" | "review" | "notfound" | "missingphoto";
 
@@ -358,6 +359,7 @@ export function adoptContacts(contacts: BookContact[], label: string) {
   closeOpenMenu();
   state.contacts = contacts;
   state.items = matchBook(contacts);
+  countLogoMatch(state.items.filter((i) => i.confidence !== "skip").length);
   state.stage = "review";
   state.searchQuery = "";
   state.filterStatus = "all";
