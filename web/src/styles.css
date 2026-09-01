@@ -41,6 +41,7 @@
   --exhausted-bg: #f1ebe0;
   --exhausted-ink: #655e54;
   font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --review-card-height: 248px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -146,6 +147,15 @@ input[type="checkbox"]:focus-visible {
 .footer a { color: inherit; }
 .settings { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; margin: 0 0 18px; }
 .settings-input { width: min(100%, 28rem); padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); margin: 8px 12px 0 0; background: var(--card); color: var(--ink); }
+.settings-empty { margin: 8px 0 0; }
+.settings-warn { color: var(--danger); margin: 8px 0 0; }
+
+/* Contacts picker is a phone API.  Hide the copy and the button on fine-pointer desktops. */
+.phone-only { display: none; }
+@media (pointer: coarse), (max-width: 720px) {
+  span.phone-only { display: inline; }
+  button.phone-only { display: inline-flex; }
+}
 .drop {
   border: 1.5px dashed var(--line);
   background: var(--card);
@@ -249,11 +259,19 @@ input[type="checkbox"]:focus-visible {
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: 14px;
-  padding: 14px;
+  padding: 12px 14px;
   display: grid;
   grid-template-columns: 44px 56px 1fr;
   gap: 12px;
   align-items: start;
+  align-content: start;
+  height: var(--review-card-height, 248px);
+  min-height: var(--review-card-height, 248px);
+  max-height: var(--review-card-height, 248px);
+  overflow: visible;
+}
+.card.is-focused {
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 .card.high { outline: 2px solid color-mix(in srgb, var(--high) 33%, transparent); }
 .card.medium { outline: 2px solid color-mix(in srgb, var(--medium) 33%, transparent); }
@@ -287,6 +305,9 @@ input[type="checkbox"]:focus-visible {
   font-size: 0.82rem;
   font-weight: 600;
   color: var(--exhausted-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Confidence badge — docs/UI-CONTRACT.md §1.2. Carries the signal via a
@@ -319,12 +340,27 @@ input[type="checkbox"]:focus-visible {
   font-size: 0.74rem;
   color: var(--muted);
   font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.name { font-weight: 650; }
-.meta { color: var(--muted); font-size: 0.82rem; margin-top: 2px; }
+.name {
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.meta {
+  color: var(--muted);
+  font-size: 0.82rem;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
-.alts { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.alts { display: flex; gap: 8px; margin-top: 8px; flex-wrap: nowrap; overflow-x: auto; max-height: 44px; }
 .alts-btn {
   width: 44px;
   height: 44px;
@@ -350,12 +386,31 @@ input[type="checkbox"]:focus-visible {
    card's single primary action and takes the full row; secondary/ghost
    actions stay compact and wrap below it instead of competing for the same
    visual weight. */
-.actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.actions { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
 .actions .btn { font-size: 0.82rem; padding: 8px 14px; flex: 0 1 auto; }
 .actions > .btn:not(.secondary):not(.ghost) {
   flex-basis: 100%;
   font-weight: 600;
 }
+.choose-own { position: relative; flex: 0 0 auto; }
+.choose-own-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  z-index: 6;
+  min-width: 11rem;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: 0 10px 30px #1c191722;
+}
+.choose-own-menu.hidden { display: none; }
+.choose-own-menu .btn { width: 100%; justify-content: flex-start; }
+.kb-hint { color: var(--muted); font-size: 0.82rem; align-self: center; }
 
 .footer { margin-top: 40px; color: var(--muted); font-size: 0.85rem; }
 .hidden { display: none; }

@@ -7,12 +7,17 @@ import type { BookContact } from "./engine/classify.ts";
 import type { LogoHit } from "./engine/logos.ts";
 import type { ReviewItem } from "./engine/match.ts";
 import {
+  CREDENTIAL_STORAGE_FAILED_COPY,
   GUESSED_DOMAIN_NOTE,
+  HD_KEYS_EMPTY_COPY,
+  PRIVACY_SENTENCE,
+  REVIEW_CARD_HEIGHT,
   badgeText,
   filterItems,
   humanFlagPhrases,
   isExhaustedItem,
   isNonBrandItem,
+  isTriageTypingTarget,
   itemMatchesFilter,
   itemMatchesQuery,
   metaLine,
@@ -20,6 +25,7 @@ import {
   trimViewCache,
   removeCandidate,
   skippedNotice,
+  triageActionForKey,
   visibleSlice,
 } from "./app.ts";
 
@@ -173,6 +179,40 @@ test("filter and search compose", () => {
   assert.deepEqual(filterItems([ready, other], "fed", "ready"), [other]);
 });
 
+test("triage keys ignore typing, modifiers, and the crop modal", () => {
+  assert.equal(triageActionForKey("j"), "next");
+  assert.equal(triageActionForKey("K"), "prev");
+  assert.equal(triageActionForKey("a"), "approve");
+  assert.equal(triageActionForKey("s"), "skip");
+  assert.equal(triageActionForKey("u"), "upload");
+  assert.equal(triageActionForKey("j", { typing: true }), null);
+  assert.equal(triageActionForKey("a", { modal: true }), null);
+  assert.equal(triageActionForKey("s", { meta: true }), null);
+  assert.equal(isTriageTypingTarget({ tagName: "INPUT" }), true);
+  assert.equal(isTriageTypingTarget({ tagName: "BUTTON" }), false);
+});
+
+test("homepage privacy sentence and HD-key empty-state use the owner copy", () => {
+  assert.equal(
+    PRIVACY_SENTENCE,
+    "Your address book never leaves this device.  Crash and performance telemetry, if enabled, never includes contact names, emails, or photos.",
+  );
+  assert.match(PRIVACY_SENTENCE, /\. {2}Crash/);
+  assert.equal(
+    HD_KEYS_EMPTY_COPY,
+    "High-resolution Brandfetch and Logo.dev marks need a key.  Without one, ContactLogo uses Simple Icons, stock tickers, and favicons.",
+  );
+  assert.match(HD_KEYS_EMPTY_COPY, /\. {2}Without/);
+  assert.match(CREDENTIAL_STORAGE_FAILED_COPY, /\. {2}It will/);
+});
+
+test("locked review cards are short enough that 14k contacts stay a window", () => {
+  assert.equal(REVIEW_CARD_HEIGHT, 248);
+  const rows = visibleSlice(14379, 3, REVIEW_CARD_HEIGHT + 16, 0, 800, 2);
+  assert.ok(rows.end <= 30, `mounted ${rows.end} cards`);
+  assert.equal(rows.totalHeight, Math.ceil(14379 / 3) * (REVIEW_CARD_HEIGHT + 16));
+});
+
 test("virtualization mounts a window, not the whole book", () => {
   const rows = visibleSlice(14379, 3, 260, 0, 800, 2);
   assert.equal(rows.start, 0);
@@ -254,6 +294,16 @@ test("trimViewCache bounds the cache without evicting mounted views", () => {
  * `onFallback`.  Scanning the source is what is left, in the same spirit as
  * `csp.test.ts`.
  */
+test("review chrome copy is American and hides raw engine flags behind human phrases", () => {
+  const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "app.ts"), "utf8");
+  assert.doesNotMatch(source, /recognise/);
+  assert.match(source, /recognize instead of two letters/);
+  assert.match(source, /Choose your own/);
+  assert.match(source, /"Approve"/);
+  assert.doesNotMatch(source, /class: "actions" \}, retry, cropBtn, uploadBtn, pasteBtn/);
+  assert.match(source, /class: "phone-only"/);
+});
+
 test("every export and sync path collects embed and padding failures", () => {
   const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "app.ts"), "utf8");
   const calls = [...source.matchAll(/\b(embedSrc|padAndSquareImage)\s*\(/g)];

@@ -10,7 +10,17 @@ import { test } from "node:test";
 import type { BookContact } from "./engine/classify.ts";
 
 type Handler = (event: StubEvent) => void;
-type StubEvent = { type: string; target: StubElement; preventDefault(): void; relatedTarget?: unknown };
+type StubEvent = {
+  type: string;
+  target: StubElement;
+  preventDefault(): void;
+  stopPropagation(): void;
+  relatedTarget?: unknown;
+  key?: string;
+  metaKey?: boolean;
+  ctrlKey?: boolean;
+  altKey?: boolean;
+};
 
 let created: StubElement[] = [];
 
@@ -120,10 +130,12 @@ class StubElement {
   }
 }
 
-function fire(node: StubElement, type: string): void {
-  const event: StubEvent = { type, target: node, preventDefault() {} };
+function fire(node: StubElement, type: string, extra: Partial<StubEvent> = {}): void {
+  const event: StubEvent = { type, target: node, preventDefault() {}, stopPropagation() {}, ...extra };
   for (const handler of [...(node.listeners.get(type) ?? [])]) handler(event);
 }
+
+const documentListeners = new Map<string, Handler[]>();
 
 const stubDocument = {
   activeElement: null as StubElement | null,
@@ -137,8 +149,14 @@ const stubDocument = {
   createElementNS(_ns: string, tag: string) {
     return new StubElement(tag);
   },
-  addEventListener() {},
-  removeEventListener() {},
+  addEventListener(type: string, fn: Handler) {
+    const bucket = documentListeners.get(type) ?? [];
+    bucket.push(fn);
+    documentListeners.set(type, bucket);
+  },
+  removeEventListener(type: string, fn: Handler) {
+    documentListeners.set(type, (documentListeners.get(type) ?? []).filter((h) => h !== fn));
+  },
 };
 
 const stubWindow = {
@@ -216,6 +234,15 @@ test("the landing page gives way to the review stage", () => {
   for (const jargon of ["ContactLogoKit", "backups/", "BadgeBook", "Crest"]) {
     assert.ok(!copy.includes(jargon), `customer copy leaked "${jargon}"`);
   }
+  assert.ok(copy.includes("recognize instead of two letters"), "British recognise leaked");
+  assert.ok(!copy.includes("recognise"), "British recognise still present");
+  assert.ok(
+    copy.includes(
+      "Your address book never leaves this device.  Crash and performance telemetry, if enabled, never includes contact names, emails, or photos.",
+    ),
+    "homepage privacy sentence missing",
+  );
+  assert.ok(findAll(stubDocument.root, (n) => hasClass(n, "phone-only")).length >= 2, "phone-only copy missing");
 
   adoptContacts(book(3), "Test");
   const afterHeadings = findAll(stubDocument.root, (n) => n.tagName === "H2" && visible(n)).map((n) => n.textContent);
@@ -364,4 +391,65 @@ test("card checkboxes and candidate buttons carry accessible names", () => {
   assert.equal(banner.getAttribute("aria-live"), "polite");
   assert.equal(banner.getAttribute("aria-atomic"), "true");
   assert.equal(banner.getAttribute("role"), "status");
+});
+
+test("settings shows the HD-key empty-state until a key is saved", () => {
+  stubDocument.root = new StubElement("div");
+  created = [];
+  render();
+  const settingsBtn = findAll(stubDocument.root, (n) => n.tagName === "BUTTON" && n.textContent === "Settings")[0];
+  fire(settingsBtn, "click");
+  const empty = byClass("settings-empty").filter(visible);
+  assert.ok(empty.length === 1, "HD-key empty-state missing");
+  assert.match(
+    empty[0].textContent,
+    /High-resolution Brandfetch and Logo\.dev marks need a key/,
+  );
+});
+
+test("Approve is the primary card action; Crop/Upload/Paste sit behind Choose your own", () => {
+  stubDocument.root = new StubElement("div");
+  created = [];
+  adoptContacts(book(3), "Test");
+  const card = cards()[0];
+  const buttons = findAll(card, (n) => n.tagName === "BUTTON");
+  const labels = buttons.map((b) => b.textContent);
+  assert.ok(labels.includes("Approve") || labels.includes("Approved"), `actions: ${labels.join(" | ")}`);
+  assert.ok(labels.includes("Choose your own"));
+  assert.ok(labels.includes("Skip"));
+  const crop = buttons.find((b) => b.textContent === "Crop")!;
+  const upload = buttons.find((b) => b.textContent === "Upload")!;
+  const paste = buttons.find((b) => b.textContent === "Paste URL")!;
+  assert.ok(crop && upload && paste, "override actions missing from the menu");
+  assert.ok(hasClass(crop.parent as StubElement, "hidden") || hasClass(ancestorWithClass(crop, "choose-own-menu")!, "hidden"));
+
+  const toggle = buttons.find((b) => b.textContent === "Choose your own")!;
+  fire(toggle, "click");
+  const menu = ancestorWithClass(paste, "choose-own-menu")!;
+  assert.equal(hasClass(menu, "hidden"), false, "Choose your own did not open");
+});
+
+test("J/K move the focused card and A approves it", () => {
+  stubDocument.root = new StubElement("div");
+  created = [];
+  adoptContacts(book(6), "Test");
+  const keydown = documentListeners.get("keydown") ?? [];
+  assert.ok(keydown.length > 0, "no document keydown listener");
+  const event = {
+    type: "keydown",
+    target: stubDocument.root,
+    key: "j",
+    metaKey: false,
+    ctrlKey: false,
+    altKey: false,
+    preventDefault() {},
+    stopPropagation() {},
+  };
+  for (const handler of keydown) handler(event);
+  assert.ok(cards().some((c) => hasClass(c, "is-focused")), "J did not focus a card");
+  const approveEvent = { ...event, key: "a" };
+  for (const handler of keydown) handler(approveEvent);
+  const focused = cards().find((c) => hasClass(c, "is-focused"))!;
+  const check = focused.children.find((n) => n.getAttribute("type") === "checkbox")!;
+  assert.equal(check.checked, true, "A did not approve the focused card");
 });

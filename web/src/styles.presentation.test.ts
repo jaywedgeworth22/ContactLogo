@@ -226,6 +226,19 @@ test("virtual-list scaffolding classes exist", () => {
   assert.match(css, /position:\s*relative/); // spacer
 });
 
+test("review cards lock height and truncate overflowing names", () => {
+  const cardBlock = extractBlock(css, "\n.card {\n");
+  assert.match(cardBlock, /max-height:\s*var\(--review-card-height/);
+  assert.match(cardBlock, /min-height:\s*var\(--review-card-height/);
+  const nameBlock = extractBlock(css, "\n.name {");
+  assert.match(nameBlock, /text-overflow:\s*ellipsis/);
+  assert.match(nameBlock, /white-space:\s*nowrap/);
+  const altsBlock = extractBlock(css, "\n.alts {");
+  assert.match(altsBlock, /flex-wrap:\s*nowrap/);
+  assert.match(css, /\.choose-own-menu\s*\{/);
+  assert.match(css, /\.phone-only\s*\{/);
+});
+
 test("card grid gives the content column meaningfully more room than the old ~140px", () => {
   // grid minimum column width
   const gridMin = /minmax\((\d+)px/.exec(css);

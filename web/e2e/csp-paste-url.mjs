@@ -203,7 +203,9 @@ if (liveThumbs === 0) {
   };
 
   const approvedBefore = await approved();
-  await page.locator("article.card").first().getByRole("button", { name: "Paste URL", exact: true }).click();
+  const card = page.locator("article.card").first();
+  await card.getByRole("button", { name: "Choose your own", exact: true }).click();
+  await card.getByRole("menuitem", { name: "Paste URL", exact: true }).click();
   await page
     .waitForFunction(
       (prev) => {
