@@ -46,7 +46,8 @@ test("CL-13 a subdomain still finds the catalog brand and its glyph", () => {
   assert.equal(item.domain, "walgreens.com");
   assert.equal(item.via, "website");
   assert.equal(item.flags.includes("subdomain-reduced"), true);
-  assert.equal(item.candidates[0]?.source, "simpleicons");
+  // walgreens Simple Icons slug 404s; ticker pack is the remaining high-tier glyph.
+  assert.equal(item.candidates[0]?.source, "ticker");
 });
 
 test("CL-03 a social URL never becomes the logo domain", () => {

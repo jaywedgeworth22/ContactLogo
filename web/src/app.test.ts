@@ -67,6 +67,9 @@ test("only user-relevant flags are phrased; the rest are dropped", () => {
     "matched a partial name",
     "replaces an existing photo",
   ]);
+  assert.deepEqual(humanFlagPhrases(["email-domain-unrelated"]), [
+    "email domain may not be this brand",
+  ]);
 });
 
 test("an unknown via value is suppressed rather than printed", () => {
