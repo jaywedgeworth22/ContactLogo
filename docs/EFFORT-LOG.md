@@ -21,6 +21,7 @@ Protocol: /Users/jay/apps/EFFORT-LOG-PROTOCOL.md (canonical). Live board: this f
 - **2026-08-25 — AG — COMPLETED — High-res logo sources (Google 256px, Clearbit 512px), quality baseline filter, 404 error prevention, review-first safety refinement, direct card drag-drop upload, and interactive crop/zoom studio modal.**  Upgraded web candidate sources (Clearbit 512px, Google 256px, Preferred SVGs); prevented SimpleIcons 404 question mark SVGs via strict slug validation; kept email and guessed domains in review; added card-level image drag & drop; and added in-browser interactive circle-mask crop/zoom/pan modal.  PR #19 merged to `main`.
 
 ## In Progress
+- **2026-09-01 — GROK — IN PROGRESS — Native shells: surface retryable match rows instead of Not found (board 0eceafd5, issue #33, worktree `~/apps/contactlogo-grok-retryable` @ `grok/native-retryable-rows`).**  Badge + Retry on the Not-found row. Web copy `No logo found` for true misses. No fourth bucket. PR #50.
 - **2026-09-01 — GROK — IN PROGRESS — Android P1: undo last batch, stop candidate wrap, Select High, brand mipmaps (board 79e358ef, issue #43, worktree `~/apps/contactlogo-grok-android-p1` @ `grok/android-p1-gaps`).**  Port kit UndoLog to app-private storage, Ready chip filters only, no `%` candidate wrap, Swap launcher mipmaps, versionName 1.0.1.
 - **2026-09-01 — GROK — IN PROGRESS — Domain-keyed first-party logo cache on Vercel (board 72a48e35, issue #44, worktree `~/apps/contactlogo-grok-logo-cache` @ `grok/first-party-logo-cache`).**  `GET /api/logo/:registrableDomain`.  No address books.  Web engine tries the cache first; native stays on live CDNs this PR.
 - **2026-09-01 — GROK — IN PROGRESS — Full-stack audit + remediations (board 1d89d23b, issue #41, worktree `~/apps/contactlogo-grok-audit` @ `grok/full-stack-audit`).**  Trust surfaces, Simple Icons liveness, PWA/SEO, and native follow-ups from the 2026-09-01 owner audit.
@@ -32,6 +33,7 @@ Protocol: /Users/jay/apps/EFFORT-LOG-PROTOCOL.md (canonical). Live board: this f
 - **2026-08-22 — CURSOR — PLANNED — Attach contactlogo.com to Coolify + Cloudflare.**  Domain is owned (Grok tapspin log).  Zone not in Cloudflare yet.  Do not use Render.
 
 ## Changelog of this log
+- 2026-09-01 — GROK — claimed issue #33 retryable native rows (board 0eceafd5).
 - 2026-09-01 — GROK — claimed Android P1 gaps (issue #43, board 79e358ef).
 - 2026-09-01 — GROK — claimed domain-keyed first-party logo cache (issue #44, board 72a48e35).
 - 2026-08-27 — GROK — local compile pickup of Monet PR #24 (issue #30, board 30af32b2).

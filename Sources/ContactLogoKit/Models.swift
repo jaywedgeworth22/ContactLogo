@@ -124,6 +124,14 @@ public struct MatchResult: Sendable {
     /// answer is "we do not know yet", not "there is no logo".
     public var isRetryable: Bool { candidates.isEmpty && !sourceErrors.isEmpty }
 
+    /// Web `exhausted-label` copy for a completed miss. Nil when `isRetryable`
+    /// — R11.6: that row is not "no logo exists". Person/non-brand cards are
+    /// a different fact and do not use this string either.
+    public var exhaustedLabel: String? {
+        guard candidates.isEmpty, !isRetryable, contactClass == .businessCard else { return nil }
+        return "No logo found"
+    }
+
     public init(contactID: String, contactClass: ContactClass,
                 candidates: [LogoCandidate], confidence: Confidence, flags: [String] = [],
                 sourceErrors: [SourceFailure] = []) {

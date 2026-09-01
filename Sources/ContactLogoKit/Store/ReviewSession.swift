@@ -55,9 +55,18 @@ public final class ReviewSession: ObservableObject {
         }
         return seen
     }
+    /// Contact IDs currently being rematched from a Retry tap. Shells bind a
+    /// per-row spinner to this; the stage stays `.review` so the queue does
+    /// not collapse into the full-scan ProgressView.
+    @Published public private(set) var retryingIDs: Set<String> = []
 
     private let settings: SettingsStore?
     private var cancelRequested = false
+    /// Identities from the last scan, keyed by contact ID, so Retry can
+    /// rematch one row without enumerating the whole book.
+    var identitiesByID: [String: ContactIdentity] = [:]
+    /// Tests inject a pipeline so Retry can run without the network.
+    var pipelineForTesting: MatchPipeline?
 
     /// `settings` is injected by the shell; when it carries Brandfetch
     /// credentials the scan uses them, otherwise the process environment is
@@ -130,6 +139,7 @@ public final class ReviewSession: ObservableObject {
     }
 
     private func configuredPipeline() -> MatchPipeline {
+        if let pipelineForTesting { return pipelineForTesting }
         guard let settings else { return Self.makePipeline() }
         let clientID = settings.resolvedBrandfetchClientID
         let apiKey = settings.resolvedBrandfetchAPIKey
@@ -138,6 +148,42 @@ public final class ReviewSession: ObservableObject {
             brandfetchClientID: clientID ?? DefaultSources.env("CONTACTLOGO_BRANDFETCH_CLIENT_ID"),
             brandfetchAPIKey: apiKey ?? DefaultSources.env("CONTACTLOGO_BRANDFETCH_API_KEY")
         )
+    }
+
+    /// Re-runs matching for one contact. Shells offer this on retryable
+    /// Not-found rows (R11.6). Stage stays `.review`; a miss stays in
+    /// `notFound`, a hit moves itself into Ready or Review via confidence.
+    public func retryMatch(for id: String) async {
+        guard !retryingIDs.contains(id) else { return }
+        guard let identity = await resolvedIdentity(for: id) else { return }
+        retryingIDs.insert(id)
+        defer { retryingIDs.remove(id) }
+        let updated = await configuredPipeline().match(identity)
+        guard let index = results.firstIndex(where: { $0.contactID == id }) else { return }
+        results[index] = updated
+        chosenIndex[id] = 0
+        if updated.confidence == .high {
+            selected.insert(id)
+        } else {
+            selected.remove(id)
+        }
+    }
+
+    func rememberIdentity(_ identity: ContactIdentity) {
+        identitiesByID[identity.id] = identity
+    }
+
+    private func resolvedIdentity(for id: String) async -> ContactIdentity? {
+        if let cached = identitiesByID[id] { return cached }
+        // Tests inject a pipeline and seed identities; never open Contacts.
+        if pipelineForTesting != nil { return nil }
+        #if canImport(Contacts)
+        if let fetched = await CNContactsProvider().fetchCandidate(id: id) {
+            identitiesByID[id] = fetched
+            return fetched
+        }
+        #endif
+        return nil
     }
 
     /// Cooperative cancellation for background runs — checked between
@@ -168,6 +214,8 @@ public final class ReviewSession: ObservableObject {
             let targets = contacts.filter {
                 pipeline.classify($0) == .businessCard && !(skipPhotos && $0.hasImage)
             }
+            identitiesByID = Dictionary(uniqueKeysWithValues: targets.map { ($0.id, $0) })
+            retryingIDs = []
             stage = .matching(done: 0, total: targets.count)
             var out: [MatchResult] = []
             for (i, contact) in targets.enumerated() {
