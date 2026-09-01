@@ -38,10 +38,14 @@ Complete frozen copies of both originals are in `backups/` (see
 
 ## What is not product surface
 
-Grok PWA scaffolding, Better Auth / PGLite login, logo-cache database,
-Clearbit/Wikidata live resolve, and multiplayer helpers stay in `vendor/crest`
-and `backups/crest` only.  The web app processes contacts in the browser and
-stores nothing except an optional Google OAuth client id in `localStorage`.
+Grok PWA scaffolding, Better Auth / PGLite login, Crest's logo-cache
+**database**, Clearbit/Wikidata live resolve, and multiplayer helpers stay in
+`vendor/crest` and `backups/crest` only.  Do not revive PGlite or auth.
+
+The web app processes contacts in the browser and stores nothing except an
+optional Google OAuth client id in `localStorage`.  `GET /api/logo/:domain` is
+a first-party, domain-keyed cache of license-tagged marks (CDN `s-maxage` plus
+instance memory).  It is not an address book.
 
 ## Review-first
 

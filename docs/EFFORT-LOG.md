@@ -21,6 +21,7 @@ Protocol: /Users/jay/apps/EFFORT-LOG-PROTOCOL.md (canonical). Live board: this f
 - **2026-08-25 — AG — COMPLETED — High-res logo sources (Google 256px, Clearbit 512px), quality baseline filter, 404 error prevention, review-first safety refinement, direct card drag-drop upload, and interactive crop/zoom studio modal.**  Upgraded web candidate sources (Clearbit 512px, Google 256px, Preferred SVGs); prevented SimpleIcons 404 question mark SVGs via strict slug validation; kept email and guessed domains in review; added card-level image drag & drop; and added in-browser interactive circle-mask crop/zoom/pan modal.  PR #19 merged to `main`.
 
 ## In Progress
+- **2026-09-01 — GROK — IN PROGRESS — Domain-keyed first-party logo cache on Vercel (board 72a48e35, issue #44, worktree `~/apps/contactlogo-grok-logo-cache` @ `grok/first-party-logo-cache`).**  `GET /api/logo/:registrableDomain`.  No address books.  Web engine tries the cache first; native stays on live CDNs this PR.
 - **2026-09-01 — GROK — IN PROGRESS — Full-stack audit + remediations (board 1d89d23b, issue #41, worktree `~/apps/contactlogo-grok-audit` @ `grok/full-stack-audit`).**  Trust surfaces, Simple Icons liveness, PWA/SEO, and native follow-ups from the 2026-09-01 owner audit.
 - **2026-08-27 — GROK — IN PROGRESS — Pickup Monet PR #24 local compile (board 30af32b2, issue #30, worktree `~/apps/contactlogo-grok-eval` @ `claude/full-app-evaluation-wwwwk1`).**  Native Swift/Android compiled for the first time.  Golden corpus now runs in Swift, TypeScript, and Kotlin.  `UIBackgroundModes=processing` is in the built iOS Info.plist.  PR #24 merged 2026-08-29.  Remaining owner decisions (logo licensing, store listings) are not merge blockers.
 - **2026-08-22 — CURSOR — IN PROGRESS — Domain + CI leftovers (uncommitted).**  Official host `contactlogo.com`.  Added `.github/workflows/ci.yml` (web Node job + macOS `swift test`) and `AGENTS.md`.  Did not run `onboard-new-app.sh` (must be from a fleet worktree, not `~/Code`).  Cloudflare jay account has no `contactlogo.com` zone; no DNS invented.  Personal-Site project list now points at ContactLogo + contactlogo.com.
@@ -30,6 +31,7 @@ Protocol: /Users/jay/apps/EFFORT-LOG-PROTOCOL.md (canonical). Live board: this f
 - **2026-08-22 — CURSOR — PLANNED — Attach contactlogo.com to Coolify + Cloudflare.**  Domain is owned (Grok tapspin log).  Zone not in Cloudflare yet.  Do not use Render.
 
 ## Changelog of this log
+- 2026-09-01 — GROK — claimed domain-keyed first-party logo cache (issue #44, board 72a48e35).
 - 2026-08-27 — GROK — local compile pickup of Monet PR #24 (issue #30, board 30af32b2).
 - 2026-08-21 — KIMI — file created during owner-requested fleet setup audit.
 - 2026-08-21 — P0 history rewrite completed (filter-repo + force-push); no contact names in this log.

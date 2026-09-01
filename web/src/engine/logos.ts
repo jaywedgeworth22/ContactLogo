@@ -1,6 +1,7 @@
 import { lookupCompanyDomain, lookupCompanyTicker } from "./catalog.ts";
 
 export type LogoSourceName =
+  | "cache"
   | "preferred"
   | "simpleicons"
   | "ticker"
@@ -17,6 +18,13 @@ export type LogoHit = {
   src: string;
   source: LogoSourceName;
   kind: "icon" | "unknown";
+  /**
+   * When `source` is `cache`, the ranked CDN this first-party URL is wrapping.
+   * Used so R11.2 tiers the mark by what the cache would serve, not by the
+   * wrapper itself (a cache hit of Clearbit must not inherit Simple Icons'
+   * high).
+   */
+  proxied?: LogoSourceName;
   /**
    * Set when this candidate's CDN requires a credential ContactLogo does not
    * have configured (e.g. Brandfetch's `c=` client id, Logo.dev's `token`).
@@ -109,19 +117,46 @@ export function simpleIconsSlug(domain: string): string | undefined {
   return SIMPLE_SLUGS[domain];
 }
 
+function readEnv(name: string): string {
+  const proc = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process;
+  const fromProc = proc?.env?.[name] ?? proc?.env?.[`VITE_${name}`];
+  if (fromProc) return String(fromProc).trim();
+  const viteEnv = (import.meta as unknown as { env?: Record<string, string | undefined> }).env;
+  const fromVite = viteEnv?.[name] ?? viteEnv?.[`VITE_${name}`];
+  return String(fromVite ?? "").trim();
+}
+
 /** Brandfetch's Logo Link CDN 403s without a client id (`?c=`).  See docs/HANDOFF-LOCAL.md. */
 export function getBrandfetchClientId(): string {
-  const viteEnv = (import.meta as { env?: { VITE_BRANDFETCH_CLIENT_ID?: string } }).env;
-  return String(viteEnv?.VITE_BRANDFETCH_CLIENT_ID ?? "").trim();
+  return readEnv("BRANDFETCH_CLIENT_ID") || readEnv("VITE_BRANDFETCH_CLIENT_ID");
 }
 
 /** Logo.dev's image CDN 403s without a token (`?token=`).  See docs/HANDOFF-LOCAL.md. */
 export function getLogoDevToken(): string {
-  const viteEnv = (import.meta as { env?: { VITE_LOGODEV_TOKEN?: string } }).env;
-  return String(viteEnv?.VITE_LOGODEV_TOKEN ?? "").trim();
+  return readEnv("LOGODEV_TOKEN") || readEnv("VITE_LOGODEV_TOKEN");
 }
 
-export function candidateUrls(domain: string): LogoHit[] {
+/** Same-origin path for the domain-keyed first-party cache.  Never a contact key. */
+export function firstPartyLogoPath(domain: string): string {
+  return `/api/logo/${encodeURIComponent(domain)}`;
+}
+
+export function isFirstPartyLogoSrc(src: string): boolean {
+  if (!src) return false;
+  try {
+    const path = src.startsWith("http://") || src.startsWith("https://") ? new URL(src).pathname : src.split("?")[0] ?? src;
+    return /\/api\/logo\//.test(path);
+  } catch {
+    return /\/api\/logo\//.test(src);
+  }
+}
+
+/**
+ * Ranked live CDNs + preferred inline marks.  The first-party cache walks this
+ * list; `candidateUrls` prepends the cache URL so the web engine tries
+ * same-origin first and falls through on 404.
+ */
+export function cdnCandidateUrls(domain: string): LogoHit[] {
   const out: LogoHit[] = [];
   const svg = PREFERRED[domain];
   if (svg) {
@@ -193,6 +228,52 @@ export function candidateUrls(domain: string): LogoHit[] {
   return out;
 }
 
+export function candidateUrls(domain: string): LogoHit[] {
+  const cdn = cdnCandidateUrls(domain);
+  if (cdn.length === 0) return [];
+  return [
+    {
+      src: firstPartyLogoPath(domain),
+      source: "cache",
+      kind: "icon",
+      proxied: cdn[0]?.source,
+    },
+    ...cdn,
+  ];
+}
+
+/** SPDX-ish tag stored with a cached mark.  Never a contact identifier. */
+export function licenseForSource(source: LogoSourceName): string {
+  switch (source) {
+    case "preferred":
+      return "trademark; curated inline mark";
+    case "simpleicons":
+      return "CC0-1.0 OR MIT";
+    case "ticker":
+      return "upstream ticker-logos (davidepalazzo/ticker-logos)";
+    case "brandfetch":
+      return "Brandfetch Logo Link terms";
+    case "logodev":
+      return "Logo.dev terms";
+    case "clearbit":
+      return "Clearbit Logo API terms";
+    case "google":
+      return "Google Favicon Service terms";
+    case "favicon":
+      return "origin-site favicon; license unknown";
+    case "cache":
+      return "see proxied source";
+    case "upload":
+      return "user upload";
+    case "crop":
+      return "user crop";
+    case "url":
+      return "user-pasted URL";
+    default:
+      return assertNever(source);
+  }
+}
+
 /**
  * Advance past a broken or tiny raster.  Never wrap: `(i+1)%n` plus `render()`
  * livelocks review when every remaining source is a 16px favicon.
@@ -210,6 +291,8 @@ export function candidatesForName(name: string): LogoHit[] {
 
 export function sourceLabel(source: LogoSourceName): string {
   switch (source) {
+    case "cache":
+      return "ContactLogo cache";
     case "preferred":
       return "Iconic mark";
     case "simpleicons":
@@ -607,6 +690,8 @@ export type PadAndSquareOptions = {
 
 export function isVectorSource(src: string): boolean {
   if (!src) return false;
+  // First-party cache may return SVG or PNG; skip the favicon pixel floor either way.
+  if (isFirstPartyLogoSrc(src)) return true;
   return (
     src.startsWith("data:image/svg") ||
     src.includes(".svg") ||

@@ -1,8 +1,53 @@
-import { defineConfig, type UserConfig } from "vite";
+import { defineConfig, type Plugin, type UserConfig } from "vite";
+import { handleLogoGet } from "./src/engine/logo-cache.ts";
 import {
   assertDatadogPublicConfig,
   type DatadogEnvSource,
 } from "./src/observability/config.ts";
+
+function logoCachePlugin(): Plugin {
+  const serve = async (req: { method?: string; url?: string; headers: NodeJS.Dict<string | string[]> }, res: {
+    statusCode: number;
+    setHeader: (k: string, v: string | number) => void;
+    end: (b?: string | Buffer) => void;
+  }, next: () => void) => {
+    const raw = req.url ?? "";
+    const path = raw.split("?")[0] ?? "";
+    if (!path.startsWith("/api/logo/")) {
+      next();
+      return;
+    }
+    const headers = new Headers();
+    for (const [key, value] of Object.entries(req.headers)) {
+      if (typeof value === "string") headers.set(key, value);
+      else if (Array.isArray(value)) headers.set(key, value.join(", "));
+    }
+    const request = new Request(new URL(raw, "http://vite.local"), {
+      method: req.method || "GET",
+      headers,
+    });
+    const response = await handleLogoGet(request);
+    res.statusCode = response.status;
+    response.headers.forEach((value, key) => {
+      res.setHeader(key, value);
+    });
+    const buf = Buffer.from(await response.arrayBuffer());
+    res.end(buf);
+  };
+  return {
+    name: "contactlogo-logo-cache",
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        void serve(req, res, next);
+      });
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use((req, res, next) => {
+        void serve(req, res, next);
+      });
+    },
+  };
+}
 
 function publicDatadogSource(): DatadogEnvSource {
   const from = (name: keyof DatadogEnvSource): string => {
@@ -47,6 +92,7 @@ export default defineConfig(({ command }): UserConfig => {
     root: ".",
     publicDir: "public",
     define: datadogDefines(source),
+    plugins: [logoCachePlugin()],
     build: {
       outDir: "dist",
       emptyOutDir: true,

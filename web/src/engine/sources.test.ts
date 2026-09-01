@@ -156,7 +156,9 @@ test("CL-18: candidateUrls still returns a ranked list when a tile would be drop
   // an unknown brand and is deliberately medium tier.
   const hits = candidateUrls("zzqx-nonexistent-brand-xyz.com");
   assert.ok(hits.length > 0);
-  assert.equal(hits[0]?.source, "clearbit");
+  assert.equal(hits[0]?.source, "cache");
+  assert.equal(hits[0]?.proxied, "clearbit");
+  assert.equal(hits.some((h) => h.source === "clearbit"), true);
   assert.equal(hits.some((h) => h.source === "brandfetch"), false);
 });
 
@@ -394,6 +396,8 @@ test("CDN credentials: an unusable provider is not offered at all", () => {
   // Consequence worth knowing: with no credentials, a domain with no curated
   // mark now tops out at medium, because clearbit is deliberately not high
   // tier. Fewer contacts are pre-checked, which is the honest outcome.
-  assert.equal(candidateUrls("apple.com")[0]?.source, "simpleicons");
-  assert.equal(candidateUrls("some-agency-with-no-icon.com")[0]?.source, "clearbit");
+  assert.equal(candidateUrls("apple.com")[0]?.source, "cache");
+  assert.equal(candidateUrls("apple.com")[0]?.proxied, "simpleicons");
+  assert.equal(candidateUrls("some-agency-with-no-icon.com")[0]?.source, "cache");
+  assert.equal(candidateUrls("some-agency-with-no-icon.com")[0]?.proxied, "clearbit");
 });

@@ -402,3 +402,16 @@ Everything under `BGTaskScheduler`, `UIBackgroundModes`,
 `BGTaskSchedulerPermittedIdentifiers`, notifications, `PhotosPicker`/
 `NSOpenPanel`, and the actual Settings screen UI belongs to the shell agent's
 files and is out of the kit's surface.
+
+---
+
+## Follow-up — first-party logo cache (web-only this change)
+
+The web engine now tries `GET /api/logo/:registrableDomain` first and falls
+through to live CDNs on 404.  Native Swift and Kotlin clients keep fetching
+those CDNs directly in this change; wiring them to the same-origin cache is a
+follow-up once the Vercel function is in production.
+
+Do not send contact names, emails, or phones to that endpoint.  The key is the
+registrable domain only.  Clients that receive SVG or an unpadded raster still
+apply ENGINE-CONTRACT R11.7 locally (512×512 canvas, 15% inset).
