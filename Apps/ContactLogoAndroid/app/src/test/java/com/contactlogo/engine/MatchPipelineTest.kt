@@ -29,18 +29,20 @@ class MatchPipelineTest {
 
     @Test
     fun loneFirmGivenNameIsABusinessCard() {
+        // FedEx still has a live Simple Icons slug.  Walgreens was dropped when
+        // cdn.simpleicons.org started 404ing that mark (2026-09-01).
         val lone = ContactIdentity(
             id = "2",
-            displayName = "Walgreens",
-            givenName = "Walgreens",
+            displayName = "FedEx",
+            givenName = "FedEx",
             organization = ""
         )
-        assertEquals("Walgreens", MatchPipeline.inferCompanyFromLoneName(lone))
+        assertEquals("FedEx", MatchPipeline.inferCompanyFromLoneName(lone))
         assertFalse(MatchPipeline.isPerson(lone))
         val result = MatchPipeline.match(lone)
         assertEquals(Confidence.HIGH, result.confidence)
         assertTrue(result.approved)
-        assertEquals("walgreens.com", result.matchedDomain)
+        assertEquals("fedex.com", result.matchedDomain)
     }
 
     @Test
