@@ -77,6 +77,9 @@ enum MatchBackgroundTask {
         let runner = BackgroundMatchRunner(session: session)
 
         let work = Task { @MainActor in
+            // `run()` writes the review queue to Application Support before
+            // returning true, so setTaskCompleted and the notification cannot
+            // outrun the data (issue #32).
             let completed = await runner.run()
             task.setTaskCompleted(success: completed)
             if completed {

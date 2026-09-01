@@ -61,20 +61,68 @@ public final class ReviewSession: ObservableObject {
     @Published public private(set) var retryingIDs: Set<String> = []
 
     private let settings: SettingsStore?
+    private let queueStore: ReviewQueueStore
     private var cancelRequested = false
     /// Identities from the last scan, keyed by contact ID, so Retry can
     /// rematch one row without enumerating the whole book.
     var identitiesByID: [String: ContactIdentity] = [:]
     /// Tests inject a pipeline so Retry can run without the network.
     var pipelineForTesting: MatchPipeline?
+    /// Token captured when contacts were enumerated for the current results.
+    /// Replaced after apply/undo, which themselves mutate the contact store.
+    var scanChangeToken: Data?
+    var scanDate: Date?
 
     /// `settings` is injected by the shell; when it carries Brandfetch
     /// credentials the scan uses them, otherwise the process environment is
     /// used exactly as before (CLI and CI behaviour unchanged).
-    public init(settings: SettingsStore? = nil) {
+    /// `queueStore` defaults to Application Support; tests inject a temp dir.
+    public init(settings: SettingsStore? = nil, queueStore: ReviewQueueStore? = nil) {
         self.settings = settings
+        self.queueStore = queueStore ?? ReviewQueueStore()
         undoHistory = (try? UndoLog().listBatchSummaries()) ?? []
         lastBatchID = undoHistory.first?.id
+        restorePersistedQueue()
+    }
+
+    /// Reloads a non-empty queue whose contact-store change token still
+    /// matches.  A stale or empty file is discarded so a notification can
+    /// never open a queue built against contacts that have since changed.
+    private func restorePersistedQueue() {
+        guard let snapshot = try? queueStore.loadFresh() else { return }
+        results = snapshot.results
+        selected = Set(snapshot.selected)
+        chosenIndex = snapshot.chosenIndex
+        names = snapshot.names
+        scanDate = snapshot.scannedAt
+        scanChangeToken = snapshot.contactStoreChangeToken
+        stage = .review
+    }
+
+    /// Writes the current results to Application Support.  Returns false if
+    /// the write failed — callers that advertise the queue (the background
+    /// runner) must not notify in that case.  An empty result set clears the
+    /// file so a later launch does not revive the previous scan.
+    @discardableResult
+    public func persistReviewQueue() -> Bool {
+        do {
+            if results.isEmpty {
+                try queueStore.clear()
+                return true
+            }
+            let snapshot = PersistedReviewQueue(
+                scannedAt: scanDate ?? Date(),
+                contactStoreChangeToken: scanChangeToken ?? queueStore.currentChangeToken(),
+                results: results,
+                selected: selected.sorted(),
+                chosenIndex: chosenIndex,
+                names: names
+            )
+            try queueStore.save(snapshot)
+            return true
+        } catch {
+            return false
+        }
     }
 
     public func displayName(for id: String) -> String { names[id] ?? id }
@@ -198,6 +246,10 @@ public final class ReviewSession: ObservableObject {
         cancelRequested = false
         #if canImport(Contacts)
         stage = .scanning
+        // Stamp the store as it is *before* matching.  A token captured after
+        // a long run could hide mutations that happened while we were away.
+        scanDate = Date()
+        scanChangeToken = queueStore.currentChangeToken()
         let provider = CNContactsProvider()
         do {
             guard try await provider.requestAccess() else {
@@ -240,6 +292,9 @@ public final class ReviewSession: ObservableObject {
             chosenIndex = [:]
             selected = Set(out.filter { $0.confidence == .high }.map(\.contactID))
             stage = .review
+            // Best-effort for a foreground scan; the background runner treats
+            // a failed persist as an unsuccessful run so it will not notify.
+            _ = persistReviewQueue()
             return true
         } catch {
             stage = .idle
@@ -310,6 +365,10 @@ public final class ReviewSession: ObservableObject {
         }
         try? log.prune()
         refreshUndoHistory()
+        // Apply mutated the contact store.  Restamp so the remaining queue
+        // is not discarded as stale on the next launch.
+        scanChangeToken = queueStore.currentChangeToken()
+        _ = persistReviewQueue()
         stage = .review
         #endif
     }
@@ -350,6 +409,8 @@ public final class ReviewSession: ObservableObject {
             do {
                 try await log.restore(batchID: batchID, using: provider)
                 try log.deleteBatch(batchID)
+                scanChangeToken = queueStore.currentChangeToken()
+                _ = persistReviewQueue()
             } catch {
                 lastError = .undoFailed(batchID: batchID, underlying: error.localizedDescription)
             }
@@ -384,6 +445,8 @@ public final class ReviewSession: ObservableObject {
             }
         }
         refreshUndoHistory()
+        scanChangeToken = queueStore.currentChangeToken()
+        _ = persistReviewQueue()
         #endif
     }
 

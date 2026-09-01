@@ -38,6 +38,7 @@
 		66A6BA19C6F3EB06181C2A0E /* CandidateRanker.swift in Sources */ = {isa = PBXBuildFile; fileRef = E04865AB793CE93A696E583A /* CandidateRanker.swift */; };
 		6AE8A1498C59CB7B58305D0E /* CompaniesLogoSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = F54AE3ACB7FFE84AB4A3AC6C /* CompaniesLogoSource.swift */; };
 		6E6960FA842960ABC310E0E9 /* PhoneDirectory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 865EC5BB0A51330E0CDC3443 /* PhoneDirectory.swift */; };
+		77AFE1E346632A0D879BF0C5 /* ReviewQueueStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 172A9B425E61B5CBB50936DC /* ReviewQueueStore.swift */; };
 		785EABE71FF9B24DDA7B1259 /* BackgroundMatchRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBAD4842EA4D40654FEFC94B /* BackgroundMatchRunner.swift */; };
 		7A074D2261B623F209B09D35 /* ContactLogoKitMac.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 79414AE70947DE8A49F40D48 /* ContactLogoKitMac.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		7B2F55EB61AAA8853A737099 /* ContactsProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74683030E2B730DA8ECA66E2 /* ContactsProvider.swift */; };
@@ -48,6 +49,7 @@
 		8B84083B3475B3FE01286A5B /* GenericBlocklist.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98997F8A612379F7F3F60A43 /* GenericBlocklist.swift */; };
 		8C89465619D6094AD3364840 /* ContactLogoiOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 681346B29861440FC8ECDB60 /* ContactLogoiOSApp.swift */; };
 		98F292E356313AE5E9CCF5E8 /* SentryTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97A4D290499E32073943EB24 /* SentryTelemetry.swift */; };
+		9C2F9B38B1DB9B22279B3FEE /* ReviewQueueStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 172A9B425E61B5CBB50936DC /* ReviewQueueStore.swift */; };
 		9F7F933245B243F8E30E71FC /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 25365E7DBFE88D90575DBBA4 /* Assets.xcassets */; };
 		9FAC0079606A5E0B0CFEF5E0 /* ContactLogoKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 31BCB449DF697F691F3899EC /* ContactLogoKit.framework */; };
 		A11808266B0D9CDD5E977B89 /* ContactsProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74683030E2B730DA8ECA66E2 /* ContactsProvider.swift */; };
@@ -132,6 +134,7 @@
 		061D3C49F1AFEF23ED131B95 /* WikimediaSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WikimediaSource.swift; sourceTree = "<group>"; };
 		0C95E9161210A4E38C45148E /* AppUpdatePrompt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdatePrompt.swift; sourceTree = "<group>"; };
 		0C997BCAD07D659AF1F12FCD /* NotificationScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationScheduler.swift; sourceTree = "<group>"; };
+		172A9B425E61B5CBB50936DC /* ReviewQueueStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewQueueStore.swift; sourceTree = "<group>"; };
 		19B063D75543B34805CD5F1C /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		1C8FBB5F39536723C38B6A61 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		1F48055747588374023786E1 /* ContactLogoMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ContactLogoMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -232,6 +235,7 @@
 				39EEECF2529DD56CDDB234FC /* CandidateFileName.swift */,
 				D286008B1C88DA56ECD4BC34 /* ImagePreparer.swift */,
 				CCF41B30625237952CE7D3A8 /* KeychainStore.swift */,
+				172A9B425E61B5CBB50936DC /* ReviewQueueStore.swift */,
 				C8104FB0F5DF9282B24180F0 /* ReviewSession.swift */,
 				B93FC49350414117E0A9F619 /* SettingsStore.swift */,
 				5ED8D6C0517E1AE6081E879C /* SVGRasterizer.swift */,
@@ -537,6 +541,7 @@
 				A2486D13C48FAAC2EF0C4AAC /* NameNormalizer.swift in Sources */,
 				6E6960FA842960ABC310E0E9 /* PhoneDirectory.swift in Sources */,
 				C363DBA04A219A74EF97535A /* PreferredMarksSource.swift in Sources */,
+				77AFE1E346632A0D879BF0C5 /* ReviewQueueStore.swift in Sources */,
 				BF638B49139C82EBAB895417 /* ReviewSession.swift in Sources */,
 				394F7AC53FEC7D352D09E06B /* SVGRasterizer.swift in Sources */,
 				A4346F7C0A2AA4ABF7A1540B /* SettingsStore.swift in Sources */,
@@ -573,6 +578,7 @@
 				09B2E455FD779F007F2C0C58 /* NameNormalizer.swift in Sources */,
 				81319EF21E1C9BEAAC6209AF /* PhoneDirectory.swift in Sources */,
 				D557996B008217B89F137B4F /* PreferredMarksSource.swift in Sources */,
+				9C2F9B38B1DB9B22279B3FEE /* ReviewQueueStore.swift in Sources */,
 				CD0E7DCE7500AB2379551539 /* ReviewSession.swift in Sources */,
 				0A6AC9C36FAC07966C652473 /* SVGRasterizer.swift in Sources */,
 				53D6C481278F96AA4D224174 /* SettingsStore.swift in Sources */,

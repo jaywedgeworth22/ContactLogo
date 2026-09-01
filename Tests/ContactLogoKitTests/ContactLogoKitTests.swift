@@ -889,10 +889,18 @@ final class CandidateFileNameTests: XCTestCase {
 
 @MainActor
 final class ManualCandidateTests: XCTestCase {
+    private func isolatedSession() -> ReviewSession {
+        let dir = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ContactLogoQueue-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return ReviewSession(queueStore: ReviewQueueStore(
+            directory: dir, currentChangeToken: { Data("test".utf8) }))
+    }
+
     /// VISION's unsure-queue promise: the user's own image becomes the top
     /// candidate, already squared and padded.
     func testManualPickBecomesTheTopCandidate() throws {
-        let session = ReviewSession()
+        let session = isolatedSession()
         session.results = [MatchResult(contactID: "1", contactClass: .businessCard,
                                        candidates: [], confidence: .skip, flags: [])]
         let svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\">"
@@ -908,7 +916,7 @@ final class ManualCandidateTests: XCTestCase {
     }
 
     func testUnusableManualBytesThrowAndChangeNothing() {
-        let session = ReviewSession()
+        let session = isolatedSession()
         session.results = [MatchResult(contactID: "1", contactClass: .businessCard,
                                        candidates: [], confidence: .skip, flags: [])]
         XCTAssertThrowsError(try session.setManualCandidate(for: "1", imageData: Data("nope".utf8)))
@@ -917,7 +925,7 @@ final class ManualCandidateTests: XCTestCase {
     }
 
     func testUndoWithNoBatchIsReportedNotSilent() async {
-        let session = ReviewSession()
+        let session = isolatedSession()
         session.lastBatchID = nil
         await session.undoLast()
         XCTAssertEqual(session.lastError, ReviewSessionError.noBatchToUndo)
