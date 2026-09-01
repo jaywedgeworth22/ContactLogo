@@ -8,6 +8,11 @@ options:
   groupSortPosition: top
   xcodeVersion: "16.0"
 
+packages:
+  Sentry:
+    url: https://github.com/getsentry/sentry-cocoa.git
+    from: "8.44.0"
+
 settings:
   base:
     # Must stay >= the language mode implied by Package.swift's
@@ -67,6 +72,8 @@ targets:
       - path: Apps/ContactLogoiOS
     dependencies:
       - target: ContactLogoKit
+      - package: Sentry
+        product: Sentry
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.contactlogo
