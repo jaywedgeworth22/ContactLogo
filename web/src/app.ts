@@ -101,6 +101,7 @@ const FLAG_PHRASES: Record<string, string> = {
   "homonym-risk": "name is also a common word",
   "brand-tail": "matched a partial name",
   "replace-existing": "replaces an existing photo",
+  "email-domain-unrelated": "email domain may not be this brand",
 };
 
 const KNOWN_VIA: ReadonlySet<string> = new Set(["website", "email", "catalog", "phone", "guess"]);
@@ -1334,6 +1335,11 @@ function buildSettingsPanel(): { node: HTMLElement; input: HTMLInputElement } {
       { class: "meta" },
       "Optional Google People API client id for Import and Direct Sync to Google Contacts.  Stored only in this browser.",
     ),
+    el(
+      "p",
+      { class: "meta" },
+      "High-resolution Brandfetch and Logo.dev marks need a key at build time.  Without one, ContactLogo uses Simple Icons, stock tickers, and favicons.",
+    ),
     input,
     save,
   );
@@ -1348,7 +1354,7 @@ function buildLanding(): HTMLElement {
     el(
       "p",
       {},
-      "Your address book is full of grey initial circles.  ContactLogo finds the official mark for each business card in it — the pharmacy, the bank, the school, the plumber — so calls, messages and mail arrive with a face you recognise instead of two letters.",
+      "Your address book is full of grey initial circles.  ContactLogo finds the official mark for each business card in it — the pharmacy, the bank, the school, the plumber — so calls, messages and mail arrive with a face you recognize instead of two letters.",
     ),
     el(
       "p",
@@ -1368,7 +1374,9 @@ function buildLanding(): HTMLElement {
         "li",
         {},
         el("strong", {}, "Import. "),
-        "Drop in a vCard or Google CSV export, connect Google Contacts, or pick straight from this phone.",
+        canPickDeviceContacts()
+          ? "Drop in a vCard or Google CSV export, connect Google Contacts, or pick straight from this phone."
+          : "Drop in a vCard or Google CSV export, or connect Google Contacts.",
       ),
       el(
         "li",
@@ -1398,7 +1406,7 @@ function buildLanding(): HTMLElement {
     el(
       "p",
       {},
-      "The address book is read and matched on this device.  It is never uploaded to a server, never stored between visits, and closing the tab leaves nothing behind.  Logo images are fetched from public brand sources by domain name only.",
+      "Your address book never leaves this device.  Crash and performance telemetry, if enabled, never includes contact names, emails, or photos.  Logo images are fetched from public brand sources by domain name only, and closing the tab leaves the imported book behind.",
     ),
     el(
       "p",
@@ -1425,11 +1433,29 @@ function mountShell(root: HTMLElement): Shell {
     el(
       "header",
       { class: "hero" },
-      el("div", { class: "hero-row" }, el("h1", {}, "ContactLogo"), settingsBtn),
+      el(
+        "div",
+        { class: "hero-row" },
+        el(
+          "div",
+          { class: "wordmark" },
+          el("img", {
+            class: "hero-mark",
+            src: "/icon-192.png",
+            width: "40",
+            height: "40",
+            alt: "",
+          }),
+          el("h1", {}, "ContactLogo"),
+        ),
+        settingsBtn,
+      ),
       el(
         "p",
         {},
-        "Brand icons for your address book.  Import a vCard, Google CSV, Google Contacts, or this phone, review every match, then download an updated card or sync directly to Google.  Existing person photos are never replaced.",
+        canPickDeviceContacts()
+          ? "Brand icons for your address book.  Import a vCard, Google CSV, Google Contacts, or this phone, review every match, then download an updated card or sync directly to Google.  Existing person photos are never replaced."
+          : "Brand icons for your address book.  Import a vCard, Google CSV, or Google Contacts, review every match, then download an updated card or sync directly to Google.  Existing person photos are never replaced.",
       ),
     ),
   );
@@ -1457,7 +1483,7 @@ function mountShell(root: HTMLElement): Shell {
   const drop = el(
     "div",
     { class: "drop" },
-    el("div", {}, el("strong", {}, "Import an address book"), el("span", {}, "Contacts stay in this browser.  Nothing is uploaded to a server.")),
+    el("div", {}, el("strong", {}, "Import an address book"), el("span", {}, "Your address book never leaves this device.  Crash and performance telemetry, if enabled, never includes contact names, emails, or photos.")),
     ...importActions,
     file,
   );
@@ -1587,7 +1613,10 @@ function mountShell(root: HTMLElement): Shell {
     el(
       "p",
       { class: "footer" },
-      "Review-first: clear, official marks are pre-checked; guessed domains, favicons and photos you already have wait for your review.  The Mac and iPhone apps follow the same rules.",
+      "Review-first: clear, official marks are pre-checked; guessed domains, favicons and photos you already have wait for your review.  Native Mac, iPhone, and Android apps follow the same rules.  ",
+      el("a", { href: "/privacy" }, "Privacy"),
+      " · ",
+      el("a", { href: "/terms" }, "Terms"),
     ),
   );
 

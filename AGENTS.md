@@ -12,9 +12,11 @@ and the web.
 Production hosting is Vercel (auto-deployed from main, no Docker container in use).
 The `web/` directory is the Vercel root directory per dashboard configuration.
 Security headers, cache policy for `/assets/*`, and build configuration are in
-`vercel.json`.  Do not invent Apple or DNS credentials.  Do not treat Grok
-Publish (`contact-logo.grok.me`, `contactlogo.grok.me`, `bizlogo.grok.me`) as
-the product URL.
+`vercel.json`.  `web/server.mjs` and `web/Dockerfile` are local/dev leftovers,
+not production.  `/healthz` is 404 on Vercel by design.  Do not invent Apple or
+DNS credentials.  Do not treat Grok Publish (`contact-logo.grok.me`,
+`contactlogo.grok.me`, `bizlogo.grok.me`) as the product URL.  Do not attach
+App Store / Play badges until listings exist.
 
 Sibling names (other apps, not this repo): Autorotate public host is
 `autorotate.codes` (GitHub may still say TopSpin).  DealDex public host is

@@ -1,75 +1,128 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Privacy Policy — ContactLogo</title>
-    <meta name="description" content="ContactLogo Privacy Policy. Learn how we handle your data with on-device processing." />
+    <meta
+      name="description"
+      content="How ContactLogo handles your address book, logo lookups, and optional crash telemetry on web, iOS, macOS, and Android."
+    />
+    <link rel="canonical" href="https://contactlogo.com/privacy" />
     <link rel="icon" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="theme-color" content="#f4f0e8" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#17140f" media="(prefers-color-scheme: dark)" />
     <style>
       :root {
-        --bg: #0c0a09;
-        --card: #1c1917;
-        --border: #292524;
-        --text: #f5f5f4;
-        --muted: #a8a29e;
-        --accent: #38bdf8;
+        color-scheme: light;
+        --bg: #f4f0e8;
+        --card: #fffdf8;
+        --line: #e4dccf;
+        --ink: #1c1917;
+        --muted: #6b635a;
+        --accent: #1c1917;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          color-scheme: dark;
+          --bg: #17140f;
+          --card: #211d17;
+          --line: #3a342a;
+          --ink: #f2ece1;
+          --muted: #a89e90;
+          --accent: #f2ece1;
+        }
       }
       * { box-sizing: border-box; margin: 0; padding: 0; }
       body {
         background: var(--bg);
-        color: var(--text);
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-        line-height: 1.6;
-        padding: 2rem 1rem;
+        color: var(--ink);
+        font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+        line-height: 1.55;
+        padding: 2rem 1rem 4rem;
       }
       .container {
         max-width: 720px;
         margin: 0 auto;
         background: var(--card);
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 2.5rem 2rem;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 2.25rem 1.75rem;
       }
-      h1 { font-size: 2rem; font-weight: 700; margin-bottom: 0.5rem; }
-      .date { color: var(--muted); font-size: 0.9rem; margin-bottom: 2rem; }
-      h2 { font-size: 1.3rem; font-weight: 600; margin-top: 1.75rem; margin-bottom: 0.75rem; color: var(--text); }
-      p { margin-bottom: 1rem; color: var(--muted); }
-      ul { margin-left: 1.5rem; margin-bottom: 1rem; color: var(--muted); }
-      li { margin-bottom: 0.5rem; }
-      a { color: var(--accent); text-decoration: none; }
-      a:hover { text-decoration: underline; }
-      .header-link { display: inline-block; margin-bottom: 1.5rem; font-size: 0.9rem; color: var(--accent); }
+      h1 { font-size: 2rem; letter-spacing: -0.03em; margin-bottom: 0.35rem; }
+      .date { color: var(--muted); font-size: 0.95rem; margin-bottom: 1.75rem; }
+      h2 { font-size: 1.2rem; margin: 1.6rem 0 0.6rem; }
+      p, li { color: var(--muted); }
+      p { margin-bottom: 0.9rem; }
+      ul { margin: 0 0 1rem 1.35rem; }
+      li { margin-bottom: 0.45rem; }
+      a { color: var(--accent); }
+      .header-link { display: inline-block; margin-bottom: 1.25rem; font-size: 0.95rem; }
     </style>
   </head>
   <body>
     <div class="container">
-      <a href="/" class="header-link">&larr; Back to ContactLogo</a>
+      <a class="header-link" href="/">&larr; Back to ContactLogo</a>
       <h1>Privacy Policy</h1>
-      <p class="date">Last updated: August 26, 2026</p>
+      <p class="date">Last updated: September 1, 2026</p>
 
       <h2>Overview</h2>
-      <p>ContactLogo ("we", "our", or "us") is committed to protecting your privacy. This Privacy Policy explains how our applications (iOS, macOS, and Web) handle your personal data and contact information.</p>
+      <p>ContactLogo ("we", "our", or "us") matches business contacts to public brand marks so your address book shows a logo instead of grey initials.  This policy covers the web app at contactlogo.com, the iOS app, the macOS app, and the Android app.</p>
+      <p>Your address book never leaves this device unless you explicitly choose Google Contacts import or write-back.  Crash and performance telemetry, if enabled, never includes contact names, emails, or photos.</p>
 
-      <h2>On-Device Processing</h2>
-      <p>ContactLogo operates on a strict privacy-first architecture:</p>
+      <h2>On-device processing</h2>
       <ul>
-        <li><strong>On-Device Matching:</strong> When you grant permission to access your contacts, our engine analyzes company names and organization identifiers directly on your device.</li>
-        <li><strong>No Address Book Uploads:</strong> We never upload your full address book, contact phone numbers, personal notes, or private contact details to our servers.</li>
-        <li><strong>Explicit User Approval:</strong> No contact records are modified without your explicit review and confirmation.</li>
+        <li><strong>Matching happens locally.</strong>  Company names, emails, websites, and phone numbers are scored on the device or in this browser tab.</li>
+        <li><strong>No address-book uploads to ContactLogo.</strong>  We do not operate a server that stores contacts, phone numbers, notes, or photos.</li>
+        <li><strong>Nothing is written without you.</strong>  A logo reaches a contact only after you review and approve it.</li>
       </ul>
 
-      <h2>Data We Collect</h2>
-      <p>We do not collect or store personal identifying information. If you contact customer support, we retain your email address and message history solely to provide assistance.</p>
+      <h2>What we do not collect</h2>
+      <p>ContactLogo does not create accounts.  We do not store your address book, and we do not sell contact data.  Closing the web tab leaves the imported book behind in that session only.</p>
 
-      <h2>Third-Party Services</h2>
-      <p>To retrieve brand logos, the app may query public domain asset registries (such as Brandfetch, Clearbit, or official company domains) using only the sanitized business domain name. No personal contact data is included in these lookups.</p>
+      <h2>Logo lookups</h2>
+      <p>To find a mark, the app may request a public image using only a sanitized business domain (for example <code>fedex.com</code>), never a person's name, email, or phone.  Depending on the surface and your settings, those lookups can reach:</p>
+      <ul>
+        <li>Simple Icons (<code>cdn.simpleicons.org</code>)</li>
+        <li>The ticker-logos GitHub pack (<code>raw.githubusercontent.com</code>)</li>
+        <li>Brandfetch and Logo.dev, only when you (or a build) supply a key</li>
+        <li>Clearbit Logo (<code>logo.clearbit.com</code>)</li>
+        <li>Google Favicon (<code>t1.gstatic.com</code>)</li>
+        <li>DuckDuckGo icons (<code>icons.duckduckgo.com</code>)</li>
+        <li>Wikimedia Commons, on native Apple apps</li>
+        <li>Official company domains, when you paste an image URL</li>
+      </ul>
+      <p>Those third parties receive the domain string and standard request metadata (IP address, user agent).  They do not receive your address book.</p>
 
-      <h2>Your Choices &amp; Data Rights</h2>
-      <p>You can revoke contact permissions at any time via your device's system settings (iOS Settings &rarr; Privacy &amp; Security &rarr; Contacts, or macOS System Settings &rarr; Privacy &amp; Security &rarr; Contacts).</p>
+      <h2>Google Contacts</h2>
+      <p>If you tap Import Google Contacts or Apply to Google Contacts, the browser talks to Google using OAuth.  Scopes cover reading your Google Contacts and, when you choose write-back, updating contact photos you approved.  Google is the processor for that data.  ContactLogo never sees the OAuth refresh token on a ContactLogo server, because there is no ContactLogo account server.</p>
 
-      <h2>Contact Us</h2>
-      <p>If you have any questions about this Privacy Policy or our practices, please contact us at <a href="mailto:support@ContactLogo.com">support@ContactLogo.com</a>.</p>
+      <h2>Optional crash and performance telemetry</h2>
+      <p>When public keys are configured for a build:</p>
+      <ul>
+        <li>The web app may send Datadog RUM and browser logs (page views, resource timing, and errors).  Interaction tracking that would derive names from image <code>alt</code> text is off.  Session Replay is off.</li>
+        <li>The web app may send exception envelopes to Sentry if a Sentry DSN is configured at build time.</li>
+        <li>The iOS app may send crash reports and app-hang traces to Sentry.  Screenshots, view hierarchy, and default PII are off.</li>
+      </ul>
+      <p>If those keys are absent, telemetry stays dark.  Telemetry payloads are not supposed to include contact display names, emails, phone numbers, or photos.  Logo CDN URLs keyed by domain may appear in resource timing.</p>
+
+      <h2>Android, iOS, and macOS</h2>
+      <p>The native apps read the on-device Contacts database with system permission.  Applied logos are written back as contact photos.  Undo, where implemented, keeps prior photo bytes in app-private storage on the device, not in iCloud or Google Drive.  Android backup of that private store is disabled.</p>
+
+      <h2>Cookies and local storage</h2>
+      <p>The web app may keep an optional Google client id in this browser's storage so you do not re-paste it.  Native apps may keep Brandfetch keys in the system keychain.  There is no advertising cookie and no cross-site tracker.</p>
+
+      <h2>Your choices</h2>
+      <ul>
+        <li>Web: close the tab.  The imported book is gone.</li>
+        <li>iOS / macOS: Settings → Privacy &amp; Security → Contacts.</li>
+        <li>Android: app permission for Contacts.</li>
+        <li>Google: revoke ContactLogo in your Google Account security settings.</li>
+      </ul>
+
+      <h2>Contact</h2>
+      <p>Questions: <a href="mailto:support@contactlogo.com">support@contactlogo.com</a>.  You can also open an issue on the public GitHub repository.  See also the <a href="/terms">Terms of Use</a>.</p>
     </div>
   </body>
 </html>

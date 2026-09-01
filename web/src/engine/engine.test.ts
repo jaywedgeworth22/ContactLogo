@@ -174,7 +174,7 @@ test("google csv import", () => {
 });
 
 test("simple icons slug map", () => {
-  assert.equal(simpleIconsSlug("chase.com"), "jpmorgan");
+  assert.equal(simpleIconsSlug("chase.com"), "chase");
   assert.equal(simpleIconsSlug("att.com"), "atandt");
 });
 

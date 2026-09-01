@@ -776,43 +776,44 @@ also print `via-website`, and MUST NOT print `guessed-domain` next to a
 TypeScript tables:
 
 ```
-apple.com apple            google.com google          microsoft.com microsoft
-amazon.com amazon          meta.com meta              facebook.com facebook
-instagram.com instagram    tesla.com tesla            nvidia.com nvidia
-netflix.com netflix        spotify.com spotify        adobe.com adobe
-salesforce.com salesforce  oracle.com oracle          ibm.com ibm
-intel.com intel            cisco.com cisco            stripe.com stripe
+apple.com apple            google.com google          meta.com meta
+facebook.com facebook      instagram.com instagram    tesla.com tesla
+nvidia.com nvidia          netflix.com netflix        spotify.com spotify
+salesforce.com salesforce  intel.com intel            cisco.com cisco
+stripe.com stripe
 paypal.com paypal          visa.com visa              mastercard.com mastercard
-americanexpress.com americanexpress                   chase.com jpmorgan
-jpmorganchase.com jpmorgan bankofamerica.com bankofamerica
-wellsfargo.com wellsfargo  citi.com citigroup         geico.com geico
-statefarm.com statefarm    verizon.com verizon        att.com atandt
-t-mobile.com tmobile       united.com unitedairlines  aa.com americanairlines
+americanexpress.com americanexpress                   chase.com chase
+jpmorganchase.com chase    bankofamerica.com bankofamerica
+wellsfargo.com wellsfargo  verizon.com verizon        att.com atandt
+united.com unitedairlines  aa.com americanairlines
 southwest.com southwestairlines                       fedex.com fedex
-ups.com ups                usps.com usps              homedepot.com homedepot
-lowes.com lowe's           costco.com costco          walmart.com walmart
+ups.com ups                usps.com usps
 target.com target          starbucks.com starbucks    mcdonalds.com mcdonalds
 uber.com uber              lyft.com lyft              doordash.com doordash
 airbnb.com airbnb          nike.com nike              samsung.com samsung
 sony.com sony              ford.com ford              bmw.com bmw
-usaa.com usaa              centerpointenergy.com centerpointenergy
 x.ai x                     x.com x                    twitter.com x
-squareup.com square        walgreens.com walgreens    cvs.com cvs
-github.com github          linkedin.com linkedin      youtube.com youtube
-discord.com discord        slack.com slack            zoom.us zoom
+squareup.com square        github.com github          youtube.com youtube
+discord.com discord        zoom.us zoom
 notion.so notion           figma.com figma            dropbox.com dropbox
 pinterest.com pinterest    reddit.com reddit          tiktok.com tiktok
 whatsapp.com whatsapp      telegram.org telegram      signal.org signal
-ebay.com ebay              shopify.com shopify        hulu.com hulu
-disneyplus.com disneyplus  spacex.com spacex          starlink.com spacex
+ebay.com ebay              shopify.com shopify
+spacex.com spacex          starlink.com spacex
+# Dropped 2026-09-01 after cdn.simpleicons.org 404s (trademark removals):
+# microsoft amazon adobe oracle ibm citigroup geico statefarm tmobile
+# homedepot lowe's costco walmart usaa centerpointenergy linkedin slack
+# hulu disneyplus walgreens cvs jpmorgan.  salesforce remains live.
 ```
 
 **R13.2 Slugs MUST NOT be derived.** A domain absent from R13.1 produces **no**
-Simple Icons candidate. Android derives the slug by stripping the TLD, so
-`delta.com` → `delta` → the *Delta software* mark: a confident, square,
-transparent, wrong logo — the highest-damage failure the engine can produce.
-Simple Icons slugs are brand names, not domain labels (`chase.com` → `jpmorgan`,
-`att.com` → `atandt`); derivation is right only by accident.
+Simple Icons candidate.  Deriving a slug by stripping the TLD made `delta.com`
+→ `delta` → the *Delta software* mark: a confident, square, transparent, wrong
+logo — the highest-damage failure the engine can produce.  All three engines
+now use this table; they must not guess a slug.
+Simple Icons slugs are brand names, not domain labels (`att.com` → `atandt`);
+derivation is right only by accident.  A mapped slug that 404s must be dropped
+or remapped to a live slug (`chase.com` → `chase` as of 2026-09-01).
 
 **R13.3 `SKIP` set.** `delta.com`. Even if a `delta` slug is later added to
 R13.1, delta.com MUST NOT use it; the airline is served by the curated mark

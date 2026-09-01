@@ -90,6 +90,14 @@ test("the Paste URL action is carried by img-src, not connect-src", () => {
   );
 });
 
+test("connect-src allows Sentry ingest so a configured VITE_SENTRY_DSN can post", () => {
+  const connect = directives().get("connect-src") ?? [];
+  assert.ok(
+    connect.includes("https://*.ingest.sentry.io") || connect.includes("https://*.ingest.us.sentry.io"),
+    "connect-src must allow Sentry ingest hosts; a DSN without this CSP entry fails silently",
+  );
+});
+
 test("the directives that keep the CSP worth having are still strict", () => {
   const csp = directives();
   // img-src is deliberately wide (above), so these carry the weight.

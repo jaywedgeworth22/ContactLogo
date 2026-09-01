@@ -263,7 +263,9 @@ test("exhausted state classes exist", () => {
 // ---- index.html ------------------------------------------------------
 
 test("index.html declares both light and dark theme-color meta tags", () => {
-  assert.match(html, /<meta name="theme-color" content="#1c1917" media="\(prefers-color-scheme: light\)" \/>/);
+  // Light chrome matches the cream page, not near-black ink.  A dark theme-color
+  // on a light page is what iOS paints into the status bar.
+  assert.match(html, /<meta name="theme-color" content="#f4f0e8" media="\(prefers-color-scheme: light\)" \/>/);
   assert.match(html, /<meta name="theme-color" content="#17140f" media="\(prefers-color-scheme: dark\)" \/>/);
 });
 
@@ -271,6 +273,24 @@ test("index.html declares both light and dark theme-color meta tags", () => {
 
 test("manifest.webmanifest is still valid JSON and matches the light-theme tokens", () => {
   const parsed = JSON.parse(manifest);
-  assert.equal(parsed.theme_color, lightTokens.accent);
+  assert.equal(parsed.theme_color, lightTokens.bg);
   assert.equal(parsed.background_color, lightTokens.bg);
+  const png = (parsed.icons as { src: string; type?: string }[]).filter((i) => i.type === "image/png");
+  assert.ok(png.some((i) => i.src === "/icon-192.png"));
+  assert.ok(png.some((i) => i.src === "/icon-512.png"));
+});
+
+test("index.html uses a PNG apple-touch-icon and cream light theme-color", () => {
+  assert.match(html, /rel="apple-touch-icon" href="\/apple-touch-icon.png"/);
+  assert.match(html, /rel="canonical" href="https:\/\/contactlogo.com\/"/);
+  assert.match(html, /property="og:image" content="https:\/\/contactlogo.com\/og.png"/);
+});
+
+test("public SEO and PWA files exist", () => {
+  const pub = here + "../public/";
+  for (const name of ["robots.txt", "sitemap.xml", "og.png", "apple-touch-icon.png", "icon-192.png", "icon-512.png", "privacy.html", "terms.html"]) {
+    assert.ok(readFileSync(pub + name).length > 0, name);
+  }
+  const robots = readFileSync(pub + "robots.txt", "utf8");
+  assert.match(robots, /Sitemap: https:\/\/contactlogo.com\/sitemap.xml/);
 });

@@ -1,0 +1,57 @@
+name: Simple Icons liveness
+
+# Network-bound: do not gate every PR.  A weekly probe fails the job when a
+# mapped slug 404s so the three engines cannot silently rot again.
+on:
+  schedule:
+    - cron: "17 14 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - name: GET every mapped Simple Icons slug
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import re, sys, urllib.request, urllib.error
+          from pathlib import Path
+
+          text = Path("web/src/engine/logos.ts").read_text()
+          m = re.search(r"const SIMPLE_SLUGS: Record<string, string> = \{([\s\S]*?)\n\};", text)
+          if not m:
+              print("could not parse SIMPLE_SLUGS", file=sys.stderr)
+              sys.exit(2)
+          slugs = sorted({slug for _, slug in re.findall(r'"([^"]+)": "([^"]+)"', m.group(1))})
+          dead = []
+          flaky = []
+          for slug in slugs:
+              url = f"https://cdn.simpleicons.org/{slug}"
+              req = urllib.request.Request(url, headers={"User-Agent": "ContactLogo-liveness"})
+              try:
+                  with urllib.request.urlopen(req, timeout=20) as resp:
+                      code = resp.status
+              except urllib.error.HTTPError as e:
+                  code = e.code
+              except Exception as e:
+                  print(f"FLAKE {slug} {type(e).__name__}")
+                  flaky.append(slug)
+                  continue
+              if code == 404:
+                  print(f"DEAD {slug} 404")
+                  dead.append(slug)
+              elif code != 200:
+                  print(f"FLAKE {slug} {code}")
+                  flaky.append(slug)
+              else:
+                  print(f"OK {slug}")
+          print(f"mapped={len(slugs)} dead={len(dead)} flake={len(flaky)}")
+          if dead:
+              sys.exit(1)
+          PY

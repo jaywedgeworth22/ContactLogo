@@ -150,7 +150,7 @@ final class ClassificationTests: XCTestCase {
 
 final class SimpleIconsTests: XCTestCase {
     func testSlugMapAndDeltaSkip() {
-        XCTAssertEqual(SimpleIconsSource.slug(for: "chase.com"), "jpmorgan" as String?)
+        XCTAssertEqual(SimpleIconsSource.slug(for: "chase.com"), "chase" as String?)
         XCTAssertEqual(SimpleIconsSource.slug(for: "att.com"), "atandt" as String?)
         XCTAssertNotNil(SimpleIconsSource.url(for: "fedex.com"))
         // R13.3 — the airline is served by the curated mark, never by the

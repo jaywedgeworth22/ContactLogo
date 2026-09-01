@@ -24,7 +24,13 @@ struct SettingsView: View {
                 } header: {
                     Text("Brandfetch")
                 } footer: {
-                    Text("Optional. ContactLogo works without a key using free logo sources; adding your own Brandfetch credentials unlocks higher-quality matches.")
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Optional.  High-resolution Brandfetch and Logo.dev marks need a key.  Without one, ContactLogo uses Simple Icons, stock tickers, and favicons.")
+                        if settings.credentialStorageFailed {
+                            Text("The keychain would not save that credential.  High-resolution sources will stay off until it can.")
+                                .foregroundStyle(.red)
+                        }
+                    }
                 }
                 Section {
                     Toggle("Skip contacts that already have a photo", isOn: $settings.skipContactsWithExistingPhoto)

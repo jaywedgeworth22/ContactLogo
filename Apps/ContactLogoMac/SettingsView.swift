@@ -16,9 +16,14 @@ struct SettingsView: View {
                     .onChange(of: settings.brandfetchClientID) { settings.save() }
                 SecureField("API Key", text: $settings.brandfetchAPIKey)
                     .onChange(of: settings.brandfetchAPIKey) { settings.save() }
-                Text("Optional. ContactLogo works without a key using free logo sources; adding your own Brandfetch credentials unlocks higher-quality matches.")
+                Text("Optional.  High-resolution Brandfetch and Logo.dev marks need a key.  Without one, ContactLogo uses Simple Icons, stock tickers, and favicons.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if settings.credentialStorageFailed {
+                    Text("The keychain would not save that credential.  High-resolution sources will stay off until it can.")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
             }
             Section("Matching") {
                 Toggle("Skip contacts that already have a photo", isOn: $settings.skipContactsWithExistingPhoto)

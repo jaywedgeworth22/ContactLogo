@@ -23,7 +23,7 @@
   --high: #2f7d4a;
   --medium: #b86b1a;
   --low: #a3491f;
-  --skip: #8a8178;
+  --skip: #655e54;
   --accent: #1c1917;
   --accent-ink: #f8f4ec;
   --focus-ring: #2563eb;
@@ -139,8 +139,11 @@ input[type="checkbox"]:focus-visible {
 .hero h1 { font-size: 2.2rem; letter-spacing: -0.03em; margin: 0 0 8px; }
 .hero p { color: var(--muted); margin: 0 0 24px; max-width: 40rem; line-height: 1.45; }
 
-.hero-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.hero-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .hero-row h1 { margin: 0; }
+.wordmark { display: flex; align-items: center; gap: 10px; }
+.hero-mark { width: 40px; height: 40px; border-radius: 8px; display: block; }
+.footer a { color: inherit; }
 .settings { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; margin: 0 0 18px; }
 .settings-input { width: min(100%, 28rem); padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); margin: 8px 12px 0 0; background: var(--card); color: var(--ink); }
 .drop {

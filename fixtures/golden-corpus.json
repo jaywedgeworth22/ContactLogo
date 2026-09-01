@@ -531,7 +531,7 @@
         "flags": [
           "via-catalog"
         ],
-        "simpleIconsSlug": "walgreens"
+        "simpleIconsSlug": null
       },
       "rule": "MATCHING-ENGINE §2 rule 1; ENGINE-CONTRACT R5.1",
       "why": "Store-location parentheticals are stripped before any lookup."
@@ -608,7 +608,7 @@
           "lone-firm-name",
           "via-catalog"
         ],
-        "simpleIconsSlug": "walgreens"
+        "simpleIconsSlug": null
       },
       "rule": "MATCHING-ENGINE §2b 'A lone given or family name that is a catalog firm'; ENGINE-CONTRACT R7.4",
       "why": "A catalog firm parked in the given-name field is a business card, not a person."
@@ -718,7 +718,7 @@
           "via-catalog",
           "replace-existing"
         ],
-        "simpleIconsSlug": "costco"
+        "simpleIconsSlug": null
       },
       "rule": "MATCHING-ENGINE §1 'replace-existing caps at medium', §6; ENGINE-CONTRACT R10.4",
       "why": "Overwriting an existing photo always goes through review, never pre-checked."
@@ -772,7 +772,7 @@
           "subdomain-reduced",
           "via-website"
         ],
-        "simpleIconsSlug": "walgreens"
+        "simpleIconsSlug": null
       },
       "rule": "MATCHING-ENGINE §4 junk domains; ENGINE-CONTRACT R1 (CL-13)",
       "why": "shop.walgreens.com must reduce to walgreens.com, or the catalog entry and the Simple Icons glyph are both missed."
@@ -1357,7 +1357,7 @@
         "flags": [
           "via-catalog"
         ],
-        "simpleIconsSlug": "costco"
+        "simpleIconsSlug": null
       },
       "rule": "ENGINE-CONTRACT R5.2",
       "why": "Paired with the Cisco case; 'Costco' must not normalize to 'cost'."
@@ -1619,7 +1619,7 @@
           "decoration-stripped",
           "via-catalog"
         ],
-        "simpleIconsSlug": "walgreens"
+        "simpleIconsSlug": null
       },
       "rule": "MATCHING-ENGINE §2 rule 2; ENGINE-CONTRACT R6.3",
       "why": "A locationish tail after ' - ' is decoration, not a brand tail."
@@ -1978,7 +1978,7 @@
           "via-catalog",
           "replace-existing"
         ],
-        "simpleIconsSlug": "amazon"
+        "simpleIconsSlug": null
       },
       "rule": "MATCHING-ENGINE §4 + §6; ENGINE-CONTRACT R10",
       "why": "Two independent caps land on the same contact; the result is still exactly medium, not low."
@@ -2269,7 +2269,7 @@
         "flags": [
           "via-catalog"
         ],
-        "simpleIconsSlug": "jpmorgan"
+        "simpleIconsSlug": "chase"
       },
       "rule": "MATCHING-ENGINE §3 source 2; ENGINE-CONTRACT R13 (CL-04)",
       "why": "The slug is not the domain label: deriving 'chase' from chase.com yields no icon at all."
@@ -2531,7 +2531,7 @@
           "brand-tail",
           "via-catalog"
         ],
-        "simpleIconsSlug": "costco"
+        "simpleIconsSlug": null
       },
       "rule": "MATCHING-ENGINE section 1 (Person: never a logo target); section 5 rule 8 scoped to org-only cards",
       "why": "The other side of the same test, and the reason the head is read rather than the 'At' form suppressed outright: a pharmacy counter inside a Costco is a real department and should carry the brand. 'Pharmacy' is an ORG_SIGNAL trade word, so the head is not personal."
