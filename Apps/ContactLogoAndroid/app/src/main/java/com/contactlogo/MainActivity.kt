@@ -17,10 +17,12 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.contactlogo.engine.ContactsRepository
+import com.contactlogo.engine.UndoLog
 import com.contactlogo.ui.ContactLogoApp
 import com.contactlogo.ui.ContactLogoViewModel
 import com.contactlogo.ui.PlayUpdateDialog
 import com.contactlogo.ui.theme.ContactLogoTheme
+import java.io.File
 import com.google.android.play.core.appupdate.AppUpdateInfo
 import com.google.android.play.core.appupdate.AppUpdateManager
 import com.google.android.play.core.appupdate.AppUpdateManagerFactory
@@ -62,13 +64,15 @@ class MainActivity : ComponentActivity() {
         // on every API level back to minSdk 26, not just 35+.
         enableEdgeToEdge()
         val repository = ContactsRepository(applicationContext)
+        // Prior PHOTO bytes stay off backup/Drive even if allowBackup is flipped later.
+        val undoLog = UndoLog(File(applicationContext.noBackupFilesDir, "undo"))
 
         viewModel = ViewModelProvider(
             this,
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                    return ContactLogoViewModel(repository) as T
+                    return ContactLogoViewModel(repository, undoLog) as T
                 }
             }
         )[ContactLogoViewModel::class.java]
