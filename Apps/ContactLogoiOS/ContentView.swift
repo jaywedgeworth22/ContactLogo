@@ -123,7 +123,14 @@ struct ReviewQueueView: View {
                     .tint(.green)
                 }
                 .swipeActions(edge: .trailing) {
-                    if result.candidates.count > 1 {
+                    if result.isRetryable {
+                        Button {
+                            Task { await model.retryMatch(for: result.contactID) }
+                        } label: {
+                            Label("Retry", systemImage: "arrow.clockwise")
+                        }
+                        .tint(.orange)
+                    } else if result.candidates.count > 1 {
                         Button {
                             model.cycleCandidate(result.contactID)
                         } label: {
@@ -222,6 +229,9 @@ struct ReviewRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text(model.displayName(for: result.contactID)).font(.headline)
+                    if result.isRetryable {
+                        RetryableBadge()
+                    }
                     Spacer()
                     Button {
                         onPreview?()
@@ -232,11 +242,27 @@ struct ReviewRow: View {
                     }
                     .buttonStyle(.plain)
                 }
-                Text(detail)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if let exhausted = result.exhaustedLabel {
+                    Text(exhausted)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if !result.isRetryable {
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 HStack(spacing: 8) {
-                    if result.candidates.count > 1 {
+                    if result.isRetryable {
+                        if model.retryingIDs.contains(result.contactID) {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Button("Retry") {
+                                Task { await model.retryMatch(for: result.contactID) }
+                            }
+                            .font(.caption)
+                        }
+                    } else if result.candidates.count > 1 {
                         Button("Try another") { model.cycleCandidate(result.contactID) }
                             .font(.caption)
                         Text("(\((model.chosenIndex[result.contactID] ?? 0) + 1)/\(result.candidates.count))")
@@ -263,6 +289,21 @@ struct ReviewRow: View {
         case .low: "low"
         case .skip: "skip"
         }
+    }
+}
+
+/// Web `card--exhausted` treatment for a retryable skip row. Icon-only so
+/// the action copy stays the web/native word "Retry", not a third bucket.
+struct RetryableBadge: View {
+    var body: some View {
+        Image(systemName: "arrow.clockwise.circle")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.orange)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Color.orange.opacity(0.15))
+            .clipShape(Capsule())
+            .accessibilityHidden(true)
     }
 }
 

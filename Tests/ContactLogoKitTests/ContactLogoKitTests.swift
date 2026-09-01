@@ -538,6 +538,26 @@ final class SourceFailureTests: XCTestCase {
         let result = await pipeline.match(ContactIdentity(id: "1", displayName: "FedEx"))
         XCTAssertTrue(result.sourceErrors.isEmpty)
         XCTAssertFalse(result.isRetryable)
+        XCTAssertEqual(result.exhaustedLabel, "No logo found")
+    }
+
+    func testRetryableSkipDoesNotUseTheExhaustedLabel() {
+        let retry = MatchResult(
+            contactID: "1", contactClass: .businessCard, candidates: [],
+            confidence: .skip, flags: ["source-error"],
+            sourceErrors: [SourceFailure(source: .brandfetch, reason: "rate limited", rateLimited: true)]
+        )
+        XCTAssertTrue(retry.isRetryable)
+        XCTAssertNil(retry.exhaustedLabel)
+
+        let miss = MatchResult(contactID: "2", contactClass: .businessCard,
+                               candidates: [], confidence: .skip)
+        XCTAssertFalse(miss.isRetryable)
+        XCTAssertEqual(miss.exhaustedLabel, "No logo found")
+
+        let person = MatchResult(contactID: "3", contactClass: .person,
+                                 candidates: [], confidence: .skip)
+        XCTAssertNil(person.exhaustedLabel)
     }
 
     func testNameSearchGateDropsUnrelatedBrands() {
@@ -901,6 +921,65 @@ final class ManualCandidateTests: XCTestCase {
         session.lastBatchID = nil
         await session.undoLast()
         XCTAssertEqual(session.lastError, ReviewSessionError.noBatchToUndo)
+    }
+}
+
+@MainActor
+final class RetryMatchTests: XCTestCase {
+    struct HitSource: LogoSource {
+        let kind = SourceKind.simpleIcons
+        func candidates(forBrandName name: String) async throws -> [LogoCandidate] {
+            [LogoCandidate(source: .simpleIcons,
+                           imageURL: URL(string: "https://cdn.example.com/x.png")!,
+                           pixelWidth: 400, pixelHeight: 400, assetType: "icon", hasAlpha: true)]
+        }
+        func candidates(forDomain domain: String) async throws -> [LogoCandidate] {
+            try await candidates(forBrandName: domain)
+        }
+    }
+
+    private func retryableResult(id: String = "1") -> MatchResult {
+        MatchResult(
+            contactID: id, contactClass: .businessCard, candidates: [],
+            confidence: .skip, flags: ["source-error"],
+            sourceErrors: [SourceFailure(source: .wikimedia, reason: "rate limited", rateLimited: true)]
+        )
+    }
+
+    func testNeedsRetryStaysInsideNotFound() {
+        let session = ReviewSession()
+        let retry = retryableResult()
+        let miss = MatchResult(contactID: "2", contactClass: .businessCard,
+                               candidates: [], confidence: .skip)
+        session.results = [retry, miss]
+        XCTAssertEqual(session.notFound.map(\.contactID), ["1", "2"])
+        XCTAssertEqual(session.needsRetry.map(\.contactID), ["1"])
+        XCTAssertEqual(session.needsRetry[0].exhaustedLabel, nil)
+        XCTAssertEqual(session.notFound[1].exhaustedLabel, "No logo found")
+    }
+
+    func testRetryMatchReplacesTheRow() async {
+        let session = ReviewSession()
+        session.results = [retryableResult()]
+        session.rememberIdentity(ContactIdentity(id: "1", displayName: "FedEx"))
+        session.pipelineForTesting = MatchPipeline(sources: [HitSource()], fetchImage: { _ in Data() })
+
+        await session.retryMatch(for: "1")
+
+        XCTAssertFalse(session.results[0].isRetryable)
+        XCTAssertTrue(session.needsRetry.isEmpty)
+        XCTAssertFalse(session.results[0].candidates.isEmpty)
+        XCTAssertEqual(session.results[0].candidates.first?.source, .simpleIcons)
+        XCTAssertTrue(session.retryingIDs.isEmpty)
+    }
+
+    func testRetryWithoutAnIdentityIsANoOp() async {
+        let session = ReviewSession()
+        session.results = [retryableResult()]
+        session.pipelineForTesting = MatchPipeline(sources: [HitSource()], fetchImage: { _ in Data() })
+        await session.retryMatch(for: "1")
+        XCTAssertTrue(session.results[0].isRetryable)
+        XCTAssertTrue(session.results[0].candidates.isEmpty)
     }
 }
 #endif
