@@ -44,6 +44,7 @@ struct ContactLogoiOSApp: App {
             ContentView()
                 .environmentObject(model)
                 .environmentObject(settingsStore)
+                .appUpdatePrompt()
         }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .background {

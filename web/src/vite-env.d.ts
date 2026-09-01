@@ -7,6 +7,8 @@ interface ImportMetaEnv {
   readonly DD_VERSION?: string;
   readonly DD_REQUIRE?: string;
   readonly VITE_GOOGLE_CONTACTS_CLIENT_ID?: string;
+  readonly VITE_SENTRY_DSN?: string;
+  readonly VITE_SENTRY_ENV?: string;
 }
 
 interface ImportMeta {
