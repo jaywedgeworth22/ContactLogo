@@ -57,10 +57,11 @@ are verified present (`UIBackgroundModes = processing`, `BGTaskSchedulerPermitte
 com.contactlogo.match`) — `INFOPLIST_KEY_UIBackgroundModes` did not merge on Xcode 26, so those array
 keys live in `Apps/ContactLogoiOS/Info.plist`.  What is unverified is the behaviour.
 
-Related and **not fixed**: issue #32.  The queue the overnight notification advertises is not
-persisted, so it is gone by next launch.  Deliberately deferred — it needs `Codable` across the kit's
-public model plus a store, and a product call on how stale a queued match may be before it is re-run
-rather than shown.
+Related, now implemented on `grok/persist-review-queue` (issue #32): the overnight
+notification's queue is written to Application Support before `setTaskCompleted` and
+before the notification posts.  A contact-store change token stamps the payload; a
+mismatch discards it rather than showing a queue built against contacts that have
+since changed.  Candidate URLs only — no photo bytes.
 
 ---
 
@@ -171,7 +172,7 @@ app if it is ever distributed outside TestFlight.  App-icon slots also still nee
 
 | # | What |
 | --- | --- |
-| #32 | Persist the iOS background match queue before advertising it |
+| #32 | Persist the iOS background match queue before advertising it — implemented on `grok/persist-review-queue`; still wants a device pass that the overnight notification actually opens the restored queue |
 | #33 | Surface retryable rows in the native shells instead of showing them as "Not found" |
 | #35 | The web virtualizer assumes every row is the height of the first one |
 | #36 | R8 identity order for org-only brand-tail cards |

@@ -4,7 +4,8 @@ import UserNotifications
 /// Posts the local notification VISION.md / ARCHITECTURE.md promise for
 /// overnight background matching (CL-05): "your queue is ready" once a
 /// `BGProcessingTask` finishes a scan+match pass while the app is
-/// backgrounded.
+/// backgrounded.  Callers must persist the queue (and only invoke this
+/// after that write succeeds) so a cold launch can keep the promise.
 enum NotificationScheduler {
     static func postMatchReady(ready: Int, needsReview: Int) {
         let content = UNMutableNotificationContent()

@@ -34,7 +34,7 @@
 | `Sources` | `LogoSource` protocol; preferred marks, Simple Icons, Brandfetch, Wikimedia, CompaniesLogo picker, favicon fallbacks |
 | `Rank` | aspect/icon/alpha scoring, padding, similarity gate, top-N candidate list |
 | `Pipeline` | orchestration → `MatchResult` with confidence tier (guess/favicon never HIGH) |
-| `Store` | apply approved changes; persist undo log; shared `ReviewSession` |
+| `Store` | apply approved changes; persist undo log; persist the review queue (issue #32); shared `ReviewSession` |
 
 ## Data flow (native apps)
 

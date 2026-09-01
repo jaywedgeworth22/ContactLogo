@@ -30,7 +30,7 @@ public struct ContactIdentity: Sendable, Hashable {
     }
 }
 
-public enum ContactClass: Sendable {
+public enum ContactClass: String, Sendable, Codable {
     /// Has given/family name. Photo-protected: never overwrite an existing photo.
     case person
     /// No person name — a pure business card ("FedEx", "H-E-B Pharmacy (…)").
@@ -39,13 +39,13 @@ public enum ContactClass: Sendable {
     case nonBrand
 }
 
-public enum SourceKind: String, Sendable {
+public enum SourceKind: String, Sendable, Codable {
     case brandfetch, wikimedia, googleCSE, googleScrape
     case simpleIcons, favicon, preferred, companiesLogo, manual
 }
 
 /// One logo option for a contact. The pipeline keeps the top N, not just the winner.
-public struct LogoCandidate: Sendable, Hashable {
+public struct LogoCandidate: Sendable, Hashable, Codable {
     public let source: SourceKind
     public let imageURL: URL
     public let pageURL: URL?
@@ -83,9 +83,18 @@ public struct LogoCandidate: Sendable, Hashable {
         self.altText = altText
         self.hasAlpha = hasAlpha
     }
+
+    /// Remote candidates can be re-fetched on display.  Embedded photo bytes
+    /// (data: URLs, local files) must never be written to the review-queue store.
+    public var isPersistableURL: Bool {
+        switch imageURL.scheme?.lowercased() {
+        case "http", "https": return true
+        default: return false
+        }
+    }
 }
 
-public enum Confidence: Int, Comparable, Sendable {
+public enum Confidence: Int, Comparable, Sendable, Codable {
     case skip = 0, low = 1, medium = 2, high = 3
     public static func < (lhs: Confidence, rhs: Confidence) -> Bool {
         lhs.rawValue < rhs.rawValue
@@ -95,7 +104,7 @@ public enum Confidence: Int, Comparable, Sendable {
 /// A source that failed during a run (ENGINE-CONTRACT R11.6).  A source that
 /// errored is not the same as a source that found nothing, and neither may be
 /// silent: a contact whose search was incomplete is retryable, not "not found".
-public struct SourceFailure: Sendable, Hashable {
+public struct SourceFailure: Sendable, Hashable, Codable {
     public let source: SourceKind
     public let reason: String
     /// The source gave up after exhausting its 429 backoff budget.
@@ -108,7 +117,7 @@ public struct SourceFailure: Sendable, Hashable {
     }
 }
 
-public struct MatchResult: Sendable {
+public struct MatchResult: Sendable, Equatable, Codable {
     public let contactID: String
     public var contactClass: ContactClass
     /// Ranked, best first. Empty when nothing acceptable was found.
@@ -118,6 +127,8 @@ public struct MatchResult: Sendable {
     public var flags: [String]
     /// Sources that errored while matching this contact. Non-empty means the
     /// search was incomplete — the row belongs in a retryable state.
+    /// ENGINE-CONTRACT R11.6: these must survive a process death so a
+    /// background run cannot advertise a completed search that was not.
     public var sourceErrors: [SourceFailure]
 
     /// True when nothing was found *and* at least one source failed, i.e. the
@@ -141,6 +152,14 @@ public struct MatchResult: Sendable {
         self.confidence = confidence
         self.flags = flags
         self.sourceErrors = sourceErrors
+    }
+
+    /// Drops candidates whose `imageURL` embeds photo bytes.  Issue #32: the
+    /// persisted queue is identifiers + remote URLs, never image payloads.
+    public func withoutEmbeddedImageBytes() -> MatchResult {
+        var copy = self
+        copy.candidates = candidates.filter(\.isPersistableURL)
+        return copy
     }
 }
 

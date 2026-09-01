@@ -306,6 +306,63 @@ public final class BackgroundMatchRunner {
 }
 ```
 
+### Persist-before-notify (issue #32)
+
+The overnight notification is a promise the next launch has to keep.  `run()`
+therefore writes the queue to disk *and only then* returns `true`.  The shell
+must not call `setTaskCompleted` or post the notification until `run()` has
+returned `true`.
+
+Kit API — `Sources/ContactLogoKit/Store/ReviewQueueStore.swift`:
+
+```swift
+public struct PersistedReviewQueue: Codable, Equatable, Sendable {
+    public static let currentSchemaVersion = 1
+    public var schemaVersion: Int
+    public var scannedAt: Date
+    public var contactStoreChangeToken: Data?
+    public var results: [MatchResult]
+    public var selected: [String]
+    public var chosenIndex: [String: Int]
+    public var names: [String: String]
+}
+
+public struct ReviewQueueStore: Sendable {
+    public init(directory: URL? = nil,
+                currentChangeToken: @escaping @Sendable () -> Data? = ReviewQueueStore.liveChangeToken)
+    public func save(_ snapshot: PersistedReviewQueue) throws
+    /// Production read: non-empty, current schema, change token still matches.
+    /// Anything else is deleted rather than shown.
+    public func loadFresh() throws -> PersistedReviewQueue?
+    public func clear() throws
+}
+
+extension ReviewSession {
+    public convenience init(settings: SettingsStore?, queueStore: ReviewQueueStore?)
+    /// False if the write failed — the background runner must not notify.
+    @discardableResult public func persistReviewQueue() -> Bool
+}
+```
+
+Rules:
+
+- `MatchResult` and its members are `Codable`.  `ContactClass` has a `String`
+  raw value (`person` / `businessCard` / `nonBrand`).  `Confidence` keeps its
+  `Int` raw value.
+- Photo bytes are never persisted.  `data:` and local-file candidates are
+  stripped on save; only `http`/`https` URLs remain.
+- The payload is stamped with the scan date and
+  `CNContactStore.currentHistoryToken` captured when contacts were enumerated.
+  A mismatch (including nil vs non-nil) discards the file.  Never show a queue
+  built against contacts that have since changed.
+- `ReviewSession` loads `loadFresh()` on init and enters `.review` when the
+  snapshot is non-empty.
+- `BackgroundMatchRunner.run()` calls `persistReviewQueue()` after a completed
+  scan and returns `false` if that write fails, so the notification cannot
+  outrun the data.
+- ENGINE-CONTRACT R11.6: `sourceErrors` round-trip with the rest of
+  `MatchResult`, so a retryable row is still retryable after relaunch.
+
 ### Shell responsibilities (`Apps/ContactLogoiOS/ContactLogoiOSApp.swift`)
 
 The kit runner gives the shell everything it needs to implement the real
@@ -324,6 +381,7 @@ static func handle(_ task: BGProcessingTask) {
     let runner = BackgroundMatchRunner(session: /* shared/model-owned session */)
     task.expirationHandler = { runner.cancel() }
     let work = Task {
+        // run() persists the queue before returning true (issue #32).
         let completed = await runner.run()
         task.setTaskCompleted(success: completed)
         if completed { /* post a local UNUserNotificationCenter notification
@@ -397,6 +455,8 @@ shell-local UI state, not session state).
 | `ReviewSession.undoHistory`, `undo(batchID:)` | `Store/ReviewSession.swift` |
 | `BackgroundMatchRunner` | `Store/BackgroundMatchRunner.swift` (new) |
 | `ReviewSession.setManualCandidate(for:imageData:)` / `(for:imageURL:)` | `Store/ReviewSession.swift` |
+| `PersistedReviewQueue`, `ReviewQueueStore` | `Store/ReviewQueueStore.swift` (new) |
+| `ReviewSession.persistReviewQueue()`, `init(settings:queueStore:)` | `Store/ReviewSession.swift` |
 
 Everything under `BGTaskScheduler`, `UIBackgroundModes`,
 `BGTaskSchedulerPermittedIdentifiers`, notifications, `PhotosPicker`/
