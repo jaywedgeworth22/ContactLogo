@@ -8,12 +8,28 @@ options:
   groupSortPosition: top
   xcodeVersion: "16.0"
 
+packages:
+  Sentry:
+    url: https://github.com/getsentry/sentry-cocoa.git
+    from: "8.44.0"
+
 settings:
   base:
-    SWIFT_VERSION: "5.9"
+    # Must stay >= the language mode implied by Package.swift's
+    # `swift-tools-version: 6.0` — Apps/ uses `@retroactive` conformances,
+    # which require Swift 5.10+, and Sources/ContactLogoKit is compiled by
+    # both this Xcode project and SwiftPM from the same sources.
+    SWIFT_VERSION: "6.0"
     MARKETING_VERSION: "1.0.0"
     CURRENT_PROJECT_VERSION: "1"
-    DEVELOPMENT_TEAM: CC8UTF7ATG
+    # Not a secret, but pinning one developer's Apple Team ID here would break
+    # the build for everyone else.  Set it per checkout:
+    #   CONTACTLOGO_DEVELOPMENT_TEAM=YOURTEAMID xcodegen generate
+    # Left unset this expands to empty, and Xcode resolves the signed-in
+    # developer's team under CODE_SIGN_STYLE: Automatic.  Do not write
+    # ${VAR:-default} here — XcodeGen has no shell-style default syntax and
+    # treats the whole "VAR:-default" string as the variable name.
+    DEVELOPMENT_TEAM: "${CONTACTLOGO_DEVELOPMENT_TEAM}"
     CODE_SIGN_STYLE: Automatic
     INFOPLIST_KEY_CFBundleDisplayName: "ContactLogo"
     INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.utilities"
@@ -29,7 +45,6 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.contactlogo.kit
-        DEVELOPMENT_TEAM: CC8UTF7ATG
         CODE_SIGN_STYLE: Automatic
         DEFINES_MODULE: YES
         GENERATE_INFOPLIST_FILE: YES
@@ -45,7 +60,6 @@ targets:
         PRODUCT_NAME: ContactLogoKit
         PRODUCT_MODULE_NAME: ContactLogoKit
         PRODUCT_BUNDLE_IDENTIFIER: com.contactlogo.kit.macos
-        DEVELOPMENT_TEAM: CC8UTF7ATG
         CODE_SIGN_STYLE: Automatic
         DEFINES_MODULE: YES
         GENERATE_INFOPLIST_FILE: YES
@@ -58,18 +72,27 @@ targets:
       - path: Apps/ContactLogoiOS
     dependencies:
       - target: ContactLogoKit
+      - package: Sentry
+        product: Sentry
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.contactlogo
         PRODUCT_NAME: "ContactLogo"
-        DEVELOPMENT_TEAM: CC8UTF7ATG
         CODE_SIGN_STYLE: Automatic
         TARGETED_DEVICE_FAMILY: "1,2"
         INFOPLIST_KEY_CFBundleDisplayName: "ContactLogo"
         INFOPLIST_KEY_NSContactsUsageDescription: "ContactLogo scans your contacts to find company logos for businesses in your address book."
-        INFOPLIST_KEY_BGTaskSchedulerPermittedIdentifiers: "com.contactlogo.match"
         INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.utilities"
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         GENERATE_INFOPLIST_FILE: YES
+        # Array keys (UIBackgroundModes, BGTaskSchedulerPermittedIdentifiers)
+        # do not merge from INFOPLIST_KEY_* on Xcode 26.  Apps/ContactLogoiOS/Info.plist
+        # holds them; GENERATE_INFOPLIST_FILE still fills the scalar keys.  CL-05.
+        INFOPLIST_FILE: Apps/ContactLogoiOS/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 
   ContactLogoMac:
@@ -84,10 +107,23 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.contactlogo.macos
         PRODUCT_NAME: "ContactLogo"
-        DEVELOPMENT_TEAM: CC8UTF7ATG
         CODE_SIGN_STYLE: Automatic
         INFOPLIST_KEY_CFBundleDisplayName: "ContactLogo"
         INFOPLIST_KEY_NSContactsUsageDescription: "ContactLogo scans your contacts to find company logos for businesses in your address book."
         INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.utilities"
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         GENERATE_INFOPLIST_FILE: YES
         CODE_SIGN_ENTITLEMENTS: Apps/ContactLogoMac/ContactLogoMac.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+
+# xcodebuild requires -scheme (not -target) whenever -derivedDataPath is given,
+# and XcodeGen does not generate schemes unless they are declared here.
+schemes:
+  ContactLogoiOS:
+    build:
+      targets:
+        ContactLogoiOS: all
+  ContactLogoMac:
+    build:
+      targets:
+        ContactLogoMac: all

@@ -5,12 +5,16 @@ plugins {
 
 android {
     namespace = "com.contactlogo"
-    compileSdk = 34
+    // Google Play has required targetSdk 35 for new and updated app submissions
+    // since August 2025 (CL-24). AGP 8.5.2 already supports compiling and
+    // targeting API 35; Kotlin 1.9.24 / compose compiler 1.5.14 are unaffected
+    // and stay pinned together.
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.contactlogo"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0.0"
 
@@ -22,7 +26,11 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // R8 was shipping disabled for release builds (CL-24); enabled with
+            // the project's own proguard-rules.pro (previously referenced but
+            // absent, so this block silently did nothing).
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -49,6 +57,18 @@ android {
     }
 }
 
+// A CI log that says only "see the HTML report" cannot be diagnosed from a CI
+// log.  Print the failing test, its assertion, and the stack.
+tasks.withType<Test>().configureEach {
+    testLogging {
+        events("failed", "skipped")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        showExceptions = true
+        showCauses = true
+        showStackTraces = true
+    }
+}
+
 dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
@@ -67,4 +87,6 @@ dependencies {
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+
+    testImplementation("junit:junit:4.13.2")
 }

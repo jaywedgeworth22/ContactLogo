@@ -22,4 +22,9 @@ Optional Google Contacts: set `VITE_GOOGLE_CONTACTS_CLIENT_ID` or paste a
 client id in Settings.  Device picker appears on browsers that implement
 `navigator.contacts`.
 
-Production build: `npm run build`.
+Production build: `npm run build`.  Vercel deployment: auto-deployed from main,
+built from the web directory root per `vercel.json`.  Local development server:
+`npm start` (serves `dist/` with `dd-trace`; not the production path).
+Datadog RUM configuration is documented in [docs/DATADOG.md](../docs/DATADOG.md);
+note that server-side APM (`dd-trace` in `server.mjs`) only runs locally, not
+in Vercel production (Vercel is a serverless CDN, not a Node container).

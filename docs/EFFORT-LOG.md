@@ -1,14 +1,15 @@
 # ContactLogo Effort Log — cross-agent board
-Protocol: /Users/jay/apps/EFFORT-LOG-PROTOCOL.md (canonical). Live board:
-`/Users/jay/apps/CONTACTLOGO-EFFORT-LOG.md` (mirror: this file). Bootstrapped
-2026-08-21 by KIMI during the fleet setup audit; folder + GitHub name aligned
-by CURSOR the same day. ContactLogo is not yet in fleet-apps.json and has no
-CI — see Planned rows below.
+Protocol: /Users/jay/apps/EFFORT-LOG-PROTOCOL.md (canonical). Live board: this file
+(mirror: docs/EFFORT-LOG.md in ~/Code/ContactLogo). As of 2026-08-21.
+
+> ⚠️ **AGENT AVAILABILITY NOTICE (2026-08-21):** KIMI is **RETIRED / UNAVAILABLE** long-term (owner directive). All agents MUST NOT assign work or wait on KIMI in-flight work. Reassign any open KIMI effort board lanes or GitHub issues to active seats (AG, GROK, CLAUDE, MONET, etc.).
 
 ## Deployed
 - (none on Coolify/Cloudflare yet.  Official product URL is https://contactlogo.com.  Grok Publish at https://contact-logo.grok.me is legacy only.)
 
 ## Completed
+- **2026-08-26 — ANTIGRAVITY — COMPLETED — Add Vercel free feature optimizations (branch `antigravity/vercel-optimizations`).**  Created `web/vercel.json` with Vite framework preset, 1-year immutable cache headers for build assets (`/assets/(.*)`), stale-while-revalidate headers for static media/fonts, strict security headers (nosniff, sameorigin, referrer-policy, permissions-policy), clean URLs, and trailing slash normalization.
+- **2026-08-25 — AG — COMPLETED — Set inline navigation bar title display mode in ContactLogo iOS (branch ag/ios-inline-nav-titles).**  Set .navigationBarTitleDisplayMode(.inline) on root NavigationStack.
 - **2026-08-21 — CURSOR — COMPLETED — Local folder `~/Code/ContactLogo` + GitHub `jaywedgeworth22/ContactLogo` + Cursor project name ContactLogo.**  `mv` of `/Users/jay/Code/BadgeBook` (git history, uncommitted merge, `backups/`, `vendor/crest/` intact).  GitHub already renamed (0 forks, old BadgeBook slug redirects).  Origin set to `https://github.com/jaywedgeworth22/ContactLogo.git`.  Cursor project list name/path updated; `~/.cursor/projects/Users-jay-Code-ContactLogo` created.  Frozen snapshots stay `backups/badgebook/` (`18fcf25`) and `backups/crest/` (`8b4ca72`).  Product docs/homepages use `contact-logo.grok.me` (live 200; unhyphenated host 404s).
 - **2026-08-21 — CURSOR — COMPLETED — Preserve Crest+BadgeBook merge into the live app.**  Uncommitted kit/web/PWA/Google-import/iOS review work committed with backups.  `vendor/crest/` subtree kept.  Best ideas stay in ContactLogoKit + `web/`.
 - **2026-08-21 — KIMI — COMPLETED — [P0] PRIVACY INCIDENT: purged `.badgebook/` from git history.**  Board item 3b9ca6cf.  Removed scan dumps, match results, review HTML, and UUID-keyed candidate PNGs from all commits via `git filter-repo` + force-push.  `.gitignore` now covers `.badgebook/`, `.contactlogo/`, scan artifacts, and AddressBook exports.  Issue #4 closed.  Residual: GitHub may cache old blobs/PR diffs until GC; issue/PR text is path-only; no forks; clones and agent transcripts are out of band.
@@ -17,7 +18,10 @@ CI — see Planned rows below.
 
 - **2026-08-22 — AG — COMPLETED — Xcode project (iOS & macOS), ContactLogo.com domain alignment, Android app build.**  Xcode project generation with iOS 17+ min deployment, document format 26 compatibility, bundle IDs `com.contactlogo` and `com.contactlogo.macos`, display name `ContactLogo`, category `utilities`, Dev Team `CC8UTF7ATG`, verified on iOS simulator with screenshot, domain aligned everywhere to `ContactLogo.com` / `https://contactlogo.com` (GitHub metadata, package.json, web, docs), and full native Android application in `Apps/ContactLogoAndroid` built and verified (`app-debug.apk`).  PR merged.
 
+- **2026-08-25 — AG — COMPLETED — High-res logo sources (Google 256px, Clearbit 512px), quality baseline filter, 404 error prevention, review-first safety refinement, direct card drag-drop upload, and interactive crop/zoom studio modal.**  Upgraded web candidate sources (Clearbit 512px, Google 256px, Preferred SVGs); prevented SimpleIcons 404 question mark SVGs via strict slug validation; kept email and guessed domains in review; added card-level image drag & drop; and added in-browser interactive circle-mask crop/zoom/pan modal.  PR #19 merged to `main`.
+
 ## In Progress
+- **2026-08-27 — GROK — IN PROGRESS — Pickup Monet PR #24 local compile (board 30af32b2, issue #30, worktree `~/apps/contactlogo-grok-eval` @ `claude/full-app-evaluation-wwwwk1`).**  Native Swift/Android compiled for the first time.  Golden corpus now runs in Swift, TypeScript, and Kotlin.  `UIBackgroundModes=processing` is in the built iOS Info.plist.  PR #24 still draft-to-ready; owner decisions (host, logo licensing) remain.
 - **2026-08-22 — CURSOR — IN PROGRESS — Domain + CI leftovers (uncommitted).**  Official host `contactlogo.com`.  Added `.github/workflows/ci.yml` (web Node job + macOS `swift test`) and `AGENTS.md`.  Did not run `onboard-new-app.sh` (must be from a fleet worktree, not `~/Code`).  Cloudflare jay account has no `contactlogo.com` zone; no DNS invented.  Personal-Site project list now points at ContactLogo + contactlogo.com.
 
 ## Planned / Reserved
@@ -25,7 +29,7 @@ CI — see Planned rows below.
 - **2026-08-22 — CURSOR — PLANNED — Attach contactlogo.com to Coolify + Cloudflare.**  Domain is owned (Grok tapspin log).  Zone not in Cloudflare yet.  Do not use Render.
 
 ## Changelog of this log
+- 2026-08-27 — GROK — local compile pickup of Monet PR #24 (issue #30, board 30af32b2).
 - 2026-08-21 — KIMI — file created during owner-requested fleet setup audit.
 - 2026-08-21 — P0 history rewrite completed (filter-repo + force-push); no contact names in this log.
 - 2026-08-21 — CURSOR — renamed local folder and GitHub product to ContactLogo; moved P0 to Completed; recorded merge+backup preservation; live site URL hyphenated.
-- 2026-08-22 — CURSOR — official product URL is contactlogo.com; CI + AGENTS.md added locally; Coolify/Cloudflare attach still waiting on DNS zone.

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
+  <!-- Concept 4 — "The Grid Lights Up": an address book of grey contacts, one match found -->
+  <g fill="#ddd6c9">
+    <rect width="44" height="44" rx="13"/>
+    <rect x="52" width="44" height="44" rx="13"/>
+    <rect y="52" width="44" height="44" rx="13"/>
+  </g>
+  <g fill="#b0a597">
+    <circle cx="22" cy="15" r="5.5"/>
+    <path d="M9 35a13 13 0 0 1 26 0Z"/>
+    <circle cx="74" cy="15" r="5.5"/>
+    <path d="M61 35a13 13 0 0 1 26 0Z"/>
+    <circle cx="22" cy="67" r="5.5"/>
+    <path d="M9 87a13 13 0 0 1 26 0Z"/>
+  </g>
+  <rect x="52" y="52" width="44" height="44" rx="13" fill="#1c1917"/>
+  <path d="M74 60.5C75.9 70 77.5 71.6 87.5 74 77.5 76.4 75.9 78 74 87.5 72.1 78 70.5 76.4 60.5 74 70.5 71.6 72.1 70 74 60.5Z" fill="#c4a574"/>
+</svg>

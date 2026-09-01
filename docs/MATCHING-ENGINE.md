@@ -101,9 +101,42 @@ is a business card, not a person. People who *work at* a company stay people.
    the winner — the review UI offers them when the user taps "unsure".
 7. **Employee contacts** (person name + corporate email domain): lowest
    priority; only logo when user opts into that class explicitly.
-8. **Person-in-name businesses** ("Byron Goode Jr - Root Insurance",
-   "Chris At NTB"): if the display name contains a known-brand tail, match the
-   brand tail, not the person.
+8. **Person-in-name businesses** — **only on a card with no given or family
+   name.**  If such a card's display name carries a known-brand tail
+   ("Front Office - Root Insurance"), match the brand tail.
+
+   This never overrides §1.  A contact with a name field is a Person and is
+   never a logo target, even when the display name reads "Byron Goode Jr - Root
+   Insurance" or "Chris At NTB" — those are people, and the tail says who they
+   are affiliated with, not that the card is that business.  The "X At Y" form
+   is the plainest case and is squarely rule 7's employee contact.
+
+   **And when there are no name fields, read the head.**  Name-field
+   classification alone leaves a hole: a vCard carrying only `FN` and no `N`
+   parses with no given name at all, so "Dana At Costco" would slip through as a
+   business.  If the head of the split reads as a person's name, the card is a
+   person.  The head is personal unless a word in it is one already known to
+   mean business, department, role, place or brand — there is no name
+   dictionary, and for this shape the safe default is "person".
+
+   | display name | head | class |
+   | --- | --- | --- |
+   | `Dana At Costco` | `Dana` | person |
+   | `Chris At NTB` | `Chris` | person |
+   | `Byron Goode Jr - Root Insurance` | `Byron Goode Jr` | person |
+   | `Pharmacy At Costco` | `Pharmacy` | business — `ORG_SIGNAL` |
+   | `Optical At Costco` | `Optical` | business — `SUBBRAND_TAIL` |
+   | `Front Office - Root Insurance` | `Front Office` | business — `ROLE_WORDS` |
+   | `Katy Auto - Firestone Tire` | `Katy Auto` | business — `katy` is a `GEO_WORD` |
+
+   A pharmacy counter inside a Costco is a real department and keeps the brand;
+   that is why the head is read rather than the "At" form suppressed outright.
+
+   *(Owner decision, 2026-08-28.  This rule was found dead in all three engines
+   by the 2026-08 audit (CL-15) and implemented during the remediation, which
+   put company logos on named individuals.  Scoping it to org-only cards is the
+   correction: a wrong logo is worse than none, and a person badged with their
+   employer's mark is a wrong logo.)*
 
 ## 6. Confidence tiers
 

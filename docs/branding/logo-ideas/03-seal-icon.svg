@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
+  <!-- Concept 3 app icon: cream C + gold dot on ink tile -->
+  <rect width="96" height="96" rx="21" fill="#1c1917"/>
+  <path d="M66.4 29.6A26 26 0 1 0 66.4 66.4" fill="none" stroke="#f5f0e8" stroke-width="14" stroke-linecap="round"/>
+  <circle cx="70.5" cy="48" r="8.7" fill="#c4a574"/>
+</svg>

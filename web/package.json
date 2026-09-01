@@ -2,15 +2,21 @@
   "name": "contactlogo-web",
   "private": true,
   "license": "Apache-2.0",
-  "description": "ContactLogo Web — review-first logo matching for a vCard or Google CSV",
+  "description": "ContactLogo Web \u2014 review-first logo matching for a vCard or Google CSV",
   "homepage": "https://contactlogo.com",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
+    "start": "node server.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test src/engine/*.test.ts src/sw-update.test.ts"
+    "test": "node --experimental-strip-types --test src/app.test.ts src/csp.test.ts src/app.dom.test.ts src/styles.presentation.test.ts src/engine/*.test.ts src/observability/*.test.ts src/sw-update.test.ts server.test.mjs"
+  },
+  "dependencies": {
+    "@datadog/browser-logs": "^6.33.0",
+    "@datadog/browser-rum-slim": "^6.33.0",
+    "dd-trace": "^5.80.0"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

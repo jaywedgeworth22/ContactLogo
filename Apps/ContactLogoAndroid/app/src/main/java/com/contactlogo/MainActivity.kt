@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -52,6 +53,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // targetSdk 35 (Android 15) forces edge-to-edge for every app regardless
+        // of what the manifest theme says (CL-24): the old
+        // statusBarColor/navigationBarColor theme overrides are ignored under
+        // that enforcement. enableEdgeToEdge() replaces them with the
+        // version-aware system-bar styling Compose's Scaffold already expects
+        // (it pads content by WindowInsets.safeDrawing), and behaves correctly
+        // on every API level back to minSdk 26, not just 35+.
+        enableEdgeToEdge()
         val repository = ContactsRepository(applicationContext)
 
         viewModel = ViewModelProvider(

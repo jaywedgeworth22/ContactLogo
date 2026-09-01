@@ -44,3 +44,4 @@ review.html
 *.abbu
 Contacts.csv
 google-contacts*.csv
+.idea/

@@ -7,6 +7,7 @@ import UIKit
 /// Three-bucket review queue (same contract as macOS and the web app).
 struct ContentView: View {
     @EnvironmentObject var model: ReviewSession
+    @State private var showSettings = false
 
     var body: some View {
         NavigationStack {
@@ -25,11 +26,27 @@ struct ContentView: View {
                 }
             }
             .navigationTitle("ContactLogo")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                // Every element here must be ToolbarContent; a bare Button makes
+                // toolbar(content:) ambiguous against its View overload.
                 if model.stage == .idle || model.stage == .review {
-                    Button("Scan") { Task { await model.scanAndMatch() } }
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("Scan") { Task { await model.scanAndMatch() } }
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showSettings = true
+                    } label: {
+                        Image(systemName: "gearshape")
+                    }
+                    .accessibilityLabel("Settings")
                 }
             }
+        }
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
         }
     }
 
@@ -54,6 +71,8 @@ struct ReviewQueueView: View {
     @State private var bucket: ReviewSession.Bucket = .auto
     @State private var searchText = ""
     @State private var previewResult: MatchResult?
+    @State private var manualOverrideResult: MatchResult?
+    @State private var showError = false
 
     var rows: [MatchResult] {
         let base: [MatchResult]
@@ -88,13 +107,12 @@ struct ReviewQueueView: View {
                     .buttonStyle(.borderedProminent)
             }
             .padding(.horizontal)
-            if model.lastBatchID != nil {
-                Button("Undo last batch") { Task { await model.undoLast() } }
-                    .padding(.horizontal)
-            }
+            undoHistoryRow
             List(rows, id: \.contactID) { result in
                 ReviewRow(result: result, onPreview: {
                     previewResult = result
+                }, onManualOverride: {
+                    manualOverrideResult = result
                 })
                 .swipeActions(edge: .leading) {
                     Button {
@@ -125,6 +143,55 @@ struct ReviewQueueView: View {
         .sheet(item: $previewResult) { result in
             ContactSimulatorSheet(result: result)
         }
+        .sheet(item: $manualOverrideResult) { result in
+            ManualOverrideSheet(contactID: result.contactID)
+        }
+        .onChange(of: model.lastError) { _, newValue in
+            showError = newValue != nil
+        }
+        .alert("ContactLogo", isPresented: $showError, presenting: model.lastError) { _ in
+            Button("OK") {}
+        } message: { error in
+            Text(errorMessage(error))
+        }
+    }
+
+    @ViewBuilder
+    private var undoHistoryRow: some View {
+        if let mostRecent = model.undoHistory.first {
+            HStack {
+                Button("Undo last batch") {
+                    Task { await model.undo(batchID: mostRecent.id) }
+                }
+                if model.undoHistory.count > 1 {
+                    Menu("History (\(model.undoHistory.count))") {
+                        ForEach(model.undoHistory) { batch in
+                            Button {
+                                Task { await model.undo(batchID: batch.id) }
+                            } label: {
+                                Text("\(batch.contactCount) contact\(batch.contactCount == 1 ? "" : "s") — \(batch.createdAt.formatted(.relative(presentation: .named)))")
+                            }
+                        }
+                    }
+                }
+                Spacer()
+            }
+            .font(.footnote)
+            .padding(.horizontal)
+        }
+    }
+
+    private func errorMessage(_ error: ReviewSessionError) -> String {
+        switch error {
+        case .applyFailed(let succeeded, let failed, let underlying):
+            return "\(failed) of \(succeeded + failed) logos failed to apply (\(underlying))."
+        case .nothingToApply:
+            return "Nothing selected to apply."
+        case .undoFailed(let batchID, let underlying):
+            return "Couldn't undo batch \(batchID.prefix(8)) (\(underlying)). You can try again."
+        case .noBatchToUndo:
+            return "There's no batch to undo."
+        }
     }
 }
 
@@ -136,6 +203,7 @@ struct ReviewRow: View {
     @EnvironmentObject var model: ReviewSession
     let result: MatchResult
     var onPreview: (() -> Void)? = nil
+    var onManualOverride: (() -> Void)? = nil
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -167,14 +235,16 @@ struct ReviewRow: View {
                 Text(detail)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                if result.candidates.count > 1 {
-                    HStack(spacing: 8) {
+                HStack(spacing: 8) {
+                    if result.candidates.count > 1 {
                         Button("Try another") { model.cycleCandidate(result.contactID) }
                             .font(.caption)
                         Text("(\((model.chosenIndex[result.contactID] ?? 0) + 1)/\(result.candidates.count))")
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
                     }
+                    Button("Choose your own…") { onManualOverride?() }
+                        .font(.caption)
                 }
             }
         }
@@ -273,12 +343,17 @@ struct ContactSimulatorSheet: View {
 
 struct LogoThumb: View {
     let url: URL?
+    @State private var decodedDataImage: UIImage?
 
     var body: some View {
         Group {
             if let url {
-                if url.scheme == "data", let data = try? Data(contentsOf: url) {
-                    dataImage(data)
+                if url.scheme == "data" {
+                    if let decodedDataImage {
+                        Image(uiImage: decodedDataImage).resizable().scaledToFit()
+                    } else {
+                        placeholder
+                    }
                 } else {
                     AsyncImage(url: url) { phase in
                         switch phase {
@@ -300,19 +375,31 @@ struct LogoThumb: View {
         .frame(width: 52, height: 52)
         .background(Color.gray.opacity(0.08))
         .clipShape(Circle())
+        .task(id: url) {
+            await loadDataImageIfNeeded()
+        }
     }
 
-    @ViewBuilder
-    private func dataImage(_ data: Data) -> some View {
-        #if canImport(UIKit)
-        if let ui = UIImage(data: data) {
-            Image(uiImage: ui).resizable().scaledToFit()
-        } else {
-            placeholder
+    // Decodes data: URLs once per distinct `url` (cached in state) instead
+    // of synchronously re-decoding base64 on every body evaluation.
+    private func loadDataImageIfNeeded() async {
+        guard let url, url.scheme == "data" else {
+            if decodedDataImage != nil { decodedDataImage = nil }
+            return
         }
-        #else
-        placeholder
-        #endif
+        // Only `Data` crosses the actor boundary — UIImage is not Sendable, so
+        // constructing it inside the detached task and returning it is a Swift 6
+        // concurrency error.  The base64 decode is the expensive part and still
+        // happens off the main actor.
+        let payload = url
+        let raw = await Task.detached(priority: .utility) { () -> Data? in
+            try? Data(contentsOf: payload)
+        }.value
+        if let raw {
+            decodedDataImage = UIImage(data: raw)
+        } else {
+            decodedDataImage = nil
+        }
     }
 
     private var placeholder: some View {
@@ -321,4 +408,3 @@ struct LogoThumb: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
-

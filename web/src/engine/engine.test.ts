@@ -24,6 +24,8 @@ test("catalog finds brands and location tails", () => {
   assert.equal(lookupCompanyDomain("Walgreens"), "walgreens.com");
   assert.equal(lookupCompanyDomain("Walgreens Mason Rd"), "walgreens.com");
   assert.equal(lookupCompanyDomain("H-E-B"), "heb.com");
+  assert.equal(lookupCompanyDomain("H-E-B Pharmacy"), "heb.com");
+  assert.equal(lookupCompanyDomain("Delta Dental"), undefined);
   assert.equal(lookupCompanyDomain("Charles Schwab"), "schwab.com");
   assert.equal(lookupCompanyDomain("Kaiser Permanente"), "kp.org");
   assert.equal(lookupCompanyDomain("Buc-ee's"), "buc-ees.com");
@@ -106,6 +108,63 @@ test("vcard round-trip keeps org and photo", () => {
   assert.equal(parsed[0]?.hadExistingPhoto, true);
 });
 
+test("vcard preserves all original properties during export", () => {
+  const raw = [
+    "BEGIN:VCARD",
+    "VERSION:3.0",
+    "FN:Alice Smith",
+    "N:Smith;Alice;;;",
+    "EMAIL;TYPE=HOME:alice@home.com",
+    "EMAIL;TYPE=WORK:alice@work.com",
+    "TEL;TYPE=CELL:555-1234",
+    "ADR;TYPE=HOME:;;123 Main St;City;ST;12345;USA",
+    "NOTE:VIP Client",
+    "BDAY:1990-01-01",
+    "X-CUSTOM-FIELD:custom-value",
+    "END:VCARD",
+  ].join("\r\n");
+
+  const [contact] = parseVcard(raw);
+  assert.ok(contact);
+  assert.equal(contact.displayName, "Alice Smith");
+
+  // Export without new photo should preserve raw card exactly
+  const exportedRaw = contactToVcard(contact);
+  assert.equal(exportedRaw.includes("ADR;TYPE=HOME"), true);
+  assert.equal(exportedRaw.includes("NOTE:VIP Client"), true);
+  assert.equal(exportedRaw.includes("BDAY:1990-01-01"), true);
+  assert.equal(exportedRaw.includes("X-CUSTOM-FIELD:custom-value"), true);
+
+  // Export with new photo should inject PHOTO while keeping all existing fields
+  contact.photoDataUrl = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+  const exportedWithPhoto = contactToVcard(contact);
+  assert.equal(exportedWithPhoto.includes("PHOTO;ENCODING=b;TYPE=PNG:"), true);
+  assert.equal(exportedWithPhoto.includes("ADR;TYPE=HOME"), true);
+  assert.equal(exportedWithPhoto.includes("NOTE:VIP Client"), true);
+  assert.equal(exportedWithPhoto.includes("BDAY:1990-01-01"), true);
+  assert.equal(exportedWithPhoto.includes("X-CUSTOM-FIELD:custom-value"), true);
+});
+
+test("vcard 4.0 preserves data URI photo format during export", () => {
+  const raw = [
+    "BEGIN:VCARD",
+    "VERSION:4.0",
+    "FN:Bob Jones",
+    "N:Jones;Bob;;;",
+    "NOTE:vCard 4 contact",
+    "END:VCARD",
+  ].join("\r\n");
+
+  const [contact] = parseVcard(raw);
+  assert.ok(contact);
+  contact.photoDataUrl = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+  const exportedWithPhoto = contactToVcard(contact);
+  assert.equal(exportedWithPhoto.includes("PHOTO:data:image/png;base64,"), true);
+  assert.equal(exportedWithPhoto.includes("PHOTO;ENCODING="), false);
+  assert.equal(exportedWithPhoto.includes("VERSION:4.0"), true);
+  assert.equal(exportedWithPhoto.includes("NOTE:vCard 4 contact"), true);
+});
+
 test("google csv import", () => {
   const csv = "Name,Given Name,Organization Name,E-mail 1 - Value\nFedEx,FedEx,FedEx,x@fedex.com\n";
   assert.equal(looksLikeContactCsv(csv), true);
@@ -163,9 +222,66 @@ test("source labels cover every logo source", async () => {
   const { sourceLabel } = await import("./logos.ts");
   assert.equal(sourceLabel("preferred"), "Iconic mark");
   assert.equal(sourceLabel("simpleicons"), "Simple Icons");
+  assert.equal(sourceLabel("ticker"), "Stock Ticker Pack (HD)");
+  assert.equal(sourceLabel("brandfetch"), "Brandfetch (HD)");
+  assert.equal(sourceLabel("logodev"), "Logo.dev (HD)");
+  assert.equal(sourceLabel("clearbit"), "Clearbit (512px)");
+  assert.equal(sourceLabel("google"), "Google (256px)");
   assert.equal(sourceLabel("favicon"), "Favicon");
   assert.equal(sourceLabel("upload"), "Your file");
+  assert.equal(sourceLabel("crop"), "Custom crop");
   assert.equal(sourceLabel("url"), "Pasted URL");
+});
+
+test("ticker lookup works for public companies", async () => {
+  const { lookupCompanyTicker } = await import("./catalog.ts");
+  assert.equal(lookupCompanyTicker("apple.com"), "AAPL");
+  assert.equal(lookupCompanyTicker("tesla.com"), "TSLA");
+  assert.equal(lookupCompanyTicker("schwab.com"), "SCHW");
+  assert.equal(lookupCompanyTicker("random-site.com"), undefined);
+});
+
+test("nextCandidateIndex never wraps past the last source", async () => {
+  const { nextCandidateIndex } = await import("./logos.ts");
+  assert.equal(nextCandidateIndex(0, 5), 1);
+  assert.equal(nextCandidateIndex(3, 5), 4);
+  assert.equal(nextCandidateIndex(4, 5), undefined);
+  assert.equal(nextCandidateIndex(0, 1), undefined);
+  assert.equal(nextCandidateIndex(0, 0), undefined);
+  // The #21 alt-thumb used `(i + 1) % n`, which returns 0 here and re-renders forever.
+  assert.notEqual((4 + 1) % 5, nextCandidateIndex(4, 5) ?? -1);
+});
+
+test("candidateUrls provides high-res sources and avoids unknown simpleicons", async () => {
+  const { candidateUrls } = await import("./logos.ts");
+  const known = candidateUrls("apple.com");
+  assert.equal(known.some((c) => c.source === "simpleicons"), true);
+  assert.equal(known.some((c) => c.source === "ticker"), true);
+  // Brandfetch and Logo.dev are omitted unless their credential is configured,
+  // and none is in the test environment — see the credentials test in
+  // sources.test.ts for why an unusable candidate must not be ranked.
+  assert.equal(known.some((c) => c.source === "brandfetch"), false);
+  assert.equal(known.some((c) => c.source === "logodev"), false);
+  assert.equal(known.some((c) => c.source === "clearbit"), true);
+  assert.equal(known.some((c) => c.source === "google"), true);
+
+  const unknown = candidateUrls("random-local-bakery.com");
+  assert.equal(unknown.some((c) => c.source === "simpleicons"), false);
+  assert.equal(unknown.some((c) => c.source === "ticker"), false);
+  assert.equal(unknown.some((c) => c.source === "brandfetch"), false);
+  assert.equal(unknown.some((c) => c.source === "logodev"), false);
+  assert.equal(unknown.some((c) => c.source === "clearbit"), true);
+  assert.equal(unknown.some((c) => c.source === "google"), true);
+});
+
+test("email and guessed domains stay in review", async () => {
+  const emailItem = matchContact({
+    id: "101",
+    displayName: "Jay's Receipts",
+    email: "receipts@mycustomdomain.com",
+  });
+  assert.notEqual(emailItem.confidence, "high");
+  assert.equal(emailItem.selected, false);
 });
 
 test("google person mapping", async () => {
