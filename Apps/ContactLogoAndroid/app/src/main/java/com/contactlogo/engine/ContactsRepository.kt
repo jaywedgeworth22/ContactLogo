@@ -2,12 +2,12 @@ package com.contactlogo.engine
 
 import android.content.ContentProviderOperation
 import android.content.ContentResolver
+import android.content.ContentUris
 import android.content.Context
 import android.database.Cursor
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
-import android.net.Uri
 import android.provider.ContactsContract
 import androidx.core.graphics.drawable.toBitmap
 import coil.ImageLoader
@@ -17,7 +17,6 @@ import coil.request.SuccessResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
-import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -188,28 +187,36 @@ class ContactsRepository(private val context: Context) {
         return list
     }
 
-    suspend fun applyPhoto(contactId: String, photoUrl: String): Boolean = withContext(Dispatchers.IO) {
+    /**
+     * Prior PHOTO bytes for the undo log, or null when the contact had none.
+     * Prefers the high-res display photo; falls back to the thumbnail stream.
+     */
+    suspend fun readPhoto(contactId: String): ByteArray? = withContext(Dispatchers.IO) {
+        val id = contactId.toLongOrNull() ?: return@withContext null
+        val contactUri = ContentUris.withAppendedId(ContactsContract.Contacts.CONTENT_URI, id)
         try {
-            val raw = downloadImage(photoUrl) ?: return@withContext false
-            // CL-06 — ContactsContract.Photo.PHOTO must be decodable raster bytes.
-            // The Simple Icons candidate (index 0 for every domain with a slug, and
-            // pre-checked at high) is an SVG, so writing the download verbatim left
-            // a blank contact photo while the Coil-rendered preview looked correct.
-            val bytes = rasterizeForContacts(raw, photoUrl) ?: return@withContext false
+            ContactsContract.Contacts.openContactPhotoInputStream(context.contentResolver, contactUri, true)
+                ?.use { it.readBytes() }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    suspend fun prepareLogo(photoUrl: String): ByteArray? = withContext(Dispatchers.IO) {
+        val raw = downloadImage(photoUrl) ?: return@withContext null
+        rasterizeForContacts(raw, photoUrl)
+    }
+
+    suspend fun prepareLogoBytes(raw: ByteArray): ByteArray? = withContext(Dispatchers.IO) {
+        rasterizeForContacts(raw, raw)
+    }
+
+    suspend fun writePhoto(contactId: String, bytes: ByteArray): Boolean = withContext(Dispatchers.IO) {
+        try {
             val cr = context.contentResolver
-
-            // Find raw contact ID
             val rawContactId = getRawContactId(cr, contactId) ?: return@withContext false
-
             val ops = ArrayList<ContentProviderOperation>()
-            ops.add(
-                ContentProviderOperation.newDelete(ContactsContract.Data.CONTENT_URI)
-                    .withSelection(
-                        "${ContactsContract.Data.RAW_CONTACT_ID} = ? AND ${ContactsContract.Data.MIMETYPE} = ?",
-                        arrayOf(rawContactId.toString(), ContactsContract.CommonDataKinds.Photo.CONTENT_ITEM_TYPE)
-                    )
-                    .build()
-            )
+            ops.add(deletePhotoOp(rawContactId))
             ops.add(
                 ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
                     .withValue(ContactsContract.Data.RAW_CONTACT_ID, rawContactId)
@@ -217,13 +224,36 @@ class ContactsRepository(private val context: Context) {
                     .withValue(ContactsContract.CommonDataKinds.Photo.PHOTO, bytes)
                     .build()
             )
-
             cr.applyBatch(ContactsContract.AUTHORITY, ops)
             true
         } catch (_: Exception) {
             false
         }
     }
+
+    suspend fun removePhoto(contactId: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val cr = context.contentResolver
+            val rawContactId = getRawContactId(cr, contactId) ?: return@withContext false
+            cr.applyBatch(ContactsContract.AUTHORITY, arrayListOf(deletePhotoOp(rawContactId)))
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    suspend fun applyPhoto(contactId: String, photoUrl: String): Boolean {
+        val bytes = prepareLogo(photoUrl) ?: return false
+        return writePhoto(contactId, bytes)
+    }
+
+    private fun deletePhotoOp(rawContactId: Long): ContentProviderOperation =
+        ContentProviderOperation.newDelete(ContactsContract.Data.CONTENT_URI)
+            .withSelection(
+                "${ContactsContract.Data.RAW_CONTACT_ID} = ? AND ${ContactsContract.Data.MIMETYPE} = ?",
+                arrayOf(rawContactId.toString(), ContactsContract.CommonDataKinds.Photo.CONTENT_ITEM_TYPE)
+            )
+            .build()
 
     private fun getRawContactId(cr: ContentResolver, contactId: String): Long? {
         val cursor = cr.query(
@@ -250,14 +280,14 @@ class ContactsRepository(private val context: Context) {
      * than none" failure with extra steps. Reporting the apply as failed lets the
      * caller leave the contact alone.
      */
-    private suspend fun rasterizeForContacts(raw: ByteArray, sourceUrl: String): ByteArray? {
+    private suspend fun rasterizeForContacts(raw: ByteArray, coilData: Any): ByteArray? {
         BitmapFactory.decodeByteArray(raw, 0, raw.size)?.let { return square(it) }
 
         // Not raster — hand it to Coil, which already has the SVG decoder this app
         // uses to draw the same candidate in the review list.
         return try {
             val request = ImageRequest.Builder(context)
-                .data(sourceUrl)
+                .data(coilData)
                 .size(PHOTO_PX, PHOTO_PX)
                 // A hardware bitmap has no pixels to read back, so compress() fails.
                 .allowHardware(false)

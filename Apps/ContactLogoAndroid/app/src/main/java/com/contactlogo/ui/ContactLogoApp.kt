@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -28,8 +29,28 @@ import com.contactlogo.engine.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import java.net.URI
 
-class ContactLogoViewModel(private val repository: ContactsRepository) : ViewModel() {
+sealed class SessionError {
+    data class ApplyFailed(val succeeded: Int, val failed: Int, val underlying: String) : SessionError()
+    object NothingToApply : SessionError()
+    data class UndoFailed(val batchId: String, val underlying: String) : SessionError()
+    object NoBatchToUndo : SessionError()
+}
+
+fun sessionErrorMessage(error: SessionError): String = when (error) {
+    is SessionError.ApplyFailed ->
+        "${error.failed} of ${error.succeeded + error.failed} logos failed to apply (${error.underlying}).  You can try again."
+    SessionError.NothingToApply -> "Nothing selected to apply."
+    is SessionError.UndoFailed ->
+        "Couldn't undo batch ${error.batchId.take(8)} (${error.underlying}).  You can try again."
+    SessionError.NoBatchToUndo -> "There's no batch to undo."
+}
+
+class ContactLogoViewModel(
+    private val repository: ContactsRepository,
+    private val undoLog: UndoLog
+) : ViewModel() {
     private val _results = MutableStateFlow<List<MatchResult>>(emptyList())
     val results: StateFlow<List<MatchResult>> = _results
 
@@ -39,11 +60,35 @@ class ContactLogoViewModel(private val repository: ContactsRepository) : ViewMod
     private val _isApplying = MutableStateFlow(false)
     val isApplying: StateFlow<Boolean> = _isApplying
 
+    private val _isUndoing = MutableStateFlow(false)
+    val isUndoing: StateFlow<Boolean> = _isUndoing
+
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery
 
+    private val _statusFilter = MutableStateFlow(StatusFilter.ALL)
+    val statusFilter: StateFlow<StatusFilter> = _statusFilter
+
+    private val _undoHistory = MutableStateFlow<List<UndoLog.BatchSummary>>(emptyList())
+    val undoHistory: StateFlow<List<UndoLog.BatchSummary>> = _undoHistory
+
+    private val _lastError = MutableStateFlow<SessionError?>(null)
+    val lastError: StateFlow<SessionError?> = _lastError
+
+    init {
+        refreshUndoHistory()
+    }
+
     fun setSearchQuery(q: String) {
         _searchQuery.value = q
+    }
+
+    fun setStatusFilter(filter: StatusFilter) {
+        _statusFilter.value = if (_statusFilter.value == filter) StatusFilter.ALL else filter
+    }
+
+    fun clearError() {
+        _lastError.value = null
     }
 
     fun scanContacts() {
@@ -64,31 +109,179 @@ class ContactLogoViewModel(private val repository: ContactsRepository) : ViewMod
 
     fun cycleCandidate(contactId: String) {
         _results.value = _results.value.map {
-            if (it.contact.id == contactId && it.candidates.isNotEmpty()) {
-                val nextIdx = (it.selectedIndex + 1) % it.candidates.size
-                it.copy(selectedIndex = nextIdx)
+            if (it.contact.id == contactId) {
+                val next = nextCandidateIndex(it.selectedIndex, it.candidates.size) ?: return@map it
+                it.copy(selectedIndex = next)
             } else it
         }
     }
 
     fun selectAllHigh() {
         _results.value = _results.value.map {
-            if (it.confidence == Confidence.HIGH && it.candidates.isNotEmpty()) it.copy(approved = true) else it
+            if (isReadyRow(it)) it.copy(approved = true) else it
         }
     }
 
     fun applyApproved() {
         viewModelScope.launch {
             _isApplying.value = true
-            val approvedItems = _results.value.filter { it.approved && it.selectedLogo != null }
-            for (item in approvedItems) {
-                if (MatchPipeline.isPerson(item.contact)) continue
-                val logo = item.selectedLogo ?: continue
-                repository.applyPhoto(item.contact.id, logo.url)
+            _lastError.value = null
+            try {
+                val approvedItems = _results.value.filter { it.approved && it.selectedLogo != null }
+                val records = mutableListOf<UndoLog.Record>()
+                val prepared = mutableListOf<Pair<String, ByteArray>>()
+                for (item in approvedItems) {
+                    if (MatchPipeline.isPerson(item.contact)) continue
+                    val logo = item.selectedLogo ?: continue
+                    val newBytes = logo.localBytes ?: repository.prepareLogo(logo.url) ?: continue
+                    val previous = repository.readPhoto(item.contact.id)
+                    records.add(UndoLog.Record(item.contact.id, previous))
+                    prepared.add(item.contact.id to newBytes)
+                }
+                if (records.isEmpty()) {
+                    _lastError.value = SessionError.NothingToApply
+                    return@launch
+                }
+                try {
+                    undoLog.recordBatch(records)
+                } catch (e: Exception) {
+                    _lastError.value = SessionError.ApplyFailed(
+                        0,
+                        records.size,
+                        e.message ?: "undo log"
+                    )
+                    return@launch
+                }
+                var succeeded = 0
+                var failed = 0
+                var reason: String? = null
+                for ((id, bytes) in prepared) {
+                    if (repository.writePhoto(id, bytes)) {
+                        succeeded += 1
+                    } else {
+                        failed += 1
+                        if (reason == null) reason = "write failed"
+                    }
+                }
+                if (reason != null) {
+                    _lastError.value = SessionError.ApplyFailed(succeeded, failed, reason)
+                }
+                undoLog.prune()
+                refreshUndoHistory()
+                scanContacts()
+            } finally {
+                _isApplying.value = false
             }
-            _isApplying.value = false
-            scanContacts()
         }
+    }
+
+    fun undoLastBatch() {
+        val id = _undoHistory.value.firstOrNull()?.id
+        if (id == null) {
+            _lastError.value = SessionError.NoBatchToUndo
+            return
+        }
+        undo(id)
+    }
+
+    /**
+     * Restore [batchId] and every newer batch, newest first.  A log is deleted
+     * only once its own restore has succeeded; a failure stops the unwind with
+     * everything not yet restored still on disk.
+     */
+    fun undo(batchId: String) {
+        viewModelScope.launch {
+            _isUndoing.value = true
+            _lastError.value = null
+            try {
+                val history = undoLog.listBatchSummaries()
+                val index = history.indexOfFirst { it.id == batchId }
+                val toUnwind = if (index >= 0) {
+                    history.subList(0, index + 1)
+                } else {
+                    listOf(UndoLog.BatchSummary(batchId, 0.0, 0))
+                }
+                for (summary in toUnwind) {
+                    try {
+                        val ops = undoLog.loadRestoreOps(summary.id)
+                        for (op in ops) {
+                            val ok = if (op.previousBytes != null) {
+                                repository.writePhoto(op.contactId, op.previousBytes)
+                            } else {
+                                repository.removePhoto(op.contactId)
+                            }
+                            if (!ok) {
+                                throw UndoLog.UndoException("could not restore contact ${op.contactId}")
+                            }
+                        }
+                    } catch (e: Exception) {
+                        _lastError.value = SessionError.UndoFailed(
+                            summary.id,
+                            e.message ?: "restore failed"
+                        )
+                        refreshUndoHistory()
+                        return@launch
+                    }
+                    try {
+                        undoLog.deleteBatch(summary.id)
+                    } catch (e: Exception) {
+                        _lastError.value = SessionError.UndoFailed(
+                            summary.id,
+                            "restored, but its undo log could not be removed: ${e.message}"
+                        )
+                        refreshUndoHistory()
+                        return@launch
+                    }
+                }
+                refreshUndoHistory()
+                scanContacts()
+            } finally {
+                _isUndoing.value = false
+            }
+        }
+    }
+
+    suspend fun applyManualBytes(contactId: String, bytes: ByteArray): String? {
+        val prepared = repository.prepareLogoBytes(bytes) ?: return "Couldn't read that photo."
+        injectManual(contactId, prepared, "manual")
+        return null
+    }
+
+    suspend fun applyManualUrl(contactId: String, url: String): String? {
+        val trimmed = url.trim()
+        val parsed = try {
+            URI(trimmed)
+        } catch (_: Exception) {
+            null
+        }
+        if (parsed == null || parsed.scheme.isNullOrBlank()) {
+            return "That doesn't look like a valid URL."
+        }
+        val prepared = repository.prepareLogo(trimmed) ?: return "Couldn't fetch that image."
+        injectManual(contactId, prepared, "url")
+        return null
+    }
+
+    private fun injectManual(contactId: String, bytes: ByteArray, source: String) {
+        _results.value = _results.value.map {
+            if (it.contact.id != contactId) it
+            else {
+                val candidate = LogoCandidate(
+                    url = "manual://$contactId",
+                    source = source,
+                    localBytes = bytes
+                )
+                it.copy(
+                    candidates = listOf(candidate) + it.candidates,
+                    selectedIndex = 0,
+                    approved = true
+                )
+            }
+        }
+    }
+
+    private fun refreshUndoHistory() {
+        _undoHistory.value = undoLog.listBatchSummaries()
     }
 }
 
@@ -98,24 +291,32 @@ fun ContactLogoApp(viewModel: ContactLogoViewModel) {
     val results by viewModel.results.collectAsState()
     val isScanning by viewModel.isScanning.collectAsState()
     val isApplying by viewModel.isApplying.collectAsState()
+    val isUndoing by viewModel.isUndoing.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
+    val statusFilter by viewModel.statusFilter.collectAsState()
+    val undoHistory by viewModel.undoHistory.collectAsState()
+    val lastError by viewModel.lastError.collectAsState()
+    var overrideContactId by remember { mutableStateOf<String?>(null) }
 
-    val filteredResults = remember(results, searchQuery) {
-        if (searchQuery.isBlank()) results
-        else {
-            val q = searchQuery.lowercase()
-            results.filter {
-                it.contact.displayName.lowercase().contains(q) ||
-                it.contact.organization.lowercase().contains(q) ||
-                (it.matchedDomain?.lowercase()?.contains(q) == true)
-            }
+    val busy = isScanning || isApplying || isUndoing
+
+    val filteredResults = remember(results, searchQuery, statusFilter) {
+        val q = searchQuery.lowercase()
+        results.filter { result ->
+            val matchesSearch = searchQuery.isBlank() ||
+                result.contact.displayName.lowercase().contains(q) ||
+                result.contact.organization.lowercase().contains(q) ||
+                (result.matchedDomain?.lowercase()?.contains(q) == true)
+            matchesSearch && matchesStatusFilter(result, statusFilter)
         }
     }
 
-    val readyCount = results.count { it.confidence == Confidence.HIGH && it.candidates.isNotEmpty() }
-    val reviewCount = results.count { it.confidence == Confidence.MEDIUM && it.candidates.isNotEmpty() }
-    val skipCount = results.count { it.confidence == Confidence.SKIP || it.candidates.isEmpty() }
+    val readyCount = results.count { isReadyRow(it) }
+    val reviewCount = results.count { isReviewRow(it) }
+    val skipCount = results.count { isSkippedRow(it) }
     val approvedCount = results.count { it.approved }
+
+    val overrideResult = results.find { it.contact.id == overrideContactId }
 
     Scaffold(
         topBar = {
@@ -129,7 +330,7 @@ fun ContactLogoApp(viewModel: ContactLogoViewModel) {
                 actions = {
                     Button(
                         onClick = { viewModel.scanContacts() },
-                        enabled = !isScanning && !isApplying,
+                        enabled = !busy,
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
                         if (isScanning) {
@@ -149,24 +350,54 @@ fun ContactLogoApp(viewModel: ContactLogoViewModel) {
                     tonalElevation = 8.dp,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                            .padding(16.dp)
                     ) {
-                        Text("$approvedCount selected", fontWeight = FontWeight.SemiBold)
-                        Button(
-                            onClick = { viewModel.applyApproved() },
-                            enabled = approvedCount > 0 && !isApplying,
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E))
+                        if (lastError != null) {
+                            Text(
+                                sessionErrorMessage(lastError!!),
+                                color = Color(0xFFB3261E),
+                                fontSize = 12.sp,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { viewModel.clearError() }
+                                    .padding(bottom = 8.dp)
+                            )
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            if (isApplying) {
-                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
-                                Spacer(Modifier.width(6.dp))
+                            val newest = undoHistory.firstOrNull()
+                            TextButton(
+                                onClick = { viewModel.undoLastBatch() },
+                                enabled = newest != null && !busy
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    if (newest != null) "Undo last batch (${newest.contactCount})"
+                                    else "Undo last batch"
+                                )
                             }
-                            Text("Apply $approvedCount Logos")
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("$approvedCount selected", fontWeight = FontWeight.SemiBold)
+                                Spacer(Modifier.width(8.dp))
+                                Button(
+                                    onClick = { viewModel.applyApproved() },
+                                    enabled = approvedCount > 0 && !busy,
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E))
+                                ) {
+                                    if (isApplying) {
+                                        CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                                        Spacer(Modifier.width(6.dp))
+                                    }
+                                    Text("Apply $approvedCount Logos")
+                                }
+                            }
                         }
                     }
                 }
@@ -194,7 +425,6 @@ fun ContactLogoApp(viewModel: ContactLogoViewModel) {
                     shape = RoundedCornerShape(12.dp)
                 )
 
-                // Status Metric Cards
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -205,21 +435,40 @@ fun ContactLogoApp(viewModel: ContactLogoViewModel) {
                         title = "Ready",
                         count = readyCount,
                         color = Color(0xFF22C55E),
+                        selected = statusFilter == StatusFilter.READY,
                         modifier = Modifier.weight(1f),
-                        onClick = { viewModel.selectAllHigh() }
+                        onClick = { viewModel.setStatusFilter(StatusFilter.READY) }
                     )
                     MetricChip(
                         title = "Review",
                         count = reviewCount,
                         color = Color(0xFFF59E0B),
-                        modifier = Modifier.weight(1f)
+                        selected = statusFilter == StatusFilter.REVIEW,
+                        modifier = Modifier.weight(1f),
+                        onClick = { viewModel.setStatusFilter(StatusFilter.REVIEW) }
                     )
                     MetricChip(
                         title = "Skipped",
                         count = skipCount,
                         color = Color(0xFF94A3B8),
-                        modifier = Modifier.weight(1f)
+                        selected = statusFilter == StatusFilter.SKIPPED,
+                        modifier = Modifier.weight(1f),
+                        onClick = { viewModel.setStatusFilter(StatusFilter.SKIPPED) }
                     )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    OutlinedButton(
+                        onClick = { viewModel.selectAllHigh() },
+                        enabled = readyCount > 0 && !busy
+                    ) {
+                        Text("Select High")
+                    }
                 }
 
                 LazyColumn(
@@ -231,12 +480,22 @@ fun ContactLogoApp(viewModel: ContactLogoViewModel) {
                         ContactRow(
                             result = result,
                             onToggleApprove = { viewModel.toggleApproval(result.contact.id) },
-                            onCycleCandidate = { viewModel.cycleCandidate(result.contact.id) }
+                            onCycleCandidate = { viewModel.cycleCandidate(result.contact.id) },
+                            onManualOverride = { overrideContactId = result.contact.id }
                         )
                     }
                 }
             }
         }
+    }
+
+    if (overrideResult != null) {
+        ManualOverrideDialog(
+            contactName = overrideResult.contact.displayName.ifBlank { overrideResult.contact.organization },
+            onDismiss = { overrideContactId = null },
+            onBytes = { viewModel.applyManualBytes(overrideResult.contact.id, it) },
+            onUrl = { viewModel.applyManualUrl(overrideResult.contact.id, it) }
+        )
     }
 }
 
@@ -290,12 +549,23 @@ fun EmptyScanState(onScan: () -> Unit) {
 }
 
 @Composable
-fun MetricChip(title: String, count: Int, color: Color, modifier: Modifier = Modifier, onClick: (() -> Unit)? = null) {
+fun MetricChip(
+    title: String,
+    count: Int,
+    color: Color,
+    modifier: Modifier = Modifier,
+    selected: Boolean = false,
+    onClick: (() -> Unit)? = null
+) {
     Surface(
         shape = RoundedCornerShape(10.dp),
-        color = color.copy(alpha = 0.12f),
+        color = color.copy(alpha = if (selected) 0.28f else 0.12f),
         modifier = modifier
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .then(
+                if (selected) Modifier.border(1.5.dp, color, RoundedCornerShape(10.dp))
+                else Modifier
+            )
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
@@ -312,7 +582,8 @@ fun MetricChip(title: String, count: Int, color: Color, modifier: Modifier = Mod
 fun ContactRow(
     result: MatchResult,
     onToggleApprove: () -> Unit,
-    onCycleCandidate: () -> Unit
+    onCycleCandidate: () -> Unit,
+    onManualOverride: () -> Unit
 ) {
     val logo = result.selectedLogo
     Card(
@@ -326,7 +597,6 @@ fun ContactRow(
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Circular Avatar Preview
             Box(
                 modifier = Modifier
                     .size(52.dp)
@@ -337,7 +607,7 @@ fun ContactRow(
             ) {
                 if (logo != null) {
                     AsyncImage(
-                        model = logo.url,
+                        model = logo.localBytes ?: logo.url,
                         contentDescription = result.contact.displayName,
                         contentScale = ContentScale.Fit,
                         modifier = Modifier
@@ -378,20 +648,50 @@ fun ContactRow(
                 }
 
                 if (result.candidates.size > 1) {
+                    val next = nextCandidateIndex(result.selectedIndex, result.candidates.size)
                     Row(
                         modifier = Modifier
                             .padding(top = 4.dp)
-                            .clickable(onClick = onCycleCandidate),
+                            .clickable(enabled = next != null, onClick = onCycleCandidate),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(12.dp), tint = Color(0xFF38BDF8))
+                        Icon(
+                            Icons.Default.Refresh,
+                            contentDescription = null,
+                            modifier = Modifier.size(12.dp),
+                            tint = Color(0xFF38BDF8)
+                        )
                         Spacer(Modifier.width(4.dp))
                         Text(
-                            "Candidate ${result.selectedIndex + 1} of ${result.candidates.size} (${result.selectedLogo?.source})",
+                            if (next != null) {
+                                "Candidate ${result.selectedIndex + 1} of ${result.candidates.size} (${result.selectedLogo?.source})"
+                            } else {
+                                "Last candidate of ${result.candidates.size} (${result.selectedLogo?.source})"
+                            },
                             fontSize = 11.sp,
                             color = Color(0xFF38BDF8)
                         )
                     }
+                }
+
+                Row(
+                    modifier = Modifier
+                        .padding(top = 4.dp)
+                        .clickable(onClick = onManualOverride),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.AddPhotoAlternate,
+                        contentDescription = "Choose your own image",
+                        modifier = Modifier.size(12.dp),
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        "Choose your own…",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
                 }
             }
 

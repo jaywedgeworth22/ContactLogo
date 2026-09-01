@@ -34,8 +34,43 @@ data class LogoCandidate(
     val width: Int = 512,
     val height: Int = 512,
     val isVector: Boolean = false,
-    val hasAlpha: Boolean = true
+    val hasAlpha: Boolean = true,
+    /** In-memory raster for a user-supplied override (upload / pasted URL). */
+    val localBytes: ByteArray? = null
 )
+
+enum class StatusFilter {
+    ALL,
+    READY,
+    REVIEW,
+    SKIPPED
+}
+
+/**
+ * Advance past the current candidate.  Never wrap: `(i+1)%n` plus a re-render
+ * livelocks review when every remaining source is a broken favicon (web #22).
+ */
+fun nextCandidateIndex(current: Int, count: Int): Int? {
+    if (count <= 1) return null
+    val next = current + 1
+    return if (next < count) next else null
+}
+
+fun isReadyRow(result: MatchResult): Boolean =
+    result.confidence == Confidence.HIGH && result.candidates.isNotEmpty()
+
+fun isReviewRow(result: MatchResult): Boolean =
+    result.confidence == Confidence.MEDIUM && result.candidates.isNotEmpty()
+
+fun isSkippedRow(result: MatchResult): Boolean =
+    result.confidence == Confidence.SKIP || result.candidates.isEmpty()
+
+fun matchesStatusFilter(result: MatchResult, filter: StatusFilter): Boolean = when (filter) {
+    StatusFilter.ALL -> true
+    StatusFilter.READY -> isReadyRow(result)
+    StatusFilter.REVIEW -> isReviewRow(result)
+    StatusFilter.SKIPPED -> isSkippedRow(result)
+}
 
 /**
  * The static, network-free R7/R8/R10 evaluation of a contact (ENGINE-CONTRACT
@@ -67,9 +102,3 @@ data class MatchResult(
     val selectedLogo: LogoCandidate?
         get() = candidates.getOrNull(selectedIndex) ?: candidates.firstOrNull()
 }
-
-data class UndoEntry(
-    val contactId: String,
-    val previousPhotoBytes: ByteArray?,
-    val timestamp: Long = System.currentTimeMillis()
-)
