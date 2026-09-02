@@ -22,6 +22,12 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+
+        // Compile-time DSN only.  Empty when SENTRY_DSN is unset so the SDK stays dark in CI.
+        val sentryDsn = (System.getenv("SENTRY_DSN") ?: "")
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+        buildConfigField("String", "SENTRY_DSN", "\"$sentryDsn\"")
     }
 
     buildTypes {
@@ -46,6 +52,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.14"
@@ -84,6 +91,8 @@ dependencies {
     implementation("io.coil-kt:coil-svg:2.6.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("com.google.android.play:app-update:2.1.0")
+    // Crash + ANR only.  Mapping upload plugin skipped (AGP 8.5); consumer rules ship with the AAR.
+    implementation("io.sentry:sentry-android:8.54.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

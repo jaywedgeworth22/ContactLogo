@@ -16,3 +16,5 @@
 # name to avoid also leaking it into obfuscated traces.
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile
+
+# Sentry ships consumer ProGuard rules in the AAR.  No extra -keep needed.
