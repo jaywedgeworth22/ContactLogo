@@ -5,6 +5,7 @@
   "installCommand": "npm ci",
   "cleanUrls": true,
   "trailingSlash": false,
+  "ignoreCommand": "bash vercel-ignore-hourly.sh",
   "headers": [
     {
       "source": "/assets/(.*)",
