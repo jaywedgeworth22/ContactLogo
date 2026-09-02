@@ -34,6 +34,9 @@ settings:
     INFOPLIST_KEY_CFBundleDisplayName: "ContactLogo"
     INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.utilities"
     GENERATE_INFOPLIST_FILE: YES
+    # Native Sentry. Empty unless xcodebuild/CI passes SENTRY_DSN=...
+    # Do not put a live DSN in this file or in Info.plist.
+    SENTRY_DSN: ""
 
 targets:
   ContactLogoKit:
