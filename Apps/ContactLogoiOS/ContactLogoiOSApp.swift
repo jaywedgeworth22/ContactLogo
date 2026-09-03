@@ -18,15 +18,13 @@ struct ContactLogoiOSApp: App {
         _settingsStore = StateObject(wrappedValue: settings)
         _model = StateObject(wrappedValue: session)
 
-        BGTaskScheduler.shared.register(
-            forTaskWithIdentifier: MatchBackgroundTask.identifier,
-            using: nil
-        ) { task in
-            guard let task = task as? BGProcessingTask else { return }
-            Task { @MainActor in
-                MatchBackgroundTask.handle(task, session: session)
-            }
-        }
+        // Bind first, then register. The launch handler is nonisolated and
+        // hops to MainActor; capturing `session` inside the register
+        // closure itself is MainActor-isolated and crashed TestFlight 1.0.2
+        // (`EXC_BREAKPOINT` / `_dispatch_assert_queue_fail` on queue
+        // `com.apple.BGTaskScheduler (com.contactlogo.match)`). Issue #59.
+        MatchBackgroundTask.bind(session)
+        MatchBackgroundTask.register()
 
         // Local notifications are how the overnight-matching promise
         // (VISION.md / ARCHITECTURE.md) surfaces to the user — ask up front
@@ -59,6 +57,45 @@ enum MatchBackgroundTask {
     /// so a static on it cannot be read from this nonisolated enum.
     static let identifier = "com.contactlogo.match"
 
+    /// Weak so the `@StateObject` remains the owner. Read only after hopping
+    /// onto the main actor from the nonisolated launch handler.
+    @MainActor
+    private static weak var session: ReviewSession?
+
+    @MainActor
+    static func bind(_ session: ReviewSession) {
+        self.session = session
+    }
+
+    /// Must stay `nonisolated`. `BGTaskScheduler` invokes the launch handler
+    /// on `com.apple.BGTaskScheduler (com.contactlogo.match)`, not the main
+    /// actor. A MainActor-isolated closure traps under Swift 6.
+    nonisolated static func register() {
+        BGTaskScheduler.shared.register(
+            forTaskWithIdentifier: identifier,
+            using: nil
+        ) { task in
+            let boxed = UncheckedSendableBox(task)
+            Task { @MainActor in
+                handleLaunch(boxed.value)
+            }
+        }
+    }
+
+    @MainActor
+    private static func handleLaunch(_ task: BGTask) {
+        guard let processing = task as? BGProcessingTask else {
+            task.setTaskCompleted(success: false)
+            return
+        }
+        guard let session else {
+            processing.setTaskCompleted(success: false)
+            schedule()
+            return
+        }
+        handle(processing, session: session)
+    }
+
     static func schedule() {
         let request = BGProcessingTaskRequest(identifier: Self.identifier)
         request.requiresNetworkConnectivity = true
@@ -75,21 +112,20 @@ enum MatchBackgroundTask {
     @MainActor
     static func handle(_ task: BGProcessingTask, session: ReviewSession) {
         let runner = BackgroundMatchRunner(session: session)
+        let completion = TaskCompletion(task)
 
         let work = Task { @MainActor in
             // `run()` writes the review queue to Application Support before
             // returning true, so setTaskCompleted and the notification cannot
             // outrun the data (issue #32).
             let completed = await runner.run()
-            task.setTaskCompleted(success: completed)
             if completed {
                 NotificationScheduler.postMatchReady(
                     ready: session.autoAccepted.count,
                     needsReview: session.needsReview.count
                 )
             }
-            // Keep the overnight cadence going regardless of outcome.
-            schedule()
+            completion.finish(success: completed)
         }
 
         // The system can invoke expirationHandler off the main thread, so
@@ -98,8 +134,38 @@ enum MatchBackgroundTask {
         task.expirationHandler = {
             Task { @MainActor in
                 runner.cancel()
+                completion.finish(success: false)
             }
             work.cancel()
         }
+    }
+}
+
+/// `BGTask` is not Sendable. The launch handler must hop to MainActor
+/// without making the handler itself MainActor-isolated.
+private struct UncheckedSendableBox<Value>: @unchecked Sendable {
+    let value: Value
+    init(_ value: Value) { self.value = value }
+}
+
+/// `setTaskCompleted` may be called only once. Expiration and the work
+/// task race on the system deadline, so this serializes them.
+private final class TaskCompletion: @unchecked Sendable {
+    private let lock = NSLock()
+    private var finished = false
+    private let task: BGProcessingTask
+
+    init(_ task: BGProcessingTask) {
+        self.task = task
+    }
+
+    func finish(success: Bool) {
+        lock.lock()
+        let already = finished
+        if !already { finished = true }
+        lock.unlock()
+        guard !already else { return }
+        task.setTaskCompleted(success: success)
+        MatchBackgroundTask.schedule()
     }
 }
