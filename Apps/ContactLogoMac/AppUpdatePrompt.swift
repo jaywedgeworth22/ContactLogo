@@ -23,7 +23,7 @@ import SwiftUI
 enum AppUpdatePrompt {
 
     static let defaultManifestURL = URL(
-        string: "https://raw.githubusercontent.com/jaywedgeworth22/ios-app-versions/main/versions.json"
+        string: "https://raw.githubusercontent.com/jaywedgeworth22/ai-fleet-coordinator/main/site/ios-versions.json"
     )!
 
     /// Numeric Apple IDs for TestFlight / App Store deep links.

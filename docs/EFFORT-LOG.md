@@ -1,4 +1,5 @@
 # ContactLogo Effort Log — cross-agent board
+- **2026-09-03 — GROK — IN PROGRESS — Retarget AppUpdatePrompt off ios-app-versions (board `ca104839`, branch `grok/ios-versions-home`, worktree `~/apps/contactlogo-grok-ios-versions`).**  iOS + Mac copies fetch ai-fleet-coordinator `site/ios-versions.json`.  Rollout: `docs/rollouts/2026-09-03-ios-versions-home.md`.
 - **2026-09-01 — GROK — IN PROGRESS — Sentry DSN hygiene: no hardcoded iOS fallback (branch `grok/sentry-dsn-hygiene`, worktree `~/apps/contactlogo-grok-sentry-dsn`).**  Board `8a9695e902ca4da085df8a60b819308d`.  Cocoa init is plist-only / build-injected; empty DSN = no-op.
 Protocol: /Users/jay/apps/EFFORT-LOG-PROTOCOL.md (canonical). Live board: this file
 (mirror: docs/EFFORT-LOG.md in ~/Code/ContactLogo). As of 2026-08-21.
