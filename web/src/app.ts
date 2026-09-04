@@ -1092,7 +1092,7 @@ function buildCard(item: ReviewItem): CardView {
       "aria-haspopup": "menu",
       "aria-expanded": "false",
     },
-    "Choose your own",
+    "Choose Your Own",
   );
   chooseToggle.addEventListener("click", (e) => {
     e.stopPropagation();
@@ -1114,7 +1114,7 @@ function buildCard(item: ReviewItem): CardView {
     render();
   });
 
-  const retry = el("button", { class: "btn secondary", type: "button" }, "Try another");
+  const retry = el("button", { class: "btn secondary", type: "button" }, "Try Another");
   retry.addEventListener("click", () => tryAnother(item));
 
   const skip = el("button", { class: "btn ghost", type: "button" }, "Skip");
@@ -1444,10 +1444,10 @@ let shell: Shell | null = null;
 
 const CHIP_LABELS: [FilterStatus, string][] = [
   ["all", "All"],
-  ["ready", "Ready to apply"],
-  ["review", "Needs review"],
-  ["notfound", "Not found"],
-  ["missingphoto", "Missing photo"],
+  ["ready", "Ready to Apply"],
+  ["review", "Needs Review"],
+  ["notfound", "Not Found"],
+  ["missingphoto", "Missing Photo"],
 ];
 
 function buildSettingsPanel(): {
@@ -1524,7 +1524,7 @@ function buildLanding(): HTMLElement {
   const what = el(
     "section",
     { class: "section" },
-    el("h2", {}, "Every business in your contacts, with its real logo"),
+    el("h2", {}, "Every Business in Your Contacts, With Its Real Logo"),
     el(
       "p",
       {},
@@ -1540,7 +1540,7 @@ function buildLanding(): HTMLElement {
   const how = el(
     "section",
     { class: "section" },
-    el("h2", {}, "How it works"),
+    el("h2", {}, "How It Works"),
     el(
       "ol",
       {},
@@ -1570,13 +1570,13 @@ function buildLanding(): HTMLElement {
   const promise = el(
     "section",
     { class: "section" },
-    el("h2", {}, "Nothing changes without your approval"),
+    el("h2", {}, "Nothing Changes Without Your Approval"),
     el(
       "p",
       {},
       "There is no automatic apply.  A logo reaches your address book only after you tick its box and press the download or sync button — and one click saves an untouched copy of the original first, so you can always go back.",
     ),
-    el("h2", {}, "Your contacts stay in this browser"),
+    el("h2", {}, "Your Contacts Stay in This Browser"),
     el("p", {}, PRIVACY_SENTENCE),
     el(
       "p",
@@ -1650,7 +1650,7 @@ function mountShell(root: HTMLElement): Shell {
   google.addEventListener("click", () => void importFromGoogle());
   const importActions: HTMLElement[] = [pick, google];
   if (canPickDeviceContacts()) {
-    const device = el("button", { class: "btn secondary phone-only", type: "button" }, "Import from this phone");
+    const device = el("button", { class: "btn secondary phone-only", type: "button" }, "Import From This Phone");
     device.addEventListener("click", () => void importFromDevice());
     importActions.push(device);
   }
@@ -1658,7 +1658,7 @@ function mountShell(root: HTMLElement): Shell {
   const drop = el(
     "div",
     { class: "drop" },
-    el("div", {}, el("strong", {}, "Import an address book"), el("span", {}, "Your address book never leaves this device.  Crash and performance telemetry, if enabled, never includes contact names, emails, or photos.")),
+    el("div", {}, el("strong", {}, "Import an Address Book"), el("span", {}, "Your address book never leaves this device.  Crash and performance telemetry, if enabled, never includes contact names, emails, or photos.")),
     ...importActions,
     file,
   );
@@ -1701,7 +1701,7 @@ function mountShell(root: HTMLElement): Shell {
     state.showCircleMask = maskCheckbox.checked;
     render();
   });
-  const maskToggle = el("label", { class: "mask-toggle" }, maskCheckbox, el("span", {}, "Circle mask preview"));
+  const maskToggle = el("label", { class: "mask-toggle" }, maskCheckbox, el("span", {}, "Circle Mask Preview"));
   review.append(el("div", { class: "search-bar" }, searchInput, maskToggle));
 
   const chips = new Map<FilterStatus, HTMLButtonElement>();
@@ -1734,17 +1734,17 @@ function mountShell(root: HTMLElement): Shell {
     el(
       "div",
       { class: "stats" },
-      el("div", { class: "stat high" }, stats.ready, " Ready to apply"),
-      el("div", { class: "stat medium" }, stats.review, " Needs review"),
-      el("div", { class: "stat skip" }, stats.nonbrand, " Not a brand"),
-      el("div", { class: "stat skip" }, stats.notfound, " Not found"),
-      el("div", { class: "stat" }, stats.people, " People left alone"),
+      el("div", { class: "stat high" }, stats.ready, " Ready to Apply"),
+      el("div", { class: "stat medium" }, stats.review, " Needs Review"),
+      el("div", { class: "stat skip" }, stats.nonbrand, " Not a Brand"),
+      el("div", { class: "stat skip" }, stats.notfound, " Not Found"),
+      el("div", { class: "stat" }, stats.people, " People Left Alone"),
     ),
   );
 
-  const selectHigh = el("button", { class: "btn secondary", type: "button" }, "Select all high-confidence");
+  const selectHigh = el("button", { class: "btn secondary", type: "button" }, "Select All High-Confidence");
   selectHigh.addEventListener("click", () => setAllHigh(true));
-  const clearHigh = el("button", { class: "btn ghost", type: "button" }, "Clear high-confidence");
+  const clearHigh = el("button", { class: "btn ghost", type: "button" }, "Clear High-Confidence");
   clearHigh.addEventListener("click", () => setAllHigh(false));
 
   const approvedBtn = el("button", {
@@ -1758,13 +1758,13 @@ function mountShell(root: HTMLElement): Shell {
     class: "btn secondary",
     type: "button",
     title: "Export full address book with all contacts merged",
-  }, "Export full address book (0)");
+  }, "Export Full Address Book (0)");
   exportFullBtn.addEventListener("click", () => void downloadFull());
 
   const backup = el(
     "button",
     { class: "btn ghost", type: "button", title: "Download untouched original address book backup" },
-    "Download backup",
+    "Download Backup",
   );
   backup.addEventListener("click", downloadBackup);
 
@@ -1775,10 +1775,10 @@ function mountShell(root: HTMLElement): Shell {
   review.append(el("div", { class: "toolbar" }, selectHigh, clearHigh, approvedBtn, exportFullBtn, backup, googleSyncBtn, kbHint));
 
   const sections: Record<SectionKey, SectionView> = {
-    ready: buildSection("Ready to apply", "ready"),
-    review: buildSection("Needs review", "review"),
-    nonbrand: buildSection("Not a brand", "nonbrand"),
-    notfound: buildSection("Not found", "notfound"),
+    ready: buildSection("Ready to Apply", "ready"),
+    review: buildSection("Needs Review", "review"),
+    nonbrand: buildSection("Not a Brand", "nonbrand"),
+    notfound: buildSection("Not Found", "notfound"),
   };
   for (const key of ["ready", "review", "nonbrand", "notfound"] as SectionKey[]) {
     review.append(sections[key].node);
@@ -1927,7 +1927,7 @@ function syncShell(s: Shell) {
   const approved = selectedCount();
   const approvedLabel = `Download ${approved} Approved Update${approved === 1 ? "" : "s"}`;
   if (s.approvedBtn.textContent !== approvedLabel) s.approvedBtn.textContent = approvedLabel;
-  const fullLabel = `Export full address book (${state.contacts.length})`;
+  const fullLabel = `Export Full Address Book (${state.contacts.length})`;
   if (s.exportFullBtn.textContent !== fullLabel) s.exportFullBtn.textContent = fullLabel;
   s.googleSyncBtn.classList.toggle("hidden", !hasGoogleContacts);
 

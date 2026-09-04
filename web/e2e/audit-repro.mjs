@@ -132,11 +132,11 @@ for (const [tag, delta, act] of [
 // And the bulk controls, which is where the stale count was first seen.  These
 // act on the high-confidence rows only, so a medium row approved by hand above
 // survives "Clear" — the label must agree with the boxes, not reach zero.
-await page.getByRole("button", { name: "Clear high-confidence", exact: true }).click();
+await page.getByRole("button", { name: "Clear High-Confidence", exact: true }).click();
 await page.waitForTimeout(400);
 const cleared = await approved();
 if (cleared !== (await checkedCards())) ok = false;
-await page.getByRole("button", { name: "Select all high-confidence", exact: true }).click();
+await page.getByRole("button", { name: "Select All High-Confidence", exact: true }).click();
 await page.waitForTimeout(400);
 const reselected = await approved();
 if (reselected !== (await checkedCards())) ok = false;
@@ -164,7 +164,7 @@ for (let i = 0; i < cardBoxes.length; i += 1) {
 }
 const firstCard = page.locator("article.card").first();
 const heightBeforeMenu = (await firstCard.boundingBox())?.height ?? 0;
-await firstCard.getByRole("button", { name: "Choose your own", exact: true }).click();
+await firstCard.getByRole("button", { name: "Choose Your Own", exact: true }).click();
 await firstCard.getByRole("menuitem", { name: "Paste URL", exact: true }).waitFor({ state: "visible" });
 const heightAfterMenu = (await firstCard.boundingBox())?.height ?? 0;
 await page.keyboard.press("Escape");

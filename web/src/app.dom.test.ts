@@ -224,9 +224,10 @@ test("the landing page gives way to the review stage", () => {
   created = [];
   render();
   const headings = findAll(stubDocument.root, (n) => n.tagName === "H2" && visible(n)).map((n) => n.textContent);
-  assert.ok(headings.includes("How it works"), `landing headings: ${headings.join(" | ")}`);
-  assert.ok(headings.includes("Nothing changes without your approval"));
-  assert.ok(headings.includes("Your contacts stay in this browser"));
+  assert.ok(headings.includes("How It Works"), `landing headings: ${headings.join(" | ")}`);
+  assert.ok(headings.includes("Nothing Changes Without Your Approval"));
+  assert.ok(headings.includes("Your Contacts Stay in This Browser"));
+  assert.ok(headings.includes("Every Business in Your Contacts, With Its Real Logo"));
 
   const copy = findAll(stubDocument.root, (n) => visible(n))
     .map((n) => n.textContent)
@@ -243,11 +244,21 @@ test("the landing page gives way to the review stage", () => {
     "homepage privacy sentence missing",
   );
   assert.ok(findAll(stubDocument.root, (n) => hasClass(n, "phone-only")).length >= 2, "phone-only copy missing");
+  assert.ok(copy.includes("Import an Address Book"), "drop-zone heading missing");
+  const landingButtons = findAll(stubDocument.root, (n) => n.tagName === "BUTTON" && visible(n)).map((n) => n.textContent);
+  assert.ok(landingButtons.includes("Import vCard or CSV"), `landing buttons: ${landingButtons.join(" | ")}`);
+  assert.ok(landingButtons.includes("Import Google Contacts"));
+  assert.ok(landingButtons.includes("Settings"));
 
   adoptContacts(book(3), "Test");
   const afterHeadings = findAll(stubDocument.root, (n) => n.tagName === "H2" && visible(n)).map((n) => n.textContent);
-  assert.ok(!afterHeadings.includes("How it works"), "landing copy still showing during review");
-  assert.ok(afterHeadings.some((h) => h.startsWith("Ready to apply (")));
+  assert.ok(!afterHeadings.includes("How It Works"), "landing copy still showing during review");
+  assert.ok(afterHeadings.some((h) => h.startsWith("Ready to Apply (")));
+  const reviewButtons = findAll(stubDocument.root, (n) => n.tagName === "BUTTON" && visible(n)).map((n) => n.textContent);
+  assert.ok(reviewButtons.includes("Select All High-Confidence"), `review buttons: ${reviewButtons.join(" | ")}`);
+  assert.ok(reviewButtons.includes("Clear High-Confidence"));
+  assert.ok(reviewButtons.includes("Download Backup"));
+  assert.ok(reviewButtons.some((label) => label.startsWith("Export Full Address Book")));
 });
 
 test("a 300-contact book mounts a window of cards, not all of them", () => {
@@ -352,10 +363,10 @@ test("filter chips narrow the sections and track aria-pressed", () => {
   const chips = byClass("chip");
   assert.deepEqual(chips.map((c) => c.textContent), [
     "All",
-    "Ready to apply",
-    "Needs review",
-    "Not found",
-    "Missing photo",
+    "Ready to Apply",
+    "Needs Review",
+    "Not Found",
+    "Missing Photo",
   ]);
 
   const notFoundChip = chips.find((c) => c.getAttribute("data-filter") === "notfound")!;
@@ -407,7 +418,7 @@ test("settings shows the HD-key empty-state until a key is saved", () => {
   );
 });
 
-test("Approve is the primary card action; Crop/Upload/Paste sit behind Choose your own", () => {
+test("Approve is the primary card action; Crop/Upload/Paste sit behind Choose Your Own", () => {
   stubDocument.root = new StubElement("div");
   created = [];
   adoptContacts(book(3), "Test");
@@ -415,7 +426,8 @@ test("Approve is the primary card action; Crop/Upload/Paste sit behind Choose yo
   const buttons = findAll(card, (n) => n.tagName === "BUTTON");
   const labels = buttons.map((b) => b.textContent);
   assert.ok(labels.includes("Approve") || labels.includes("Approved"), `actions: ${labels.join(" | ")}`);
-  assert.ok(labels.includes("Choose your own"));
+  assert.ok(labels.includes("Choose Your Own"));
+  assert.ok(labels.includes("Try Another"));
   assert.ok(labels.includes("Skip"));
   const crop = buttons.find((b) => b.textContent === "Crop")!;
   const upload = buttons.find((b) => b.textContent === "Upload")!;
@@ -423,10 +435,10 @@ test("Approve is the primary card action; Crop/Upload/Paste sit behind Choose yo
   assert.ok(crop && upload && paste, "override actions missing from the menu");
   assert.ok(hasClass(crop.parent as StubElement, "hidden") || hasClass(ancestorWithClass(crop, "choose-own-menu")!, "hidden"));
 
-  const toggle = buttons.find((b) => b.textContent === "Choose your own")!;
+  const toggle = buttons.find((b) => b.textContent === "Choose Your Own")!;
   fire(toggle, "click");
   const menu = ancestorWithClass(paste, "choose-own-menu")!;
-  assert.equal(hasClass(menu, "hidden"), false, "Choose your own did not open");
+  assert.equal(hasClass(menu, "hidden"), false, "Choose Your Own did not open");
 });
 
 test("J/K move the focused card and A approves it", () => {

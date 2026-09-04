@@ -298,8 +298,23 @@ test("review chrome copy is American and hides raw engine flags behind human phr
   const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "app.ts"), "utf8");
   assert.doesNotMatch(source, /recognise/);
   assert.match(source, /recognize instead of two letters/);
-  assert.match(source, /Choose your own/);
+  assert.match(source, /Choose Your Own/);
   assert.match(source, /"Approve"/);
+  for (const chrome of [
+    "How It Works",
+    "Every Business in Your Contacts, With Its Real Logo",
+    "Nothing Changes Without Your Approval",
+    "Your Contacts Stay in This Browser",
+    "Try Another",
+    "Import From This Phone",
+    "Select All High-Confidence",
+    "Clear High-Confidence",
+    "Import an Address Book",
+  ]) {
+    assert.match(source, new RegExp(chrome.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
+  assert.doesNotMatch(source, /"How it works"/);
+  assert.doesNotMatch(source, /"Try another"/);
   assert.doesNotMatch(source, /class: "actions" \}, retry, cropBtn, uploadBtn, pasteBtn/);
   assert.match(source, /class: "phone-only"/);
 });

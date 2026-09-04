@@ -50,7 +50,7 @@ The badge sits inside `.card-content`, first child, above `.name`.
 
 **Terminal "no logo found" card state.**  Today an exhausted card (every
 candidate 404'd or was rejected as too small) renders `.noimg` — an inert `?`
-box — while staying checked and counted in "Ready to apply".  That is a bug in
+box — while staying checked and counted in "Ready to Apply".  That is a bug in
 app.ts's state machine (the checkbox must be forced unselected and disabled
 when `candidates.length === 0` after exhaustion), tracked separately in
 match.ts/app.ts ownership. This contract fixes the presentation side of it:
@@ -68,7 +68,7 @@ modifier class `card--exhausted`, and the thumbnail slot renders:
 small status line (not `.meta`, so it can carry its own color independent of
 the metadata line). A card with `card--exhausted` must never also carry
 `card.high` — app.ts sets confidence to `skip` and the card renders in the
-"Not found" section (see §1.3), not "Ready to apply".
+"Not Found" section (see §1.3), not "Ready to Apply".
 
 **Filter chip row.**  `state.filterStatus: FilterStatus` (`"all" | "ready" |
 "review" | "notfound" | "missingphoto"`) gets UI: a row of toggle chips between
@@ -77,10 +77,10 @@ the metadata line). A card with `card--exhausted` must never also carry
 ```html
 <div class="filter-chips" role="group" aria-label="Filter contacts by status">
   <button class="chip" type="button" data-filter="all" aria-pressed="true">All</button>
-  <button class="chip" type="button" data-filter="ready" aria-pressed="false">Ready to apply</button>
-  <button class="chip" type="button" data-filter="review" aria-pressed="false">Needs review</button>
-  <button class="chip" type="button" data-filter="notfound" aria-pressed="false">Not found</button>
-  <button class="chip" type="button" data-filter="missingphoto" aria-pressed="false">Missing photo</button>
+  <button class="chip" type="button" data-filter="ready" aria-pressed="false">Ready to Apply</button>
+  <button class="chip" type="button" data-filter="review" aria-pressed="false">Needs Review</button>
+  <button class="chip" type="button" data-filter="notfound" aria-pressed="false">Not Found</button>
+  <button class="chip" type="button" data-filter="missingphoto" aria-pressed="false">Missing Photo</button>
 </div>
 ```
 
@@ -89,26 +89,26 @@ Exactly one chip carries `aria-pressed="true"` at a time, matching
 `chip--active`. Chip label strings are exactly the five above (Title Case, no
 counts appended — counts already live in `.stats`).
 
-**Separate "Not a brand" and "Not found" sections.**  VISION.md treats "this
+**Separate "Not a Brand" and "Not Found" sections.**  VISION.md treats "this
 contact isn't a business" and "this is a business but no logo was found" as
 different facts; the audit calls out that the app currently merges them into
 one "Not found / not a brand" section, hiding the real miss rate. The review
 stage renders three result sections, not two:
 
 ```
-"Ready to apply"   — section class "section section--ready"
-"Needs review"     — section class "section section--review"
-"Not a brand"      — section class "section section--nonbrand"
-"Not found"        — section class "section section--notfound"
+"Ready to Apply"   — section class "section section--ready"
+"Needs Review"     — section class "section section--review"
+"Not a Brand"      — section class "section section--nonbrand"
+"Not Found"        — section class "section section--notfound"
 ```
 
 `.section` keeps its existing look; the `section--*` suffix exists purely as a
 styling/testing hook and carries no required visual difference except where
-noted below. "Not a brand" holds items whose flags include `non-brand` or
-`person`; "Not found" holds business-classified items that exhausted every
+noted below. "Not a Brand" holds items whose flags include `non-brand` or
+`person`; "Not Found" holds business-classified items that exhausted every
 candidate (`card--exhausted`, confidence `skip`, no non-brand/person flag).
-Section heading copy is exactly `Ready to apply (N)`, `Needs review (N)`,
-`Not a brand (N)`, `Not found (N)` — same `${title} (${items.length})` pattern
+Section heading copy is exactly `Ready to Apply (N)`, `Needs Review (N)`,
+`Not a Brand (N)`, `Not Found (N)` — same `${title} (${items.length})` pattern
 already used by `section()`.
 
 **Virtualized list container.**  Each result section's `.grid` is wrapped in a
@@ -385,7 +385,7 @@ suppressed, not printed as-is):
 | `homonym-risk` | yes | `name is also a common word` |
 | `brand-tail` | yes | `matched a partial name` |
 | `replace-existing` | yes | `replaces an existing photo` |
-| `non-brand` | n/a — routes to the "Not a brand" section (§1.3), never rendered as inline text |
+| `non-brand` | n/a — routes to the "Not a Brand" section (§1.3), never rendered as inline text |
 | `person` | n/a — item never enters the review list (`matchBook` filter); not a display concern |
 | `photo-protected` | n/a — same as `person`; these contacts don't reach card rendering |
 
