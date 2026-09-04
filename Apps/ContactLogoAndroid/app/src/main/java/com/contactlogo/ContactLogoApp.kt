@@ -18,7 +18,12 @@ class ContactLogoApp : Application() {
             options.isAttachScreenshot = false
             options.isAttachViewHierarchy = false
             options.tracesSampleRate = 0.2
+            options.profilesSampleRate = 0.1
             options.isAnrEnabled = true
+            options.sessionReplay.sessionSampleRate = 0.1
+            options.sessionReplay.onErrorSampleRate = 1.0
+            options.sessionReplay.setMaskAllText(true)
+            options.sessionReplay.setMaskAllImages(true)
         }
     }
 }
