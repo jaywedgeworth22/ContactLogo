@@ -1,5 +1,5 @@
 # ContactLogo Effort Log — cross-agent board
-- **2026-09-04 — GROK — IN PROGRESS — Sentry max-features: iOS profiling + Session Replay (board `af1ab6e9`, branch `grok/sentry-max-features`, worktree `~/apps/contactlogo-grok-sentry-max`).**  Web Replay/Feedback already on.  Android hold.  Rollout: `docs/rollouts/2026-09-04-sentry-max-features.md`.
+- **2026-09-04 — GROK — IN PR #62 — Sentry max-features: iOS profiling + Session Replay + Android native (board `af1ab6e9`, branch `grok/sentry-max-features`, worktree `~/apps/contactlogo-grok-sentry-max`).**  Android ENABLE (masked Replay 10%/100% error, profiling 0.1).  Rollout: `docs/rollouts/2026-09-04-sentry-max-features.md`.
 - **2026-09-03 — GROK — IN PROGRESS — Retarget AppUpdatePrompt off ios-app-versions (board `ca104839`, branch `grok/ios-versions-home`, worktree `~/apps/contactlogo-grok-ios-versions`).**  iOS + Mac copies fetch ai-fleet-coordinator `site/ios-versions.json`.  Rollout: `docs/rollouts/2026-09-03-ios-versions-home.md`.
 - **2026-09-01 — GROK — IN PROGRESS — Sentry DSN hygiene: no hardcoded iOS fallback (branch `grok/sentry-dsn-hygiene`, worktree `~/apps/contactlogo-grok-sentry-dsn`).**  Board `8a9695e902ca4da085df8a60b819308d`.  Cocoa init is plist-only / build-injected; empty DSN = no-op.
 Protocol: /Users/jay/apps/EFFORT-LOG-PROTOCOL.md (canonical). Live board: this file
