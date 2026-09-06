@@ -176,6 +176,9 @@ test("google csv import", () => {
 test("simple icons slug map", () => {
   assert.equal(simpleIconsSlug("chase.com"), "chase");
   assert.equal(simpleIconsSlug("att.com"), "atandt");
+  assert.equal(simpleIconsSlug("jpmorganchase.com"), undefined);
+  assert.equal(simpleIconsSlug("microsoft.com"), undefined);
+  assert.equal(simpleIconsSlug("walgreens.com"), undefined);
 });
 
 test("identity prefers website then catalog then phone", () => {

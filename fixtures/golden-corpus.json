@@ -2272,7 +2272,7 @@
         "simpleIconsSlug": "chase"
       },
       "rule": "MATCHING-ENGINE §3 source 2; ENGINE-CONTRACT R13 (CL-04)",
-      "why": "The slug is not the domain label: deriving 'chase' from chase.com yields no icon at all."
+      "why": "chase.com maps to the live Simple Icons slug chase. The previous jpmorgan slug 404s on the CDN, and jpmorganchase.com is dropped because it has no live obvious brand slug."
     },
     {
       "id": "simpleicons-slug-map-att",

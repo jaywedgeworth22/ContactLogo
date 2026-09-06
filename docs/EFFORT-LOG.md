@@ -25,6 +25,7 @@ Protocol: /Users/jay/apps/EFFORT-LOG-PROTOCOL.md (canonical). Live board: this f
 - **2026-08-25 — AG — COMPLETED — High-res logo sources (Google 256px, Clearbit 512px), quality baseline filter, 404 error prevention, review-first safety refinement, direct card drag-drop upload, and interactive crop/zoom studio modal.**  Upgraded web candidate sources (Clearbit 512px, Google 256px, Preferred SVGs); prevented SimpleIcons 404 question mark SVGs via strict slug validation; kept email and guessed domains in review; added card-level image drag & drop; and added in-browser interactive circle-mask crop/zoom/pan modal.  PR #19 merged to `main`.
 
 ## In Progress
+- **2026-09-01 — GROK — IN PROGRESS — Issue #37 drop dead Simple Icons slugs + liveness CI (board 32be84ad, worktree `~/apps/contactlogo-grok-simpleicons` @ `fix/simpleicons-liveness`).**  23 CDN-404 slugs removed from web/Swift/Kotlin maps; chase.com remapped to live slug `chase`; weekly `simpleicons-liveness.yml` added. Rebased onto main 2026-09-08 keeping `jpmorganchase.com→chase` and dropping dead `salesforce`.
 - **2026-09-04 — BF-DESIGNER — IN PROGRESS — ContactLogo.com landing headings and buttons Title Case (board `62acf520`, issue #63, branch `grok/web-title-case`, worktree `~/apps/contactlogo-grok-title-case`).**  Web chrome only.  No TestFlight.  Rollout: `docs/rollouts/2026-09-04-web-title-case.md`.
 - **2026-09-03 — BF-DIRECTOR / GROK — IN PROGRESS — iOS TestFlight background crash: Swift 6 MainActor trap in BGTask handler (issue #59, board 35559745, worktree `~/apps/contactlogo-grok-bgtask-crash` @ `grok/bgtask-mainactor-crash`).**  `MatchBackgroundTask.register()` is nonisolated so iOS can launch overnight matching without `_dispatch_assert_queue_fail`.
 - [AG] 2026-09-02 — IN PROGRESS — Fix vercel-ignore-hourly watch_args pathspec for web subfolder (branch `ag/vercel-pathspec-fix`, worktree `~/apps/contactlogo-ag-vercel-fix`). Update watch_args to use :(top)web so git diff correctly detects web updates.
@@ -47,6 +48,7 @@ Protocol: /Users/jay/apps/EFFORT-LOG-PROTOCOL.md (canonical). Live board: this f
 - **2026-08-22 — CURSOR — PLANNED — Attach contactlogo.com to Coolify + Cloudflare.**  Domain is owned (Grok tapspin log).  Zone not in Cloudflare yet.  Do not use Render.
 
 ## Changelog of this log
+- 2026-09-01 — GROK — claimed issue #37 Simple Icons slug cleanup (board 32be84ad).
 - 2026-09-01 — GROK — claimed web Sentry SDK (board 86902ab6).
 - 2026-09-01 — GROK — claimed issue #33 retryable native rows (board 0eceafd5).
 - 2026-09-01 — GROK — claimed issue #32 persist-before-notify (board f91039fc).
