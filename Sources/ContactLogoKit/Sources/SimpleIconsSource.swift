@@ -12,35 +12,45 @@ public struct SimpleIconsSource: LogoSource, Sendable {
     static let skip: Set<String> = ["delta.com"]
 
     static let slugs: [String: String] = [
-        "apple.com": "apple", "google.com": "google", "meta.com": "meta",
-        "facebook.com": "facebook", "instagram.com": "instagram", "tesla.com": "tesla",
-        "nvidia.com": "nvidia", "netflix.com": "netflix", "spotify.com": "spotify",
-        "salesforce.com": "salesforce", "intel.com": "intel", "cisco.com": "cisco",
-        "stripe.com": "stripe", "paypal.com": "paypal", "visa.com": "visa",
+        "apple.com": "apple", "google.com": "google",
+        "meta.com": "meta", "facebook.com": "facebook",
+        "instagram.com": "instagram", "tesla.com": "tesla",
+        "nvidia.com": "nvidia", "netflix.com": "netflix",
+        "spotify.com": "spotify", "intel.com": "intel",
+        "cisco.com": "cisco", "stripe.com": "stripe",
+        "paypal.com": "paypal", "visa.com": "visa",
         "mastercard.com": "mastercard", "americanexpress.com": "americanexpress",
         "chase.com": "chase", "jpmorganchase.com": "chase",
         "bankofamerica.com": "bankofamerica", "wellsfargo.com": "wellsfargo",
-        "verizon.com": "verizon", "att.com": "atandt", "united.com": "unitedairlines",
-        "aa.com": "americanairlines", "southwest.com": "southwestairlines",
-        "fedex.com": "fedex", "ups.com": "ups", "usps.com": "usps",
+        "verizon.com": "verizon", "att.com": "atandt",
+        "united.com": "unitedairlines", "aa.com": "americanairlines",
+        "southwest.com": "southwestairlines", "fedex.com": "fedex",
+        "ups.com": "ups", "usps.com": "usps",
         "target.com": "target", "starbucks.com": "starbucks",
-        "mcdonalds.com": "mcdonalds", "uber.com": "uber", "lyft.com": "lyft",
-        "doordash.com": "doordash", "airbnb.com": "airbnb", "nike.com": "nike",
-        "samsung.com": "samsung", "sony.com": "sony", "ford.com": "ford",
-        "bmw.com": "bmw", "x.ai": "x", "x.com": "x", "twitter.com": "x",
-        "squareup.com": "square", "github.com": "github", "youtube.com": "youtube",
-        "discord.com": "discord", "zoom.us": "zoom", "notion.so": "notion",
-        "figma.com": "figma", "dropbox.com": "dropbox", "pinterest.com": "pinterest",
-        "reddit.com": "reddit", "tiktok.com": "tiktok", "whatsapp.com": "whatsapp",
-        "telegram.org": "telegram", "signal.org": "signal", "ebay.com": "ebay",
-        "shopify.com": "shopify", "spacex.com": "spacex", "starlink.com": "spacex"
+        "mcdonalds.com": "mcdonalds", "uber.com": "uber",
+        "lyft.com": "lyft", "doordash.com": "doordash",
+        "airbnb.com": "airbnb", "nike.com": "nike",
+        "samsung.com": "samsung", "sony.com": "sony",
+        "ford.com": "ford", "bmw.com": "bmw",
+        "x.ai": "x", "x.com": "x",
+        "twitter.com": "x", "github.com": "github",
+        "youtube.com": "youtube", "discord.com": "discord",
+        "zoom.us": "zoom", "notion.so": "notion",
+        "figma.com": "figma", "dropbox.com": "dropbox",
+        "pinterest.com": "pinterest", "reddit.com": "reddit",
+        "tiktok.com": "tiktok", "whatsapp.com": "whatsapp",
+        "telegram.org": "telegram", "signal.org": "signal",
+        "ebay.com": "ebay", "shopify.com": "shopify",
+        "spacex.com": "spacex", "starlink.com": "spacex",
+        "squareup.com": "square"
     ]
 
     public init(session: URLSession = .shared) {
         self.session = session
     }
 
-    /// R13.2 — slugs are brand names, not domain labels (`chase.com` → `chase`), so a domain absent from the table produces **no** Simple
+    /// R13.2 — slugs are brand names, not domain labels (`att.com` →
+    /// `atandt`), so a domain absent from the table produces **no** Simple
     /// Icons candidate.  Deriving one by stripping the TLD is right only by
     /// accident and gives `delta.com` the Delta *software* mark.
     public static func slug(for domain: String) -> String? {

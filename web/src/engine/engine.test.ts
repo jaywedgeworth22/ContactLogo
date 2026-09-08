@@ -176,6 +176,11 @@ test("google csv import", () => {
 test("simple icons slug map", () => {
   assert.equal(simpleIconsSlug("chase.com"), "chase");
   assert.equal(simpleIconsSlug("att.com"), "atandt");
+  // main keeps jpmorganchase.com → live chase slug; salesforce was dead and dropped.
+  assert.equal(simpleIconsSlug("jpmorganchase.com"), "chase");
+  assert.equal(simpleIconsSlug("salesforce.com"), undefined);
+  assert.equal(simpleIconsSlug("microsoft.com"), undefined);
+  assert.equal(simpleIconsSlug("walgreens.com"), undefined);
 });
 
 test("identity prefers website then catalog then phone", () => {

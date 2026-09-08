@@ -772,48 +772,25 @@ also print `via-website`, and MUST NOT print `guessed-domain` next to a
 
 ## R13. Simple Icons
 
-**R13.1** The canonical slug map (domain → slug) is the union of the Swift and
-TypeScript tables:
+**R13.1** The canonical slug map (domain → slug) is the union of the three
+engine tables, which MUST stay in lockstep:
 
-```
-apple.com apple            google.com google          meta.com meta
-facebook.com facebook      instagram.com instagram    tesla.com tesla
-nvidia.com nvidia          netflix.com netflix        spotify.com spotify
-salesforce.com salesforce  intel.com intel            cisco.com cisco
-stripe.com stripe
-paypal.com paypal          visa.com visa              mastercard.com mastercard
-americanexpress.com americanexpress                   chase.com chase
-jpmorganchase.com chase    bankofamerica.com bankofamerica
-wellsfargo.com wellsfargo  verizon.com verizon        att.com atandt
-united.com unitedairlines  aa.com americanairlines
-southwest.com southwestairlines                       fedex.com fedex
-ups.com ups                usps.com usps
-target.com target          starbucks.com starbucks    mcdonalds.com mcdonalds
-uber.com uber              lyft.com lyft              doordash.com doordash
-airbnb.com airbnb          nike.com nike              samsung.com samsung
-sony.com sony              ford.com ford              bmw.com bmw
-x.ai x                     x.com x                    twitter.com x
-squareup.com square        github.com github          youtube.com youtube
-discord.com discord        zoom.us zoom
-notion.so notion           figma.com figma            dropbox.com dropbox
-pinterest.com pinterest    reddit.com reddit          tiktok.com tiktok
-whatsapp.com whatsapp      telegram.org telegram      signal.org signal
-ebay.com ebay              shopify.com shopify
-spacex.com spacex          starlink.com spacex
-# Dropped 2026-09-01 after cdn.simpleicons.org 404s (trademark removals):
-# microsoft amazon adobe oracle ibm citigroup geico statefarm tmobile
-# homedepot lowe's costco walmart usaa centerpointenergy linkedin slack
-# hulu disneyplus walgreens cvs jpmorgan.  salesforce remains live.
-```
+- `web/src/engine/logos.ts` (`SIMPLE_SLUGS`)
+- `Sources/ContactLogoKit/Sources/SimpleIconsSource.swift` (`slugs`)
+- `Apps/ContactLogoAndroid/app/src/main/java/com/contactlogo/engine/SimpleIcons.kt`
+
+Do not keep a second copy of the table here; it will rot (issue #37). Every
+mapped slug must 200 on `https://cdn.simpleicons.org/{slug}`. `.github/workflows/simpleicons-liveness.yml`
+probes the live map weekly and fails on 404. Keep `jpmorganchase.com` → `chase`
+(live); drop dead slugs such as `salesforce`.
 
 **R13.2 Slugs MUST NOT be derived.** A domain absent from R13.1 produces **no**
-Simple Icons candidate.  Deriving a slug by stripping the TLD made `delta.com`
-→ `delta` → the *Delta software* mark: a confident, square, transparent, wrong
-logo — the highest-damage failure the engine can produce.  All three engines
-now use this table; they must not guess a slug.
+Simple Icons candidate. Android used to derive the slug by stripping the TLD, so
+`delta.com` → `delta` → the *Delta software* mark: a confident, square,
+transparent, wrong logo — the highest-damage failure the engine can produce.
 Simple Icons slugs are brand names, not domain labels (`att.com` → `atandt`);
-derivation is right only by accident.  A mapped slug that 404s must be dropped
-or remapped to a live slug (`chase.com` → `chase` as of 2026-09-01).
+derivation is right only by accident. `chase.com` and `jpmorganchase.com` map to
+the live slug `chase` (the previous `jpmorgan` slug 404s).
 
 **R13.3 `SKIP` set.** `delta.com`. Even if a `delta` slug is later added to
 R13.1, delta.com MUST NOT use it; the airline is served by the curated mark

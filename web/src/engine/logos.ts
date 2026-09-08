@@ -51,7 +51,6 @@ const SIMPLE_SLUGS: Record<string, string> = {
   "nvidia.com": "nvidia",
   "netflix.com": "netflix",
   "spotify.com": "spotify",
-  "salesforce.com": "salesforce",
   "intel.com": "intel",
   "cisco.com": "cisco",
   "stripe.com": "stripe",
