@@ -152,7 +152,9 @@ final class SimpleIconsTests: XCTestCase {
     func testSlugMapAndDeltaSkip() {
         XCTAssertEqual(SimpleIconsSource.slug(for: "chase.com"), "chase" as String?)
         XCTAssertEqual(SimpleIconsSource.slug(for: "att.com"), "atandt" as String?)
-        XCTAssertNil(SimpleIconsSource.slug(for: "jpmorganchase.com"))
+        // main keeps jpmorganchase.com → live chase slug; salesforce was dead and dropped.
+        XCTAssertEqual(SimpleIconsSource.slug(for: "jpmorganchase.com"), "chase" as String?)
+        XCTAssertNil(SimpleIconsSource.slug(for: "salesforce.com"))
         XCTAssertNil(SimpleIconsSource.slug(for: "microsoft.com"))
         XCTAssertNil(SimpleIconsSource.slug(for: "walgreens.com"))
         XCTAssertNotNil(SimpleIconsSource.url(for: "fedex.com"))
