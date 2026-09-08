@@ -5,7 +5,7 @@ name: Simple Icons liveness
 # Cross-checks web/Swift/Kotlin maps for drift (issue #37 / PR #65).
 on:
   schedule:
-    - cron: "17 6 * * 1"
+    - cron: "17 14 * * 1"
   workflow_dispatch: {}
 
 concurrency:
