@@ -31,6 +31,8 @@
 		3C46C9CF19FF9F9C87269F1D /* GenericBlocklist.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98997F8A612379F7F3F60A43 /* GenericBlocklist.swift */; };
 		3FA84C9C9444FC7E280FB818 /* NotificationScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C997BCAD07D659AF1F12FCD /* NotificationScheduler.swift */; };
 		46F369E68DCFF497DB8076DD /* ImageFlags.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF04212A05BD18249FFCADBD /* ImageFlags.swift */; };
+		4E46ECB45FA595ECF6717D9A /* SentryTelemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32A67EDEB1599489FC142DA1 /* SentryTelemetry.swift */; };
+		520A37F15A49BA33796D5723 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = D036259F798705AC543C966D /* Sentry */; };
 		522DB2D63ABA91D22F31E79F /* FaviconSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = D79CC86B84746C889E1B7462 /* FaviconSource.swift */; };
 		53D6C481278F96AA4D224174 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B93FC49350414117E0A9F619 /* SettingsStore.swift */; };
 		5C0BFA7FEFCD6A82F8A3C079 /* DefaultSources.swift in Sources */ = {isa = PBXBuildFile; fileRef = E363321D372087081BC5666C /* DefaultSources.swift */; };
@@ -143,6 +145,7 @@
 		257BEC55D3F30E12E865F73F /* ManualOverrideSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualOverrideSheet.swift; sourceTree = "<group>"; };
 		2F13C914BB55CC5108C409D4 /* LogoSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogoSource.swift; sourceTree = "<group>"; };
 		31BCB449DF697F691F3899EC /* ContactLogoKit.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = ContactLogoKit.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		32A67EDEB1599489FC142DA1 /* SentryTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SentryTelemetry.swift; sourceTree = "<group>"; };
 		39EEECF2529DD56CDDB234FC /* CandidateFileName.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CandidateFileName.swift; sourceTree = "<group>"; };
 		443265E102A01653A01178F2 /* AppUpdatePrompt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdatePrompt.swift; sourceTree = "<group>"; };
 		4969E286A152FDE73909DD81 /* NameNormalizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NameNormalizer.swift; sourceTree = "<group>"; };
@@ -176,6 +179,7 @@
 		E04865AB793CE93A696E583A /* CandidateRanker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CandidateRanker.swift; sourceTree = "<group>"; };
 		E363321D372087081BC5666C /* DefaultSources.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultSources.swift; sourceTree = "<group>"; };
 		E5740648826FBF7D7003C356 /* ContactLogoMacApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactLogoMacApp.swift; sourceTree = "<group>"; };
+		E7387A0CA93D250803C638E8 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		EA4B4EE97BCDD22F4C6B44F7 /* CompanyCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanyCatalog.swift; sourceTree = "<group>"; };
 		EBAD4842EA4D40654FEFC94B /* BackgroundMatchRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundMatchRunner.swift; sourceTree = "<group>"; };
 		F54AE3ACB7FFE84AB4A3AC6C /* CompaniesLogoSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompaniesLogoSource.swift; sourceTree = "<group>"; };
@@ -189,6 +193,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				C1E49AE49C34602963F58353 /* ContactLogoKitMac.framework in Frameworks */,
+				520A37F15A49BA33796D5723 /* Sentry in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -307,7 +312,9 @@
 				80C25756B1F35C003AA3A118 /* ContactLogoMac.entitlements */,
 				E5740648826FBF7D7003C356 /* ContactLogoMacApp.swift */,
 				7475C47C21BB6C48B687167A /* ContentView.swift */,
+				E7387A0CA93D250803C638E8 /* Info.plist */,
 				A52EDB8D876C3D24B6B18B8E /* ManualOverrideSheet.swift */,
+				32A67EDEB1599489FC142DA1 /* SentryTelemetry.swift */,
 				19B063D75543B34805CD5F1C /* SettingsView.swift */,
 			);
 			name = ContactLogoMac;
@@ -426,6 +433,7 @@
 			);
 			name = ContactLogoMac;
 			packageProductDependencies = (
+				D036259F798705AC543C966D /* Sentry */,
 			);
 			productName = ContactLogoMac;
 			productReference = 1F48055747588374023786E1 /* ContactLogoMac.app */;
@@ -511,6 +519,7 @@
 				BF8CB02FA75136D08147A3E7 /* ContactLogoMacApp.swift in Sources */,
 				D4CAA2941479A80366213C46 /* ContentView.swift in Sources */,
 				AF21F526EEBF2C188B8380AB /* ManualOverrideSheet.swift in Sources */,
+				4E46ECB45FA595ECF6717D9A /* SentryTelemetry.swift in Sources */,
 				C963AA407E3D6C2CA3819674 /* SettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -654,6 +663,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Apps/ContactLogoMac/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = ContactLogo;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
@@ -881,6 +891,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Apps/ContactLogoMac/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = ContactLogo;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
@@ -1023,6 +1034,11 @@
 
 /* Begin XCSwiftPackageProductDependency section */
 		CAF1EB74F55B256D2CED77C7 /* Sentry */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 71CF6F66D4D0DCBF97F42019 /* XCRemoteSwiftPackageReference "sentry-cocoa" */;
+			productName = Sentry;
+		};
+		D036259F798705AC543C966D /* Sentry */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 71CF6F66D4D0DCBF97F42019 /* XCRemoteSwiftPackageReference "sentry-cocoa" */;
 			productName = Sentry;

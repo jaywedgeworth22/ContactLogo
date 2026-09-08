@@ -36,6 +36,8 @@ settings:
     GENERATE_INFOPLIST_FILE: YES
     # Native Sentry. Empty unless xcodebuild/CI passes SENTRY_DSN=...
     # Do not put a live DSN in this file or in Info.plist.
+    # iOS (contactlogo): inject Infisical SENTRY_DSN into SENTRY_DSN.
+    # Mac (contactlogo-macos): inject Infisical SENTRY_DSN_MACOS into SENTRY_DSN.
     SENTRY_DSN: ""
 
 targets:
@@ -106,6 +108,8 @@ targets:
       - path: Apps/ContactLogoMac
     dependencies:
       - target: ContactLogoKitMac
+      - package: Sentry
+        product: Sentry
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.contactlogo.macos
@@ -116,6 +120,10 @@ targets:
         INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.utilities"
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         GENERATE_INFOPLIST_FILE: YES
+        # Custom SENTRY_DSN key does not merge from INFOPLIST_KEY_* .
+        # Empty unless xcodebuild/CI passes SENTRY_DSN=... (Infisical
+        # SENTRY_DSN_MACOS).  Do not put a live DSN in git.
+        INFOPLIST_FILE: Apps/ContactLogoMac/Info.plist
         CODE_SIGN_ENTITLEMENTS: Apps/ContactLogoMac/ContactLogoMac.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 

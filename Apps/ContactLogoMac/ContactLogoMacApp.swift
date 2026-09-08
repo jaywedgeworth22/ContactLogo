@@ -8,6 +8,7 @@ struct ContactLogoMacApp: App {
     @StateObject private var model: ReviewSession
 
     init() {
+        SentryTelemetry.start()
         let settings = SettingsStore()
         _settingsStore = StateObject(wrappedValue: settings)
         _model = StateObject(wrappedValue: ReviewSession(settings: settings))
