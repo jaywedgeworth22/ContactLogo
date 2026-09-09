@@ -98,6 +98,20 @@ test("connect-src allows Sentry ingest so a configured VITE_SENTRY_DSN can post"
   );
 });
 
+test("connect-src and script-src allow Vercel Analytics and Speed Insights", () => {
+  const csp = directives();
+  const script = csp.get("script-src") ?? [];
+  const connect = csp.get("connect-src") ?? [];
+  assert.ok(
+    script.includes("https://va.vercel-scripts.com"),
+    "script-src must allow va.vercel-scripts.com",
+  );
+  assert.ok(
+    connect.includes("https://*.vercel-insights.com"),
+    "connect-src must allow *.vercel-insights.com",
+  );
+});
+
 test("the directives that keep the CSP worth having are still strict", () => {
   const csp = directives();
   // img-src is deliberately wide (above), so these carry the weight.
