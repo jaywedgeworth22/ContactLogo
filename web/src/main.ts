@@ -1,3 +1,5 @@
+import { inject } from "@vercel/analytics";
+import { injectSpeedInsights } from "@vercel/speed-insights";
 import { render } from "./app.ts";
 import { startDatadog } from "./observability/datadog.ts";
 import { startSentry } from "./observability/sentry.ts";
@@ -12,6 +14,8 @@ function showBootError(error: unknown): void {
 try {
   startSentry();
   startDatadog();
+  inject();
+  injectSpeedInsights();
   render();
   startWebUpdatePrompt();
 } catch (error) {
