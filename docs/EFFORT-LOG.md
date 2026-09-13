@@ -1,4 +1,5 @@
 # ContactLogo Effort Log — cross-agent board
+- **2026-09-13 — FX — IN PROGRESS — Merge to main is Vercel production (`fx/merge-equals-live`, worktree `~/apps/contactlogo-fx-deploy`, board `ef71d6c1`).**
 - **2026-09-07 — AG — IN PROGRESS — Fix Vercel auto-deploy rate-limit query (&state=READY) (branch `ag/vercel-ignore-state-ready`, worktree `~/apps/contactlogo-ag-vercel-fix`).**
 - **2026-09-04 — GROK — IN PR #62 — Sentry max-features: iOS profiling + Session Replay + Android native (board `af1ab6e9`, branch `grok/sentry-max-features`, worktree `~/apps/contactlogo-grok-sentry-max`).**  Android ENABLE (masked Replay 10%/100% error, profiling 0.1).  Rollout: `docs/rollouts/2026-09-04-sentry-max-features.md`.
 - **2026-09-03 — GROK — IN PROGRESS — Retarget AppUpdatePrompt off ios-app-versions (board `ca104839`, branch `grok/ios-versions-home`, worktree `~/apps/contactlogo-grok-ios-versions`).**  iOS + Mac copies fetch ai-fleet-coordinator `site/ios-versions.json`.  Rollout: `docs/rollouts/2026-09-03-ios-versions-home.md`.
