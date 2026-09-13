@@ -193,8 +193,15 @@ public struct MatchPipeline: Sendable {
 
         if let domain = stat.identity?.domain {
             for source in sources {
+                if Task.isCancelled {
+                    return MatchResult(contactID: c.id, contactClass: stat.contactClass, candidates: [],
+                                       confidence: .skip, flags: stat.flags + ["cancelled"])
+                }
                 do {
                     raw.append(contentsOf: try await source.candidates(forDomain: domain))
+                } catch is CancellationError {
+                    return MatchResult(contactID: c.id, contactClass: stat.contactClass, candidates: [],
+                                       confidence: .skip, flags: stat.flags + ["cancelled"])
                 } catch {
                     Self.record(error, from: source.kind, into: &failures)
                 }
@@ -202,12 +209,19 @@ public struct MatchPipeline: Sendable {
         }
         if raw.isEmpty {
             for source in sources {
+                if Task.isCancelled {
+                    return MatchResult(contactID: c.id, contactClass: stat.contactClass, candidates: [],
+                                       confidence: .skip, flags: stat.flags + ["cancelled"])
+                }
                 do {
                     let found = try await source.candidates(forBrandName: query)
                     // R9.2 — a name-search hit must resemble the query, or it
                     // is dropped from the ranked list (this is what kills
                     // "Cash App" → breadzine.com). Domain lookups are exempt.
                     raw.append(contentsOf: found.filter { Self.passesNameSearchGate($0, query: query) })
+                } catch is CancellationError {
+                    return MatchResult(contactID: c.id, contactClass: stat.contactClass, candidates: [],
+                                       confidence: .skip, flags: stat.flags + ["cancelled"])
                 } catch {
                     Self.record(error, from: source.kind, into: &failures)
                 }
@@ -217,10 +231,17 @@ public struct MatchPipeline: Sendable {
         var measured: [LogoCandidate] = []
         var droppedTile = false
         for var candidate in raw {
+            if Task.isCancelled {
+                return MatchResult(contactID: c.id, contactClass: stat.contactClass, candidates: [],
+                                   confidence: .skip, flags: stat.flags + ["cancelled"])
+            }
             if candidate.pixelWidth == nil || candidate.hasAlpha == nil {
                 var data: Data? = nil
                 do {
                     data = try await fetchImage(candidate.imageURL)
+                } catch is CancellationError {
+                    return MatchResult(contactID: c.id, contactClass: stat.contactClass, candidates: [],
+                                       confidence: .skip, flags: stat.flags + ["cancelled"])
                 } catch let error as LogoSourceError where error == .notFound {
                     continue // 404 or a provider fallback marker: not a candidate
                 } catch {
