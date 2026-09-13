@@ -181,6 +181,133 @@ public struct MatchPipeline: Sendable {
         return nil
     }
 
+    private func domainForOrganization(_ org: String, contact: ContactIdentity) -> String? {
+        if let catalogDomain = CompanyCatalog.domain(forName: org) {
+            return catalogDomain
+        }
+        let normOrg = org.lowercased().filter { $0.isLetter || $0.isNumber }
+        guard !normOrg.isEmpty else { return nil }
+        for raw in contact.emailDomains + contact.websiteHosts {
+            guard let d = DomainDeriver.reduce(DomainDeriver.emailHost(raw)) ?? DomainDeriver.reduce(raw) else { continue }
+            if DomainDeriver.freemail.contains(d.domain) { continue }
+            if DomainDeriver.isSocial(d) || DomainDeriver.isPlatform(d) { continue }
+            let label = Self.domainLabel(d.domain).lowercased().filter { $0.isLetter || $0.isNumber }
+            if normOrg == label || normOrg.contains(label) || label.contains(normOrg) {
+                return d.domain
+            }
+        }
+        return nil
+    }
+
+    /// Affiliated company name or domain for a named person with employer/company metadata.
+    public func affiliation(for c: ContactIdentity) -> (brandName: String, domain: String?)? {
+        let given = (c.givenName ?? "").trimmingCharacters(in: .whitespaces)
+        let family = (c.familyName ?? "").trimmingCharacters(in: .whitespaces)
+        let hasPersonName = !given.isEmpty || !family.isEmpty
+        guard hasPersonName else { return nil }
+        if inferCompanyFromLoneName(c) != nil { return nil }
+
+        // 1. Organization field (e.g. "Apple", "Texas Instruments", "Stripe")
+        if let org = c.organization?.trimmingCharacters(in: .whitespaces), !org.isEmpty {
+            let cleanOrg = NameNormalizer.clean(org)
+            if !GenericBlocklist.isNonBrand(cleanOrg) {
+                // Known catalog companies (e.g. "Texas Instruments", "American Airlines") contain geo tokens
+                // but must resolve rather than being discarded by WordLists.isRoleOrPlace!
+                if let catalogDomain = CompanyCatalog.domain(forName: cleanOrg) {
+                    return (cleanOrg, catalogDomain)
+                }
+                let seg = NameNormalizer.segment(org)
+                let orgCandidate = (seg.decorationStripped || seg.isBrandTail) ? seg.query : cleanOrg
+                if let catalogDomain = CompanyCatalog.domain(forName: orgCandidate) {
+                    return (orgCandidate, catalogDomain)
+                }
+                // Reject role metadata or job titles ("Director", "Hsa PTO - Asst Treasurer")
+                if !GenericBlocklist.isNonBrand(orgCandidate) &&
+                    !WordLists.isRoleOrPlace(cleanOrg) &&
+                    !WordLists.isRoleOrPlace(orgCandidate) {
+                    // Organization-derived affiliations must resolve using organization-compatible
+                    // evidence (catalog or work email/website), never arbitrary contact domains or guesses.
+                    if let domain = domainForOrganization(orgCandidate, contact: c) {
+                        return (orgCandidate, domain)
+                    }
+                }
+            }
+        }
+
+        // 2. Brand tail in display name ("Maya Chen - Texas Instruments")
+        let segment = NameNormalizer.segment(c.displayName)
+        if segment.isBrandTail, !GenericBlocklist.isNonBrand(segment.query) {
+            if let catalogDomain = CompanyCatalog.domain(forName: segment.query) {
+                return (segment.query, catalogDomain)
+            }
+            if !WordLists.isRoleOrPlace(segment.query) {
+                let domain = domainForOrganization(segment.query, contact: c)
+                return (segment.query, domain)
+            }
+        }
+
+        // 3. Work email domain (only if domain is not a public mail provider)
+        for raw in c.emailDomains {
+            guard let d = DomainDeriver.reduce(DomainDeriver.emailHost(raw)) else { continue }
+            if DomainDeriver.freemail.contains(d.domain) { continue }
+            if DomainDeriver.isSocial(d) || DomainDeriver.isPlatform(d) { continue }
+            let label = Self.domainLabel(d.domain)
+            let brand = label.capitalized
+            if !GenericBlocklist.isNonBrand(brand) && !WordLists.isRoleOrPlace(brand) {
+                return (brand, d.domain)
+            }
+        }
+
+        return nil
+    }
+
+    /// Matches an affiliated person against their company/organization mark.
+    /// Confidence is strictly capped at .medium (never .high) and flagged "affiliated"
+    /// so the contact is treated as less certain and requires explicit user opt-in.
+    public func matchAffiliated(_ c: ContactIdentity) async -> MatchResult? {
+        guard let aff = affiliation(for: c) else { return nil }
+        let fake = ContactIdentity(
+            id: c.id,
+            displayName: aff.brandName,
+            organization: aff.brandName,
+            emailDomains: aff.domain != nil ? [aff.domain!] : [],
+            websiteHosts: aff.domain != nil ? [aff.domain!] : [],
+            phoneNumbers: [],
+            hasImage: c.hasImage
+        )
+        let result = await match(fake)
+        guard !result.candidates.isEmpty else {
+            // Preserve failed affiliated matches if there were transient source errors
+            if !result.sourceErrors.isEmpty {
+                return MatchResult(
+                    contactID: c.id,
+                    contactClass: .person,
+                    candidates: [],
+                    confidence: .low,
+                    flags: ["affiliated", "opt-in-review"],
+                    sourceErrors: result.sourceErrors
+                )
+            }
+            return nil
+        }
+        var flags = result.flags
+        if !flags.contains("affiliated") {
+            flags.append("affiliated")
+        }
+        if !flags.contains("opt-in-review") {
+            flags.append("opt-in-review")
+        }
+        let cappedConfidence = min(result.confidence, .medium)
+        return MatchResult(
+            contactID: c.id,
+            contactClass: .person,
+            candidates: result.candidates,
+            confidence: cappedConfidence,
+            flags: flags,
+            sourceErrors: result.sourceErrors
+        )
+    }
+
     public func match(_ c: ContactIdentity) async -> MatchResult {
         let stat = staticMatch(c)
         guard stat.contactClass == .businessCard, let query = stat.query else {

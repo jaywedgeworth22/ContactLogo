@@ -38,6 +38,11 @@ public final class ReviewSession: ObservableObject {
     @Published public private(set) var lastError: ReviewSessionError?
     /// Every batch still on disk, newest first — undo survives relaunch.
     @Published public private(set) var undoHistory: [UndoLog.BatchSummary] = []
+    /// Scan breakdown metrics across the address book
+    @Published public internal(set) var totalScannedCount: Int = 0
+    @Published public internal(set) var protectedPersonCount: Int = 0
+    @Published public internal(set) var businessTargetsCount: Int = 0
+    @Published public internal(set) var affiliatedTargetsCount: Int = 0
 
     public var autoAccepted: [MatchResult] { results.filter { $0.confidence == .high } }
     public var needsReview: [MatchResult] { results.filter { $0.confidence == .medium || $0.confidence == .low } }
@@ -68,6 +73,8 @@ public final class ReviewSession: ObservableObject {
     var identitiesByID: [String: ContactIdentity] = [:]
     /// Tests inject a pipeline so Retry can run without the network.
     var pipelineForTesting: MatchPipeline?
+    /// Tests inject a contacts provider.
+    var contactsProviderForTesting: ContactsProvider?
     /// Token captured when contacts were enumerated for the current results.
     /// Replaced after apply/undo, which themselves mutate the contact store.
     var scanChangeToken: Data?
@@ -96,6 +103,10 @@ public final class ReviewSession: ObservableObject {
         names = snapshot.names
         scanDate = snapshot.scannedAt
         scanChangeToken = snapshot.contactStoreChangeToken
+        totalScannedCount = snapshot.totalScannedCount ?? 0
+        protectedPersonCount = snapshot.protectedPersonCount ?? 0
+        businessTargetsCount = snapshot.businessTargetsCount ?? 0
+        affiliatedTargetsCount = snapshot.affiliatedTargetsCount ?? 0
         stage = .review
     }
 
@@ -116,7 +127,11 @@ public final class ReviewSession: ObservableObject {
                 results: results,
                 selected: selected.sorted(),
                 chosenIndex: chosenIndex,
-                names: names
+                names: names,
+                totalScannedCount: totalScannedCount,
+                protectedPersonCount: protectedPersonCount,
+                businessTargetsCount: businessTargetsCount,
+                affiliatedTargetsCount: affiliatedTargetsCount
             )
             try queueStore.save(snapshot)
             return true
@@ -206,11 +221,19 @@ public final class ReviewSession: ObservableObject {
         guard let identity = await resolvedIdentity(for: id) else { return }
         retryingIDs.insert(id)
         defer { retryingIDs.remove(id) }
-        let updated = await configuredPipeline().match(identity)
+        let pipeline = configuredPipeline()
+        let updated: MatchResult
+        if pipeline.classify(identity) == .businessCard {
+            updated = await pipeline.match(identity)
+        } else if let aff = await pipeline.matchAffiliated(identity) {
+            updated = aff
+        } else {
+            updated = await pipeline.match(identity)
+        }
         guard let index = results.firstIndex(where: { $0.contactID == id }) else { return }
         results[index] = updated
         chosenIndex[id] = 0
-        if updated.confidence == .high {
+        if updated.confidence == .high && !updated.flags.contains("affiliated") {
             selected.insert(id)
         } else {
             selected.remove(id)
@@ -250,49 +273,93 @@ public final class ReviewSession: ObservableObject {
         // a long run could hide mutations that happened while we were away.
         scanDate = Date()
         scanChangeToken = queueStore.currentChangeToken()
-        let provider = CNContactsProvider()
+        let provider = contactsProviderForTesting ?? CNContactsProvider()
         do {
             guard try await provider.requestAccess() else {
                 stage = .idle
                 return false
             }
             let contacts = try await provider.fetchCandidates()
+            totalScannedCount = contacts.count
             names = Dictionary(uniqueKeysWithValues: contacts.map { ($0.id, $0.displayName) })
             let pipeline = configuredPipeline()
             // Default off: a business card with a photo stays in the queue as
             // `replace-existing` (MATCHING-ENGINE section 1, CONTACTLOGO.md:53).
             let skipPhotos = settings?.skipContactsWithExistingPhoto ?? false
-            // R7.6: person and non-brand contacts are never looked up at all.
-            let targets = contacts.filter {
-                pipeline.classify($0) == .businessCard && !(skipPhotos && $0.hasImage)
+
+            var businessTargets: [ContactIdentity] = []
+            var affiliatedTargets: [ContactIdentity] = []
+            var protectedCount = 0
+
+            for c in contacts {
+                let klass = pipeline.classify(c)
+                if klass == .businessCard {
+                    if !(skipPhotos && c.hasImage) {
+                        businessTargets.append(c)
+                    }
+                } else if klass == .person {
+                    if c.hasImage {
+                        // People with existing headshots are NEVER logo targets,
+                        // regardless of skipPhotos setting.
+                        protectedCount += 1
+                    } else if pipeline.affiliation(for: c) != nil {
+                        affiliatedTargets.append(c)
+                    } else {
+                        protectedCount += 1
+                    }
+                }
             }
-            identitiesByID = Dictionary(uniqueKeysWithValues: targets.map { ($0.id, $0) })
+
+            protectedPersonCount = protectedCount
+            businessTargetsCount = businessTargets.count
+            affiliatedTargetsCount = affiliatedTargets.count
+
+            enum ScanTarget {
+                case business(ContactIdentity)
+                case affiliated(ContactIdentity)
+
+                var contact: ContactIdentity {
+                    switch self {
+                    case .business(let c), .affiliated(let c):
+                        return c
+                    }
+                }
+            }
+
+            let allTargets: [ScanTarget] = businessTargets.map { .business($0) } + affiliatedTargets.map { .affiliated($0) }
+            identitiesByID = Dictionary(uniqueKeysWithValues: allTargets.map { ($0.contact.id, $0.contact) })
             retryingIDs = []
-            stage = .matching(done: 0, total: targets.count)
+            stage = .matching(done: 0, total: allTargets.count)
             if cancelRequested || Task.isCancelled {
                 stage = .idle
                 return false
             }
 
             let maxConcurrency = 8
-            var indexedResults: [MatchResult?] = Array(repeating: nil, count: targets.count)
+            var indexedResults: [MatchResult?] = Array(repeating: nil, count: allTargets.count)
             var doneCount = 0
 
-            let completedAll = await withTaskGroup(of: (Int, MatchResult)?.self) { group in
+            let completedAll = await withTaskGroup(of: (Int, MatchResult?)?.self) { group in
                 var submitted = 0
 
                 // Prime the group with up to maxConcurrency parallel tasks
-                for _ in 0..<min(maxConcurrency, targets.count) {
+                for _ in 0..<min(maxConcurrency, allTargets.count) {
                     if self.cancelRequested || Task.isCancelled {
                         group.cancelAll()
                         return false
                     }
                     let idx = submitted
-                    let contact = targets[idx]
+                    let target = allTargets[idx]
                     submitted += 1
                     group.addTask {
                         if Task.isCancelled { return nil }
-                        let res = await pipeline.match(contact)
+                        let res: MatchResult?
+                        switch target {
+                        case .business(let c):
+                            res = await pipeline.match(c)
+                        case .affiliated(let c):
+                            res = await pipeline.matchAffiliated(c)
+                        }
                         if Task.isCancelled { return nil }
                         return (idx, res)
                     }
@@ -312,22 +379,28 @@ public final class ReviewSession: ObservableObject {
 
                     indexedResults[idx] = matchResult
                     doneCount += 1
-                    self.stage = .matching(done: doneCount, total: targets.count)
+                    self.stage = .matching(done: doneCount, total: allTargets.count)
 
-                    if !self.cancelRequested && !Task.isCancelled && submitted < targets.count {
+                    if !self.cancelRequested && !Task.isCancelled && submitted < allTargets.count {
                         let nextIdx = submitted
-                        let nextContact = targets[nextIdx]
+                        let nextTarget = allTargets[nextIdx]
                         submitted += 1
                         group.addTask {
                             if Task.isCancelled { return nil }
-                            let res = await pipeline.match(nextContact)
+                            let res: MatchResult?
+                            switch nextTarget {
+                            case .business(let c):
+                                res = await pipeline.match(c)
+                            case .affiliated(let c):
+                                res = await pipeline.matchAffiliated(c)
+                            }
                             if Task.isCancelled { return nil }
                             return (nextIdx, res)
                         }
                     }
                 }
 
-                return doneCount == targets.count && !self.cancelRequested && !Task.isCancelled
+                return doneCount == allTargets.count && !self.cancelRequested && !Task.isCancelled
             }
 
             guard completedAll else {
@@ -338,7 +411,11 @@ public final class ReviewSession: ObservableObject {
             let out = indexedResults.compactMap { $0 }
             results = out
             chosenIndex = [:]
-            selected = Set(out.filter { $0.confidence == .high }.map(\.contactID))
+            // ONLY high-confidence pure business cards start selected.
+            // Affiliated contacts are NEVER auto-selected; users explicitly opt-in to update them.
+            selected = Set(out.filter { $0.confidence == .high && !$0.flags.contains("affiliated") }.map(\.contactID))
+            affiliatedTargetsCount = out.filter { $0.flags.contains("affiliated") }.count
+            businessTargetsCount = out.filter { !$0.flags.contains("affiliated") }.count
             stage = .review
             // Best-effort for a foreground scan; the background runner treats
             // a failed persist as an unsuccessful run so it will not notify.

@@ -3,11 +3,16 @@ import Foundation
 /// Abstraction over the address book so the engine runs identically on
 /// macOS, iOS, and the web (vCard-backed) shell.
 public protocol ContactsProvider: Sendable {
+    func requestAccess() async throws -> Bool
     /// Contacts worth considering: businesses and business cards.
     func fetchCandidates() async throws -> [ContactIdentity]
     func imageData(forContactID id: String) async throws -> Data?
     func setImage(_ data: Data, forContactID id: String) async throws
     func removeImage(forContactID id: String) async throws
+}
+
+extension ContactsProvider {
+    public func requestAccess() async throws -> Bool { true }
 }
 
 #if canImport(Contacts)
@@ -61,11 +66,6 @@ public final class CNContactsProvider: ContactsProvider, @unchecked Sendable {
         let given = contact.givenName.trimmingCharacters(in: .whitespaces)
         let family = contact.familyName.trimmingCharacters(in: .whitespaces)
         let org = contact.organizationName.trimmingCharacters(in: .whitespaces)
-        let hasPersonName = !given.isEmpty || !family.isEmpty
-        // only people-with-org or business cards are candidates at all
-        if requireCandidateShape {
-            guard !org.isEmpty || !hasPersonName else { return nil }
-        }
 
         let emailDomains = contact.emailAddresses.compactMap { labeled -> String? in
             let email = labeled.value as String
@@ -79,9 +79,14 @@ public final class CNContactsProvider: ContactsProvider, @unchecked Sendable {
         }
         let phones = contact.phoneNumbers.map { $0.value.stringValue }
         let display = [given, family].joined(separator: " ").trimmingCharacters(in: .whitespaces)
+        let resolvedDisplay = display.isEmpty ? (org.isEmpty ? (websiteHosts.first ?? "") : org) : display
+
+        // Drop empty placeholder contacts with zero identifying fields
+        guard !resolvedDisplay.isEmpty || !phones.isEmpty || !emailDomains.isEmpty || !websiteHosts.isEmpty else { return nil }
+
         return ContactIdentity(
             id: contact.identifier,
-            displayName: display.isEmpty ? org : display,
+            displayName: resolvedDisplay,
             givenName: given.isEmpty ? nil : given,
             familyName: family.isEmpty ? nil : family,
             organization: org.isEmpty ? nil : org,

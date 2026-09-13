@@ -95,7 +95,21 @@ struct ReviewQueueView: View {
                     .fixedSize()
                 }
             }
-            Text("High-confidence matches are pre-checked. Favicon fallbacks, guessed domains, and contacts with existing photos stay in Needs review.")
+            if model.totalScannedCount > 0 {
+                HStack(spacing: 8) {
+                    Image(systemName: "shield.checkmark.fill")
+                        .foregroundColor(.green)
+                    Text("\(model.totalScannedCount) contacts scanned · \(model.protectedPersonCount) personal contacts protected")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    if model.affiliatedTargetsCount > 0 {
+                        Text("· \(model.affiliatedTargetsCount) affiliated (opt-in)")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            Text("High-confidence business matches are pre-checked. Personal contacts with company affiliations, favicon fallbacks, and guessed domains stay in Needs review.")
                 .foregroundStyle(.secondary)
             List(rows, id: \.contactID) { result in
                 ReviewRow(result: result, onManualOverride: {
@@ -153,6 +167,15 @@ struct ReviewRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
                     Text(model.displayName(for: result.contactID)).font(.headline)
+                    if result.flags.contains("affiliated") {
+                        Text("Affiliated")
+                            .font(.caption2.bold())
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.blue.opacity(0.15))
+                            .foregroundStyle(.blue)
+                            .clipShape(Capsule())
+                    }
                     if result.isRetryable {
                         RetryableBadge()
                     }
