@@ -1055,6 +1055,15 @@ final class AffiliatedContactTests: XCTestCase {
         XCTAssertEqual(aff?.domain, "apple.com")
     }
 
+    func testPersonWithCatalogOrganizationContainingGeoTokenResolves() {
+        let engineer = ContactIdentity(id: "11", displayName: "David Clark", givenName: "David", familyName: "Clark",
+                                       organization: "Texas Instruments")
+        let aff = pipeline.affiliation(for: engineer)
+        XCTAssertNotNil(aff)
+        XCTAssertEqual(aff?.brandName, "Texas Instruments")
+        XCTAssertEqual(aff?.domain, "ti.com")
+    }
+
     @MainActor
     func testPersonWithExistingPhotoIsUnconditionallyProtected() async {
         let personWithHeadshot = ContactIdentity(id: "99", displayName: "Sarah Connor", givenName: "Sarah", familyName: "Connor",
@@ -1068,7 +1077,9 @@ final class AffiliatedContactTests: XCTestCase {
             func setImage(_ data: Data, forContactID id: String) async throws {}
             func removeImage(forContactID id: String) async throws {}
         }
-        let session = ReviewSession()
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let store = ReviewQueueStore(directory: tempDir, currentChangeToken: { nil })
+        let session = ReviewSession(queueStore: store)
         session.contactsProviderForTesting = MockProvider(contacts: [personWithHeadshot])
         session.pipelineForTesting = MatchPipeline(sources: [], fetchImage: { _ in Data() })
         await session.scanAndMatch()

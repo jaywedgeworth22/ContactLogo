@@ -79,10 +79,10 @@ public final class CNContactsProvider: ContactsProvider, @unchecked Sendable {
         }
         let phones = contact.phoneNumbers.map { $0.value.stringValue }
         let display = [given, family].joined(separator: " ").trimmingCharacters(in: .whitespaces)
-        let resolvedDisplay = display.isEmpty ? org : display
+        let resolvedDisplay = display.isEmpty ? (org.isEmpty ? (websiteHosts.first ?? "") : org) : display
 
         // Drop empty placeholder contacts with zero identifying fields
-        guard !resolvedDisplay.isEmpty || !phones.isEmpty || !emailDomains.isEmpty else { return nil }
+        guard !resolvedDisplay.isEmpty || !phones.isEmpty || !emailDomains.isEmpty || !websiteHosts.isEmpty else { return nil }
 
         return ContactIdentity(
             id: contact.identifier,

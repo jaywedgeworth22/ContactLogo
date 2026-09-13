@@ -414,6 +414,8 @@ public final class ReviewSession: ObservableObject {
             // ONLY high-confidence pure business cards start selected.
             // Affiliated contacts are NEVER auto-selected; users explicitly opt-in to update them.
             selected = Set(out.filter { $0.confidence == .high && !$0.flags.contains("affiliated") }.map(\.contactID))
+            affiliatedTargetsCount = out.filter { $0.flags.contains("affiliated") }.count
+            businessTargetsCount = out.filter { !$0.flags.contains("affiliated") }.count
             stage = .review
             // Best-effort for a foreground scan; the background runner treats
             // a failed persist as an unsuccessful run so it will not notify.

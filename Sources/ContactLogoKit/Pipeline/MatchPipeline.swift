@@ -207,24 +207,43 @@ public struct MatchPipeline: Sendable {
         guard hasPersonName else { return nil }
         if inferCompanyFromLoneName(c) != nil { return nil }
 
-        // 1. Organization field (e.g. "Apple", "Stripe")
+        // 1. Organization field (e.g. "Apple", "Texas Instruments", "Stripe")
         if let org = c.organization?.trimmingCharacters(in: .whitespaces), !org.isEmpty {
             let cleanOrg = NameNormalizer.clean(org)
-            if !GenericBlocklist.isNonBrand(cleanOrg) && !WordLists.isRoleOrPlace(cleanOrg) {
+            if !GenericBlocklist.isNonBrand(cleanOrg) {
+                // Known catalog companies (e.g. "Texas Instruments", "American Airlines") contain geo tokens
+                // but must resolve rather than being discarded by WordLists.isRoleOrPlace!
+                if let catalogDomain = CompanyCatalog.domain(forName: cleanOrg) {
+                    return (cleanOrg, catalogDomain)
+                }
                 let seg = NameNormalizer.segment(org)
                 let orgCandidate = (seg.decorationStripped || seg.isBrandTail) ? seg.query : cleanOrg
-                if !GenericBlocklist.isNonBrand(orgCandidate) && !WordLists.isRoleOrPlace(orgCandidate) {
-                    let domain = domainForOrganization(orgCandidate, contact: c)
-                    return (orgCandidate, domain)
+                if let catalogDomain = CompanyCatalog.domain(forName: orgCandidate) {
+                    return (orgCandidate, catalogDomain)
+                }
+                // Reject role metadata or job titles ("Director", "Hsa PTO - Asst Treasurer")
+                if !GenericBlocklist.isNonBrand(orgCandidate) &&
+                    !WordLists.isRoleOrPlace(cleanOrg) &&
+                    !WordLists.isRoleOrPlace(orgCandidate) {
+                    // Organization-derived affiliations must resolve using organization-compatible
+                    // evidence (catalog or work email/website), never arbitrary contact domains or guesses.
+                    if let domain = domainForOrganization(orgCandidate, contact: c) {
+                        return (orgCandidate, domain)
+                    }
                 }
             }
         }
 
-        // 2. Brand tail in display name ("Maya Chen - Apple")
+        // 2. Brand tail in display name ("Maya Chen - Texas Instruments")
         let segment = NameNormalizer.segment(c.displayName)
-        if segment.isBrandTail, !GenericBlocklist.isNonBrand(segment.query), !WordLists.isRoleOrPlace(segment.query) {
-            let domain = domainForOrganization(segment.query, contact: c)
-            return (segment.query, domain)
+        if segment.isBrandTail, !GenericBlocklist.isNonBrand(segment.query) {
+            if let catalogDomain = CompanyCatalog.domain(forName: segment.query) {
+                return (segment.query, catalogDomain)
+            }
+            if !WordLists.isRoleOrPlace(segment.query) {
+                let domain = domainForOrganization(segment.query, contact: c)
+                return (segment.query, domain)
+            }
         }
 
         // 3. Work email domain (only if domain is not a public mail provider)
