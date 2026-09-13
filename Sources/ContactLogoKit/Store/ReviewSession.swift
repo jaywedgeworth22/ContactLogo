@@ -39,10 +39,10 @@ public final class ReviewSession: ObservableObject {
     /// Every batch still on disk, newest first — undo survives relaunch.
     @Published public private(set) var undoHistory: [UndoLog.BatchSummary] = []
     /// Scan breakdown metrics across the address book
-    @Published public private(set) var totalScannedCount: Int = 0
-    @Published public private(set) var protectedPersonCount: Int = 0
-    @Published public private(set) var businessTargetsCount: Int = 0
-    @Published public private(set) var affiliatedTargetsCount: Int = 0
+    @Published public internal(set) var totalScannedCount: Int = 0
+    @Published public internal(set) var protectedPersonCount: Int = 0
+    @Published public internal(set) var businessTargetsCount: Int = 0
+    @Published public internal(set) var affiliatedTargetsCount: Int = 0
 
     public var autoAccepted: [MatchResult] { results.filter { $0.confidence == .high } }
     public var needsReview: [MatchResult] { results.filter { $0.confidence == .medium || $0.confidence == .low } }
@@ -73,6 +73,8 @@ public final class ReviewSession: ObservableObject {
     var identitiesByID: [String: ContactIdentity] = [:]
     /// Tests inject a pipeline so Retry can run without the network.
     var pipelineForTesting: MatchPipeline?
+    /// Tests inject a contacts provider.
+    var contactsProviderForTesting: ContactsProvider?
     /// Token captured when contacts were enumerated for the current results.
     /// Replaced after apply/undo, which themselves mutate the contact store.
     var scanChangeToken: Data?
@@ -101,6 +103,10 @@ public final class ReviewSession: ObservableObject {
         names = snapshot.names
         scanDate = snapshot.scannedAt
         scanChangeToken = snapshot.contactStoreChangeToken
+        totalScannedCount = snapshot.totalScannedCount ?? 0
+        protectedPersonCount = snapshot.protectedPersonCount ?? 0
+        businessTargetsCount = snapshot.businessTargetsCount ?? 0
+        affiliatedTargetsCount = snapshot.affiliatedTargetsCount ?? 0
         stage = .review
     }
 
@@ -121,7 +127,11 @@ public final class ReviewSession: ObservableObject {
                 results: results,
                 selected: selected.sorted(),
                 chosenIndex: chosenIndex,
-                names: names
+                names: names,
+                totalScannedCount: totalScannedCount,
+                protectedPersonCount: protectedPersonCount,
+                businessTargetsCount: businessTargetsCount,
+                affiliatedTargetsCount: affiliatedTargetsCount
             )
             try queueStore.save(snapshot)
             return true
@@ -263,7 +273,7 @@ public final class ReviewSession: ObservableObject {
         // a long run could hide mutations that happened while we were away.
         scanDate = Date()
         scanChangeToken = queueStore.currentChangeToken()
-        let provider = CNContactsProvider()
+        let provider = contactsProviderForTesting ?? CNContactsProvider()
         do {
             guard try await provider.requestAccess() else {
                 stage = .idle
@@ -288,7 +298,11 @@ public final class ReviewSession: ObservableObject {
                         businessTargets.append(c)
                     }
                 } else if klass == .person {
-                    if pipeline.affiliation(for: c) != nil, !(skipPhotos && c.hasImage) {
+                    if c.hasImage {
+                        // People with existing headshots are NEVER logo targets,
+                        // regardless of skipPhotos setting.
+                        protectedCount += 1
+                    } else if pipeline.affiliation(for: c) != nil {
                         affiliatedTargets.append(c)
                     } else {
                         protectedCount += 1

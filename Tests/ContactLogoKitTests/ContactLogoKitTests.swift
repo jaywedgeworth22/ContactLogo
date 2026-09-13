@@ -1034,5 +1034,91 @@ final class AffiliatedContactTests: XCTestCase {
         let target = ContactIdentity(id: "5", displayName: "Target", givenName: "Target")
         XCTAssertNil(pipeline.affiliation(for: target))
     }
+
+    func testRoleOrTitleInOrganizationIsNotAnAffiliation() {
+        let director = ContactIdentity(id: "6", displayName: "Jane Doe", givenName: "Jane", familyName: "Doe",
+                                       organization: "Director")
+        XCTAssertNil(pipeline.affiliation(for: director))
+
+        let treasurer = ContactIdentity(id: "7", displayName: "Bob Smith", givenName: "Bob", familyName: "Smith",
+                                        organization: "Hsa PTO - Asst Treasurer")
+        XCTAssertNil(pipeline.affiliation(for: treasurer))
+    }
+
+    func testPersonWithOrganizationDoesNotAdoptUnrelatedPersonalWebsite() {
+        let employee = ContactIdentity(id: "8", displayName: "Alex Rivera", givenName: "Alex", familyName: "Rivera",
+                                       organization: "Apple",
+                                       websiteHosts: ["consultant.example", "alexrivera.blog"])
+        let aff = pipeline.affiliation(for: employee)
+        XCTAssertNotNil(aff)
+        XCTAssertEqual(aff?.brandName, "Apple")
+        XCTAssertEqual(aff?.domain, "apple.com")
+    }
+
+    @MainActor
+    func testPersonWithExistingPhotoIsUnconditionallyProtected() async {
+        let personWithHeadshot = ContactIdentity(id: "99", displayName: "Sarah Connor", givenName: "Sarah", familyName: "Connor",
+                                                 organization: "Apple", hasImage: true)
+        struct MockProvider: ContactsProvider {
+            let contacts: [ContactIdentity]
+            func requestAccess() async throws -> Bool { true }
+            func fetchCandidates() async throws -> [ContactIdentity] { contacts }
+            func fetchCandidate(id: String) async -> ContactIdentity? { contacts.first(where: { $0.id == id }) }
+            func imageData(forContactID id: String) async throws -> Data? { nil }
+            func setImage(_ data: Data, forContactID id: String) async throws {}
+            func removeImage(forContactID id: String) async throws {}
+        }
+        let session = ReviewSession()
+        session.contactsProviderForTesting = MockProvider(contacts: [personWithHeadshot])
+        session.pipelineForTesting = MatchPipeline(sources: [], fetchImage: { _ in Data() })
+        await session.scanAndMatch()
+        XCTAssertEqual(session.protectedPersonCount, 1)
+        XCTAssertEqual(session.affiliatedTargetsCount, 0)
+        XCTAssertEqual(session.results.count, 0)
+    }
+
+    func testAffiliatedMatchWithTransientErrorsPreservesRetryability() async {
+        struct FailingSource: LogoSource {
+            let kind: SourceKind = .wikimedia
+            func candidates(forBrandName name: String) async throws -> [LogoCandidate] {
+                throw LogoSourceError.rateLimited(retryAfter: nil)
+            }
+            func candidates(forDomain domain: String) async throws -> [LogoCandidate] {
+                throw LogoSourceError.rateLimited(retryAfter: nil)
+            }
+        }
+        let failingPipeline = MatchPipeline(sources: [FailingSource()], fetchImage: { _ in Data() })
+        let tim = ContactIdentity(id: "9", displayName: "Tim Cook", givenName: "Tim", familyName: "Cook",
+                                  organization: "Apple")
+        let res = await failingPipeline.matchAffiliated(tim)
+        XCTAssertNotNil(res)
+        XCTAssertTrue(res?.candidates.isEmpty ?? false)
+        XCTAssertEqual(res?.sourceErrors.count, 1)
+        XCTAssertTrue(res?.flags.contains("affiliated") ?? false)
+        XCTAssertTrue(res?.flags.contains("opt-in-review") ?? false)
+    }
+
+    @MainActor
+    func testPersistedReviewQueueSavesAndRestoresScanCounts() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let store = ReviewQueueStore(directory: tempDir, currentChangeToken: { Data([1, 2, 3]) })
+        let session = ReviewSession(queueStore: store)
+        session.results = [
+            MatchResult(contactID: "10", contactClass: .businessCard,
+                        candidates: [LogoCandidate(source: .simpleIcons, imageURL: URL(string: "https://example.com/logo.png")!, pixelWidth: 128, pixelHeight: 128, assetType: "icon", hasAlpha: true)],
+                        confidence: .high)
+        ]
+        session.totalScannedCount = 7412
+        session.protectedPersonCount = 7120
+        session.businessTargetsCount = 200
+        session.affiliatedTargetsCount = 92
+        XCTAssertTrue(session.persistReviewQueue())
+
+        let restoredSession = ReviewSession(queueStore: store)
+        XCTAssertEqual(restoredSession.totalScannedCount, 7412)
+        XCTAssertEqual(restoredSession.protectedPersonCount, 7120)
+        XCTAssertEqual(restoredSession.businessTargetsCount, 200)
+        XCTAssertEqual(restoredSession.affiliatedTargetsCount, 92)
+    }
 }
 #endif

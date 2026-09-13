@@ -181,6 +181,24 @@ public struct MatchPipeline: Sendable {
         return nil
     }
 
+    private func domainForOrganization(_ org: String, contact: ContactIdentity) -> String? {
+        if let catalogDomain = CompanyCatalog.domain(forName: org) {
+            return catalogDomain
+        }
+        let normOrg = org.lowercased().filter { $0.isLetter || $0.isNumber }
+        guard !normOrg.isEmpty else { return nil }
+        for raw in contact.emailDomains + contact.websiteHosts {
+            guard let d = DomainDeriver.reduce(DomainDeriver.emailHost(raw)) ?? DomainDeriver.reduce(raw) else { continue }
+            if DomainDeriver.freemail.contains(d.domain) { continue }
+            if DomainDeriver.isSocial(d) || DomainDeriver.isPlatform(d) { continue }
+            let label = Self.domainLabel(d.domain).lowercased().filter { $0.isLetter || $0.isNumber }
+            if normOrg == label || normOrg.contains(label) || label.contains(normOrg) {
+                return d.domain
+            }
+        }
+        return nil
+    }
+
     /// Affiliated company name or domain for a named person with employer/company metadata.
     public func affiliation(for c: ContactIdentity) -> (brandName: String, domain: String?)? {
         let given = (c.givenName ?? "").trimmingCharacters(in: .whitespaces)
@@ -192,23 +210,33 @@ public struct MatchPipeline: Sendable {
         // 1. Organization field (e.g. "Apple", "Stripe")
         if let org = c.organization?.trimmingCharacters(in: .whitespaces), !org.isEmpty {
             let cleanOrg = NameNormalizer.clean(org)
-            if !GenericBlocklist.isNonBrand(cleanOrg) {
-                let domain = IdentityResolver.resolveDetailed(c, brandName: cleanOrg).identity?.domain
-                return (cleanOrg, domain)
+            if !GenericBlocklist.isNonBrand(cleanOrg) && !WordLists.isRoleOrPlace(cleanOrg) {
+                let seg = NameNormalizer.segment(org)
+                let orgCandidate = (seg.decorationStripped || seg.isBrandTail) ? seg.query : cleanOrg
+                if !GenericBlocklist.isNonBrand(orgCandidate) && !WordLists.isRoleOrPlace(orgCandidate) {
+                    let domain = domainForOrganization(orgCandidate, contact: c)
+                    return (orgCandidate, domain)
+                }
             }
         }
 
         // 2. Brand tail in display name ("Maya Chen - Apple")
         let segment = NameNormalizer.segment(c.displayName)
-        if segment.isBrandTail, !GenericBlocklist.isNonBrand(segment.query) {
-            let domain = IdentityResolver.resolveDetailed(c, brandName: segment.query).identity?.domain
+        if segment.isBrandTail, !GenericBlocklist.isNonBrand(segment.query), !WordLists.isRoleOrPlace(segment.query) {
+            let domain = domainForOrganization(segment.query, contact: c)
             return (segment.query, domain)
         }
 
-        if let domain = DomainDeriver.derive(websiteHosts: c.websiteHosts, emailDomains: c.emailDomains) {
-            let label = Self.domainLabel(domain)
+        // 3. Work email domain (only if domain is not a public mail provider)
+        for raw in c.emailDomains {
+            guard let d = DomainDeriver.reduce(DomainDeriver.emailHost(raw)) else { continue }
+            if DomainDeriver.freemail.contains(d.domain) { continue }
+            if DomainDeriver.isSocial(d) || DomainDeriver.isPlatform(d) { continue }
+            let label = Self.domainLabel(d.domain)
             let brand = label.capitalized
-            return (brand, domain)
+            if !GenericBlocklist.isNonBrand(brand) && !WordLists.isRoleOrPlace(brand) {
+                return (brand, d.domain)
+            }
         }
 
         return nil
@@ -223,16 +251,33 @@ public struct MatchPipeline: Sendable {
             id: c.id,
             displayName: aff.brandName,
             organization: aff.brandName,
-            emailDomains: c.emailDomains,
-            websiteHosts: c.websiteHosts,
-            phoneNumbers: c.phoneNumbers,
+            emailDomains: aff.domain != nil ? [aff.domain!] : [],
+            websiteHosts: aff.domain != nil ? [aff.domain!] : [],
+            phoneNumbers: [],
             hasImage: c.hasImage
         )
         let result = await match(fake)
-        guard !result.candidates.isEmpty else { return nil }
+        guard !result.candidates.isEmpty else {
+            // Preserve failed affiliated matches if there were transient source errors
+            if !result.sourceErrors.isEmpty {
+                return MatchResult(
+                    contactID: c.id,
+                    contactClass: .person,
+                    candidates: [],
+                    confidence: .low,
+                    flags: ["affiliated", "opt-in-review"],
+                    sourceErrors: result.sourceErrors
+                )
+            }
+            return nil
+        }
         var flags = result.flags
-        flags.append("affiliated")
-        flags.append("opt-in-review")
+        if !flags.contains("affiliated") {
+            flags.append("affiliated")
+        }
+        if !flags.contains("opt-in-review") {
+            flags.append("opt-in-review")
+        }
         let cappedConfidence = min(result.confidence, .medium)
         return MatchResult(
             contactID: c.id,

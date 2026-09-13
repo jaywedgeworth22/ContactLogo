@@ -3,11 +3,16 @@ import Foundation
 /// Abstraction over the address book so the engine runs identically on
 /// macOS, iOS, and the web (vCard-backed) shell.
 public protocol ContactsProvider: Sendable {
+    func requestAccess() async throws -> Bool
     /// Contacts worth considering: businesses and business cards.
     func fetchCandidates() async throws -> [ContactIdentity]
     func imageData(forContactID id: String) async throws -> Data?
     func setImage(_ data: Data, forContactID id: String) async throws
     func removeImage(forContactID id: String) async throws
+}
+
+extension ContactsProvider {
+    public func requestAccess() async throws -> Bool { true }
 }
 
 #if canImport(Contacts)

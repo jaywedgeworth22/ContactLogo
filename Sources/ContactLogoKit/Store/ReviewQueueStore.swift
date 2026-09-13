@@ -23,6 +23,10 @@ public struct PersistedReviewQueue: Codable, Equatable, Sendable {
     public var selected: [String]
     public var chosenIndex: [String: Int]
     public var names: [String: String]
+    public var totalScannedCount: Int?
+    public var protectedPersonCount: Int?
+    public var businessTargetsCount: Int?
+    public var affiliatedTargetsCount: Int?
 
     public init(schemaVersion: Int = PersistedReviewQueue.currentSchemaVersion,
                 scannedAt: Date,
@@ -30,7 +34,11 @@ public struct PersistedReviewQueue: Codable, Equatable, Sendable {
                 results: [MatchResult],
                 selected: [String],
                 chosenIndex: [String: Int],
-                names: [String: String]) {
+                names: [String: String],
+                totalScannedCount: Int? = nil,
+                protectedPersonCount: Int? = nil,
+                businessTargetsCount: Int? = nil,
+                affiliatedTargetsCount: Int? = nil) {
         self.schemaVersion = schemaVersion
         self.scannedAt = scannedAt
         self.contactStoreChangeToken = contactStoreChangeToken
@@ -38,6 +46,10 @@ public struct PersistedReviewQueue: Codable, Equatable, Sendable {
         self.selected = selected
         self.chosenIndex = chosenIndex
         self.names = names
+        self.totalScannedCount = totalScannedCount
+        self.protectedPersonCount = protectedPersonCount
+        self.businessTargetsCount = businessTargetsCount
+        self.affiliatedTargetsCount = affiliatedTargetsCount
     }
 }
 
