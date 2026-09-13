@@ -42,6 +42,7 @@ public enum ContactClass: String, Sendable, Codable {
 public enum SourceKind: String, Sendable, Codable {
     case brandfetch, wikimedia, googleCSE, googleScrape
     case simpleIcons, favicon, preferred, companiesLogo, manual
+    case contactLogoCache
 }
 
 /// One logo option for a contact. The pipeline keeps the top N, not just the winner.

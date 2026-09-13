@@ -227,8 +227,10 @@ final class DefaultSourcesTests: XCTestCase {
     func testNativeSourceOrder() {
         let kinds = DefaultSources.logoSources(brandfetchClientID: nil).map(\.kind)
         XCTAssertEqual(kinds.first, .preferred)
+        XCTAssertEqual(kinds[1], .contactLogoCache)
         XCTAssertTrue(kinds.contains(.companiesLogo))
         XCTAssertTrue(kinds.contains(.simpleIcons))
+        XCTAssertTrue(kinds.contains(.contactLogoCache))
         XCTAssertEqual(kinds.last, .favicon)
         XCTAssertFalse(kinds.contains(.brandfetch))
         let withBrand = DefaultSources.logoSources(brandfetchClientID: "test").map(\.kind)

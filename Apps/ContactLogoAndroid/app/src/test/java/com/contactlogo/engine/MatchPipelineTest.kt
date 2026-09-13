@@ -83,13 +83,11 @@ class MatchPipelineTest {
 
     @Test
     fun catalogHitWithoutCuratedAssetStaysInReview() {
-        // ENGINE-CONTRACT R11.4 (CL-04b): a favicon winner is NEVER high, however
-        // confident the static ceiling is. Exxon's static ceiling is high (a clean
+        // ENGINE-CONTRACT R11.4 (CL-04b): a non-curated winner is NEVER high, however
+        // confident the static ceiling is.  Exxon's static ceiling is high (a clean
         // catalog hit, no caps) but this pipeline has no Simple Icons entry for
-        // exxon.com, so the only real candidate is a favicon — confidence must be
-        // capped at medium and the contact must not be auto-approved. Before this
-        // fix, google.com/s2/favicons sat at candidate index 0 for every domain and
-        // was auto-approved at HIGH regardless of source.
+        // exxon.com, so candidates fall through to first-party cache and favicons —
+        // confidence must be capped at medium and the contact must not be auto-approved.
         val exxon = ContactIdentity(
             id = "6",
             displayName = "Exxon",
@@ -99,7 +97,20 @@ class MatchPipelineTest {
         assertEquals("exxon.com", result.matchedDomain)
         assertEquals(Confidence.MEDIUM, result.confidence)
         assertFalse(result.approved)
-        assertEquals("favicon", result.selectedLogo?.source)
+        assertEquals("contactLogoCache", result.selectedLogo?.source)
+    }
+
+    @Test
+    fun firstPartyLogoCacheCandidateEmittedPriorToFavicons() {
+        val fedex = ContactIdentity(
+            id = "4",
+            displayName = "FedEx",
+            organization = "FedEx"
+        )
+        val result = MatchPipeline.match(fedex)
+        val sources = result.candidates.map { it.source }
+        assertEquals(listOf("simpleIcons", "contactLogoCache", "favicon", "favicon"), sources)
+        assertEquals("https://contactlogo.com/api/logo/fedex.com", result.candidates[1].url)
     }
 
     @Test
