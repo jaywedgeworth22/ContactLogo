@@ -15,6 +15,10 @@ public enum DefaultSources {
     ) -> [any LogoSource] {
         var sources: [any LogoSource] = [
             PreferredMarksSource(),
+            ContactLogoCacheSource(
+                baseURL: Self.env("CONTACTLOGO_CACHE_BASE_URL").flatMap(URL.init(string:))
+                    ?? URL(string: "https://contactlogo.com/api/logo")!
+            ),
             SimpleIconsSource(),
             CompaniesLogoSource(),
             WikimediaSource(),

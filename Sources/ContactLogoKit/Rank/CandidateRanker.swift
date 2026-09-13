@@ -16,6 +16,7 @@ public enum CandidateRanker {
         // §5.4 official-source bonus
         switch c.source {
         case .preferred: s += 48
+        case .contactLogoCache: s += 44
         case .simpleIcons: s += 36
         case .companiesLogo: s += 32
         case .brandfetch: s += 20
@@ -55,7 +56,7 @@ public enum CandidateRanker {
                                   domainAgrees: Bool) -> Confidence {
         guard let best, nameSimilarityPassed else { return .skip }
         var tier: Confidence
-        let iconic: Set<SourceKind> = [.brandfetch, .wikimedia, .manual, .preferred, .simpleIcons, .companiesLogo]
+        let iconic: Set<SourceKind> = [.brandfetch, .wikimedia, .manual, .preferred, .simpleIcons, .companiesLogo, .contactLogoCache]
         if best.isSquareish, best.isPictographic, iconic.contains(best.source) {
             tier = .high
         } else if best.isSquareish {

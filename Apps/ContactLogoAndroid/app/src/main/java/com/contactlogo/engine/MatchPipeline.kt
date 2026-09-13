@@ -373,10 +373,10 @@ object MatchPipeline {
     // -----------------------------------------------------------------
 
     /**
-     * R11 candidate list. Simple Icons (a real, curated brand glyph) is offered
-     * first when a slug maps to this domain; favicon fallbacks are always last
-     * resort. Before this fix `google.com/s2/favicons` sat at index 0 for every
-     * domain, favicon or not (CL-04b).
+     * R11 candidate list.  Simple Icons (a real, curated brand glyph) is offered
+     * first when a slug maps to this domain; first-party ContactLogo.com edge
+     * cache (issue #74) provides verified 512px marks prior to third-party CDNs;
+     * favicon fallbacks are always last resort.
      */
     private fun generateCandidates(domain: String): List<LogoCandidate> {
         val candidates = mutableListOf<LogoCandidate>()
@@ -392,6 +392,17 @@ object MatchPipeline {
                 )
             )
         }
+
+        // First-party edge cache on ContactLogo.com (issue #74)
+        candidates.add(
+            LogoCandidate(
+                url = "https://contactlogo.com/api/logo/$domain",
+                source = "contactLogoCache",
+                width = 512,
+                height = 512,
+                isVector = false
+            )
+        )
 
         // Favicon fallbacks (R3 source 7 / R11.4): last resort, never high.
         candidates.add(
@@ -417,14 +428,14 @@ object MatchPipeline {
     }
 
     /**
-     * R11.2/R11.4 asset tier for the best candidate. Simple Icons glyphs are
-     * curated square icon-typed assets (high-eligible); any favicon-sourced
-     * candidate — a Google s2 favicon, `/favicon.ico`, or any other favicon endpoint —
-     * is capped at medium and MUST NEVER read high, however confident the static
-     * ceiling was. No candidate at all is `skip`.
+     * R11.2/R11.4 asset tier for the best candidate.  Simple Icons glyphs are
+     * curated square icon-typed assets (high-eligible); remote cache without
+     * offline verification or favicon-sourced candidates stay in review (capped
+     * at medium) and MUST NEVER read high, however confident the static ceiling
+     * was.  No candidate at all is `skip`.
      */
     private fun assetTierOf(best: LogoCandidate?): Confidence {
         if (best == null) return Confidence.SKIP
-        return if (best.source == "favicon") Confidence.MEDIUM else Confidence.HIGH
+        return if (best.source == "simpleIcons") Confidence.HIGH else Confidence.MEDIUM
     }
 }

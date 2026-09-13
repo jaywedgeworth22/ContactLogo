@@ -395,27 +395,40 @@ export async function handleVercelLogo(
     end: (b?: string | Uint8Array) => void;
   },
 ): Promise<void> {
-  const host = headerValue(req.headers, "host") || "localhost";
-  const proto = headerValue(req.headers, "x-forwarded-proto") || "https";
-  const url = new URL(req.url || "/", `${proto}://${host}`);
-  const domain = queryValue(req.query?.domain);
-  if (domain && !url.pathname.includes("/api/logo/")) {
-    url.pathname = `/api/logo/${domain}`;
+  try {
+    const host = headerValue(req.headers, "host") || "localhost";
+    const proto = headerValue(req.headers, "x-forwarded-proto") || "https";
+    const url = new URL(req.url || "/", `${proto}://${host}`);
+    const domain = queryValue(req.query?.domain);
+    if (domain) {
+      url.pathname = `/api/logo/${domain}`;
+    }
+    const headers = new Headers();
+    for (const [key, value] of Object.entries(req.headers)) {
+      if (key.startsWith(":")) continue;
+      try {
+        if (typeof value === "string") headers.set(key, value);
+        else if (Array.isArray(value)) headers.set(key, value.join(", "));
+      } catch {
+        // Skip headers that fail WebIDL validation
+      }
+    }
+    const request = new Request(url, { method: req.method || "GET", headers });
+    const response = await handleLogoGet(request);
+    res.statusCode = response.status;
+    response.headers.forEach((value, key) => {
+      res.setHeader(key, value);
+    });
+    if (req.method?.toUpperCase() === "HEAD" || response.status === 304 || response.status === 204) {
+      res.end();
+      return;
+    }
+    res.end(new Uint8Array(await response.arrayBuffer()));
+  } catch (err: unknown) {
+    res.statusCode = 500;
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.setHeader("Cache-Control", "no-store");
+    const message = err instanceof Error ? err.message : String(err);
+    res.end(JSON.stringify({ error: "internal_error", message }));
   }
-  const headers = new Headers();
-  for (const [key, value] of Object.entries(req.headers)) {
-    if (typeof value === "string") headers.set(key, value);
-    else if (Array.isArray(value)) headers.set(key, value.join(", "));
-  }
-  const request = new Request(url, { method: req.method || "GET", headers });
-  const response = await handleLogoGet(request);
-  res.statusCode = response.status;
-  response.headers.forEach((value, key) => {
-    res.setHeader(key, value);
-  });
-  if (req.method?.toUpperCase() === "HEAD" || response.status === 304 || response.status === 204) {
-    res.end();
-    return;
-  }
-  res.end(new Uint8Array(await response.arrayBuffer()));
 }
