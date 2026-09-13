@@ -5,9 +5,15 @@ import {
 } from "./engine/classify.ts";
 import { looksLikeContactCsv, parseGoogleCsv } from "./engine/csv.ts";
 import {
+  clearGoogleSyncUndoBatch,
+  fetchPhotoAsDataUrl,
+  getLatestGoogleSyncUndoBatch,
   importGoogleContacts,
   requestAccessToken,
+  saveGoogleSyncUndoBatch,
+  undoGooglePhotoSync,
   updateGoogleContactPhoto,
+  type GoogleSyncUndoRecord,
 } from "./engine/google-contacts.ts";
 import {
   composeFromFile,
@@ -46,6 +52,7 @@ type State = {
   searchQuery: string;
   filterStatus: FilterStatus;
   showCircleMask: boolean;
+  hasGoogleUndoBatch: boolean;
 };
 
 const state: State = {
@@ -57,7 +64,18 @@ const state: State = {
   searchQuery: "",
   filterStatus: "all",
   showCircleMask: true,
+  hasGoogleUndoBatch: false,
 };
+
+// Check for existing undo batch on startup
+getLatestGoogleSyncUndoBatch()
+  .then((batch) => {
+    if (batch && batch.records.length > 0) {
+      state.hasGoogleUndoBatch = true;
+      render();
+    }
+  })
+  .catch(() => {});
 
 /** Derived once per import instead of per keystroke — the book can hold 14k cards. */
 let peopleCount = 0;
@@ -559,6 +577,7 @@ async function syncToGoogleContacts() {
     }
     let done = 0;
     let failed = 0;
+    const undoRecords: GoogleSyncUndoRecord[] = [];
     for (const item of googleTargets) {
       const hit = item.candidates[item.chosenIndex];
       if (!hit || !item.contact.googleResourceName) continue;
@@ -587,19 +606,101 @@ async function syncToGoogleContacts() {
         if (failure !== undefined) {
           throw new Error(`logo could not be prepared (${failure})`);
         }
+
+        // Capture prior photo state BEFORE mutating
+        let priorPhotoDataUrl: string | undefined;
+        if (item.contact.hadExistingPhoto) {
+          if (item.contact.existingPhotoUrl) {
+            priorPhotoDataUrl = await fetchPhotoAsDataUrl(item.contact.existingPhotoUrl, token);
+          } else if (item.contact.photoDataUrl?.startsWith("data:")) {
+            priorPhotoDataUrl = item.contact.photoDataUrl;
+          }
+        }
+        const undoRecord: GoogleSyncUndoRecord = {
+          resourceName: item.contact.googleResourceName,
+          displayName: item.contact.displayName,
+          hadExistingPhoto: Boolean(item.contact.hadExistingPhoto),
+          priorPhotoDataUrl,
+        };
+
         await updateGoogleContactPhoto(item.contact.googleResourceName, squared, token);
+        undoRecords.push(undoRecord);
         item.contact.hadExistingPhoto = true;
+        item.contact.photoDataUrl = squared;
         done += 1;
       } catch (err) {
         reportClientError(err, { operation: "google-sync-photo" });
         failed += 1;
       }
     }
+    if (undoRecords.length > 0) {
+      await saveGoogleSyncUndoBatch({
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        records: undoRecords,
+      });
+      state.hasGoogleUndoBatch = true;
+    }
     state.notice = `Google Contacts sync complete: ${done} updated${failed > 0 ? `, ${failed} failed` : ""}.`;
     render();
   } catch (err) {
     reportClientError(err, { operation: "google-sync" });
     state.notice = err instanceof Error ? err.message : "Google sync failed";
+    render();
+  }
+}
+
+async function undoGoogleContactsSync() {
+  const batch = await getLatestGoogleSyncUndoBatch();
+  if (!batch || batch.records.length === 0) {
+    state.notice = "No Google Contacts sync to undo.";
+    render();
+    return;
+  }
+  const count = batch.records.length;
+  const confirmed = window.confirm(
+    `Restore ${count} Google Contact photo${count === 1 ? "" : "s"} to their state before the last sync?`,
+  );
+  if (!confirmed) return;
+
+  const clientId = getGoogleClientId();
+  if (!clientId) {
+    state.notice = "Configure Google Client ID in Settings first.";
+    state.showSettings = true;
+    render();
+    return;
+  }
+
+  try {
+    state.notice = "Requesting Google Contacts write permission…";
+    render();
+    const token = await requestAccessToken(clientId, true);
+
+    state.notice = `Undoing Google Contacts sync: 0/${count}…`;
+    render();
+
+    const { restored, failed } = await undoGooglePhotoSync(token, batch, (cur, total, name) => {
+      state.notice = `Restoring Google photo: ${cur}/${total} (${name})…`;
+      render();
+    });
+
+    state.hasGoogleUndoBatch = false;
+
+    // Update in-memory contacts
+    const byResource = new Map(batch.records.map((r) => [r.resourceName, r]));
+    for (const item of state.items) {
+      if (item.contact.googleResourceName && byResource.has(item.contact.googleResourceName)) {
+        const rec = byResource.get(item.contact.googleResourceName)!;
+        item.contact.hadExistingPhoto = rec.hadExistingPhoto;
+        item.contact.photoDataUrl = rec.priorPhotoDataUrl;
+      }
+    }
+
+    state.notice = `Google Contacts undo complete: ${restored} restored${failed > 0 ? `, ${failed} failed` : ""}.`;
+    render();
+  } catch (err) {
+    reportClientError(err, { operation: "undo-google-sync" });
+    state.notice = err instanceof Error ? err.message : "Undo Google sync failed";
     render();
   }
 }
@@ -1437,6 +1538,7 @@ type Shell = {
   approvedBtn: HTMLButtonElement;
   exportFullBtn: HTMLButtonElement;
   googleSyncBtn: HTMLButtonElement;
+  googleUndoBtn: HTMLButtonElement;
   sections: Record<SectionKey, SectionView>;
 };
 
@@ -1771,8 +1873,15 @@ function mountShell(root: HTMLElement): Shell {
   const googleSyncBtn = el("button", { class: "btn secondary google-sync-btn hidden", type: "button" }, "⚡ Apply to Google Contacts");
   googleSyncBtn.addEventListener("click", () => void syncToGoogleContacts());
 
+  const googleUndoBtn = el(
+    "button",
+    { class: "btn ghost google-undo-btn hidden", type: "button", title: "Restore Google Contacts photos from the last sync" },
+    "↩ Undo Google Sync",
+  );
+  googleUndoBtn.addEventListener("click", () => void undoGoogleContactsSync());
+
   const kbHint = el("span", { class: "kb-hint" }, "J/K move · A approve · S skip · U upload");
-  review.append(el("div", { class: "toolbar" }, selectHigh, clearHigh, approvedBtn, exportFullBtn, backup, googleSyncBtn, kbHint));
+  review.append(el("div", { class: "toolbar" }, selectHigh, clearHigh, approvedBtn, exportFullBtn, backup, googleSyncBtn, googleUndoBtn, kbHint));
 
   const sections: Record<SectionKey, SectionView> = {
     ready: buildSection("Ready to Apply", "ready"),
@@ -1816,6 +1925,7 @@ function mountShell(root: HTMLElement): Shell {
     approvedBtn,
     exportFullBtn,
     googleSyncBtn,
+    googleUndoBtn,
     sections,
   };
   shell = built;
@@ -1930,6 +2040,7 @@ function syncShell(s: Shell) {
   const fullLabel = `Export Full Address Book (${state.contacts.length})`;
   if (s.exportFullBtn.textContent !== fullLabel) s.exportFullBtn.textContent = fullLabel;
   s.googleSyncBtn.classList.toggle("hidden", !hasGoogleContacts);
+  s.googleUndoBtn.classList.toggle("hidden", !state.hasGoogleUndoBatch);
 
   const narrowed = state.searchQuery.trim() !== "" || state.filterStatus !== "all";
   for (const key of ["ready", "review", "nonbrand", "notfound"] as SectionKey[]) {

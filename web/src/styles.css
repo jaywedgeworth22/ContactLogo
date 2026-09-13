@@ -457,6 +457,15 @@ input[type="checkbox"]:focus-visible {
 .google-sync-btn:hover {
   background: #1d4ed8;
 }
+.google-undo-btn {
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-weight: 500;
+}
+.google-undo-btn:hover {
+  color: var(--ink);
+  border-color: var(--muted);
+}
 .notice-banner {
   background: var(--card);
   border-left: 3px solid var(--accent);

@@ -176,16 +176,31 @@ export function personToBookContact(person: Person): BookContact | null {
   const name = primary?.displayName?.trim() || organization;
   if (!name) return null;
   const photo = person.photos?.find((p) => p.url && !p.default);
+  const emails = person.emailAddresses
+    ?.map((e) => e.value?.trim())
+    .filter((v): v is string => Boolean(v));
+  const phones = person.phoneNumbers
+    ?.map((p) => p.value?.trim())
+    .filter((v): v is string => Boolean(v));
+  const websites = person.urls
+    ?.map((u) => u.value?.trim())
+    .filter((v): v is string => Boolean(v));
+
   return {
     id: crypto.randomUUID(),
     displayName: name,
     givenName: primary?.givenName,
     familyName: primary?.familyName,
     organization,
-    email: person.emailAddresses?.[0]?.value,
-    phone: person.phoneNumbers?.[0]?.value,
-    website: person.urls?.[0]?.value,
+    email: emails?.[0] ?? person.emailAddresses?.[0]?.value,
+    phone: phones?.[0] ?? person.phoneNumbers?.[0]?.value,
+    website: websites?.[0] ?? person.urls?.[0]?.value,
+    emails: emails && emails.length > 0 ? emails : undefined,
+    phones: phones && phones.length > 0 ? phones : undefined,
+    websites: websites && websites.length > 0 ? websites : undefined,
+    photoDataUrl: photo?.url,
     hadExistingPhoto: Boolean(photo),
+    existingPhotoUrl: photo?.url,
     importSource: "google",
     googleResourceName: person.resourceName,
   };
@@ -228,4 +243,209 @@ export async function updateGoogleContactPhoto(
     const errText = await res.text().catch(() => "");
     throw new Error(`Failed to update photo for ${resourceName}: ${res.status} ${errText}`);
   }
+}
+
+/** Delete contact photo in Google People API */
+export async function deleteGoogleContactPhoto(
+  resourceName: string,
+  token: string,
+): Promise<void> {
+  const url = `https://people.googleapis.com/v1/${encodeURIComponent(resourceName)}:deleteContactPhoto`;
+  const res = await fetchWithRetry(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  if (!res.ok && res.status !== 404) {
+    const errText = await res.text().catch(() => "");
+    throw new Error(`Failed to delete photo for ${resourceName}: ${res.status} ${errText}`);
+  }
+}
+
+export type GoogleSyncUndoRecord = {
+  resourceName: string;
+  displayName: string;
+  hadExistingPhoto: boolean;
+  priorPhotoDataUrl?: string;
+};
+
+export type GoogleSyncUndoBatch = {
+  id: string;
+  timestamp: number;
+  records: GoogleSyncUndoRecord[];
+};
+
+export const GOOGLE_UNDO_KEY = "contactlogo.googleSyncUndo";
+
+function openUndoDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    if (typeof indexedDB === "undefined") {
+      return reject(new Error("IndexedDB unavailable"));
+    }
+    const req = indexedDB.open("contactlogo_db", 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains("google_sync_undo")) {
+        db.createObjectStore("google_sync_undo", { keyPath: "id" });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error ?? new Error("IndexedDB open failed"));
+  });
+}
+
+export async function saveGoogleSyncUndoBatch(batch: GoogleSyncUndoBatch): Promise<void> {
+  try {
+    const db = await openUndoDb();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction("google_sync_undo", "readwrite");
+      const store = tx.objectStore("google_sync_undo");
+      store.put(batch);
+      store.put({ ...batch, id: "latest" });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch {
+    // IndexedDB unavailable or error
+  }
+
+  if (typeof localStorage !== "undefined") {
+    try {
+      localStorage.setItem(GOOGLE_UNDO_KEY, JSON.stringify(batch));
+    } catch {
+      try {
+        const metadataOnly: GoogleSyncUndoBatch = {
+          id: batch.id,
+          timestamp: batch.timestamp,
+          records: batch.records.map((r) => ({
+            resourceName: r.resourceName,
+            displayName: r.displayName,
+            hadExistingPhoto: r.hadExistingPhoto,
+          })),
+        };
+        localStorage.setItem(GOOGLE_UNDO_KEY, JSON.stringify(metadataOnly));
+      } catch {
+        // ignore storage quota error
+      }
+    }
+  }
+}
+
+export async function getLatestGoogleSyncUndoBatch(): Promise<GoogleSyncUndoBatch | null> {
+  try {
+    const db = await openUndoDb();
+    const batch = await new Promise<GoogleSyncUndoBatch | null>((resolve, reject) => {
+      const tx = db.transaction("google_sync_undo", "readonly");
+      const store = tx.objectStore("google_sync_undo");
+      const req = store.get("latest");
+      req.onsuccess = () => resolve((req.result as GoogleSyncUndoBatch) ?? null);
+      req.onerror = () => reject(req.error);
+    });
+    if (batch && batch.records?.length > 0) return batch;
+  } catch {
+    // fall through to localStorage
+  }
+
+  if (typeof localStorage !== "undefined") {
+    try {
+      const raw = localStorage.getItem(GOOGLE_UNDO_KEY);
+      if (raw) {
+        return JSON.parse(raw) as GoogleSyncUndoBatch;
+      }
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+export async function clearGoogleSyncUndoBatch(): Promise<void> {
+  try {
+    const db = await openUndoDb();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction("google_sync_undo", "readwrite");
+      const store = tx.objectStore("google_sync_undo");
+      store.delete("latest");
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch {
+    // ignore
+  }
+
+  if (typeof localStorage !== "undefined") {
+    try {
+      localStorage.removeItem(GOOGLE_UNDO_KEY);
+    } catch {
+      // ignore
+    }
+  }
+}
+
+export async function blobToDataUrl(blob: Blob): Promise<string> {
+  if (typeof FileReader !== "undefined") {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]!);
+  }
+  const type = blob.type || "image/jpeg";
+  return `data:${type};base64,${btoa(binary)}`;
+}
+
+export async function fetchPhotoAsDataUrl(url: string, token?: string): Promise<string | undefined> {
+  try {
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const res = await fetchWithRetry(url, { headers });
+    if (!res.ok) return undefined;
+    const blob = await res.blob();
+    return await blobToDataUrl(blob);
+  } catch {
+    return undefined;
+  }
+}
+
+export async function undoGooglePhotoSync(
+  token: string,
+  batch?: GoogleSyncUndoBatch | null,
+  onProgress?: (done: number, total: number, name: string) => void,
+): Promise<{ restored: number; failed: number }> {
+  const currentBatch = batch ?? (await getLatestGoogleSyncUndoBatch());
+  if (!currentBatch || currentBatch.records.length === 0) {
+    return { restored: 0, failed: 0 };
+  }
+
+  let restored = 0;
+  let failed = 0;
+  const total = currentBatch.records.length;
+
+  for (const record of currentBatch.records) {
+    onProgress?.(restored + failed + 1, total, record.displayName);
+    try {
+      if (record.hadExistingPhoto && record.priorPhotoDataUrl) {
+        await updateGoogleContactPhoto(record.resourceName, record.priorPhotoDataUrl, token);
+        restored += 1;
+      } else if (!record.hadExistingPhoto) {
+        await deleteGoogleContactPhoto(record.resourceName, token);
+        restored += 1;
+      } else {
+        // Had existing photo but no prior data URL was captured
+        failed += 1;
+      }
+    } catch {
+      failed += 1;
+    }
+  }
+
+  await clearGoogleSyncUndoBatch();
+  return { restored, failed };
 }

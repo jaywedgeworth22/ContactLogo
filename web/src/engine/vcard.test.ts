@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { parseVcard, contactToVcard, contactsToVcard } from "./vcard.ts";
+import { resolveIdentity, type BookContact } from "./classify.ts";
 
 /** The card from docs/EVALUATION-2026-08.md CL-01, plus the fields it lost. */
 const RICH_CARD_LINES = [
@@ -373,4 +374,55 @@ test("a dangling = before END:VCARD does not swallow the card boundary", () => {
   const out = contactsToVcard(parseVcard(qpCard("NOTE;ENCODING=QUOTED-PRINTABLE:dangling=")));
   assert.match(out, /END:VCARD/);
   assert.equal(out.split("BEGIN:VCARD").length, 2);
+});
+
+test("Issue #75: secondary corporate email on vCard resolves domain when primary is freemail", () => {
+  const card = [
+    "BEGIN:VCARD",
+    "VERSION:3.0",
+    "FN:Acme Consulting",
+    "EMAIL:contact@gmail.com",
+    "EMAIL:contact@acme.example",
+    "END:VCARD",
+  ].join("\r\n");
+  const contacts = parseVcard(card);
+  assert.equal(contacts.length, 1);
+  assert.deepEqual(contacts[0]?.emails, ["contact@gmail.com", "contact@acme.example"]);
+  const res = resolveIdentity(contacts[0]!, "Acme");
+  assert.equal(res?.domain, "acme.example");
+  assert.equal(res?.via, "email");
+});
+
+test("Issue #75: secondary corporate website on vCard resolves domain when primary is social", () => {
+  const card = [
+    "BEGIN:VCARD",
+    "VERSION:3.0",
+    "FN:Widget Co",
+    "URL:https://twitter.com/widgetco",
+    "URL:https://widgetco.example",
+    "END:VCARD",
+  ].join("\r\n");
+  const contacts = parseVcard(card);
+  assert.equal(contacts.length, 1);
+  assert.deepEqual(contacts[0]?.websites, ["https://twitter.com/widgetco", "https://widgetco.example"]);
+  const res = resolveIdentity(contacts[0]!, "Widget Co");
+  assert.equal(res?.domain, "widgetco.example");
+  assert.equal(res?.via, "website");
+});
+
+test("Issue #75: synthesizeProperties exports all emails, phones, and websites", () => {
+  const contact: BookContact = {
+    id: "test-id",
+    displayName: "Multi Valued Corp",
+    emails: ["first@corp.example", "second@corp.example"],
+    phones: ["+15125550100", "+15125550101"],
+    websites: ["https://first.example", "https://second.example"],
+  };
+  const vcf = contactToVcard(contact);
+  assert.match(vcf, /EMAIL;TYPE=INTERNET:first@corp\.example/);
+  assert.match(vcf, /EMAIL;TYPE=INTERNET:second@corp\.example/);
+  assert.match(vcf, /TEL;TYPE=WORK,VOICE:\+15125550100/);
+  assert.match(vcf, /TEL;TYPE=WORK,VOICE:\+15125550101/);
+  assert.match(vcf, /URL:https:\/\/first\.example/);
+  assert.match(vcf, /URL:https:\/\/second\.example/);
 });

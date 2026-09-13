@@ -65,6 +65,26 @@ function col(header: string[], row: string[], ...names: string[]): string | unde
   return undefined;
 }
 
+function allCols(header: string[], row: string[], patterns: RegExp[]): string[] {
+  const values: string[] = [];
+  const seen = new Set<string>();
+  for (let idx = 0; idx < header.length; idx++) {
+    const h = header[idx]?.trim() ?? "";
+    if (!h) continue;
+    for (const pat of patterns) {
+      if (pat.test(h)) {
+        const val = row[idx]?.trim();
+        if (val && !seen.has(val)) {
+          seen.add(val);
+          values.push(val);
+        }
+        break;
+      }
+    }
+  }
+  return values;
+}
+
 export function looksLikeContactCsv(text: string): boolean {
   const first = text.replace(/^\uFEFF/, "").split(/\r?\n/, 1)[0]?.toLowerCase() ?? "";
   return (
@@ -90,15 +110,39 @@ export function parseGoogleCsv(text: string): BookContact[] {
       [given, family].filter(Boolean).join(" ").trim() ||
       col(header, row, "Organization Name", "Organization");
     if (!name) continue;
+
+    const emails = allCols(header, row, [
+      /^e-?mail(\s*\d+)?\s*-\s*value$/i,
+      /^e-?mail(\s*\d+)?\s*address$/i,
+      /^e-?mail$/i,
+    ]);
+    const phones = allCols(header, row, [
+      /^phone(\s*\d+)?\s*-\s*value$/i,
+      /^(mobile|home|business|work|primary|other)?\s*phone(\s*\d+)?$/i,
+      /^phone$/i,
+    ]);
+    const websites = allCols(header, row, [
+      /^website(\s*\d+)?\s*-\s*value$/i,
+      /^web\s*page(\s*\d+)?$/i,
+      /^website(\s*\d+)?$/i,
+      /^url(\s*\d+)?$/i,
+    ]);
+    const primaryEmail = emails[0] ?? col(header, row, "E-mail 1 - Value", "E-mail Address", "Email", "Email Address");
+    const primaryPhone = phones[0] ?? col(header, row, "Phone 1 - Value", "Mobile Phone", "Phone", "Home Phone", "Business Phone");
+    const primaryWebsite = websites[0] ?? col(header, row, "Website 1 - Value", "Web Page", "Website");
+
     out.push({
       id: crypto.randomUUID(),
       displayName: name,
       givenName: given,
       familyName: family,
       organization: col(header, row, "Organization Name", "Organization", "Company"),
-      email: col(header, row, "E-mail 1 - Value", "E-mail Address", "Email", "Email Address"),
-      phone: col(header, row, "Phone 1 - Value", "Mobile Phone", "Phone", "Home Phone", "Business Phone"),
-      website: col(header, row, "Website 1 - Value", "Web Page", "Website"),
+      email: primaryEmail,
+      phone: primaryPhone,
+      website: primaryWebsite,
+      emails: emails.length > 0 ? emails : undefined,
+      phones: phones.length > 0 ? phones : undefined,
+      websites: websites.length > 0 ? websites : undefined,
       hadExistingPhoto: Boolean(col(header, row, "Photo", "Photo 1")),
     });
   }
