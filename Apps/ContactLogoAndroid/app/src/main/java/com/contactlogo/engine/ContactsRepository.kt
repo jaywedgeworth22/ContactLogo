@@ -35,10 +35,89 @@ class ContactsRepository(private val context: Context) {
         const val PHOTO_PX = PhotoGeometry.SIZE_PX
     }
 
+    private class ContactDataHolder {
+        var givenName: String = ""
+        var familyName: String = ""
+        var organization: String = ""
+        val phones = mutableListOf<String>()
+        val emails = mutableListOf<String>()
+        val urls = mutableListOf<String>()
+    }
+
     suspend fun loadContacts(): List<ContactIdentity> = withContext(Dispatchers.IO) {
-        val contacts = mutableListOf<ContactIdentity>()
         val cr: ContentResolver = context.contentResolver
 
+        // Single batch projection query over ContactsContract.Data for all relevant types
+        val dataMap = mutableMapOf<String, ContactDataHolder>()
+        val projection = arrayOf(
+            ContactsContract.Data.CONTACT_ID,
+            ContactsContract.Data.MIMETYPE,
+            ContactsContract.Data.DATA1,
+            ContactsContract.Data.DATA2,
+            ContactsContract.Data.DATA3
+        )
+        val selection = "${ContactsContract.Data.MIMETYPE} IN (?, ?, ?, ?, ?)"
+        val selectionArgs = arrayOf(
+            ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE,
+            ContactsContract.CommonDataKinds.Email.CONTENT_ITEM_TYPE,
+            ContactsContract.CommonDataKinds.Organization.CONTENT_ITEM_TYPE,
+            ContactsContract.CommonDataKinds.Website.CONTENT_ITEM_TYPE,
+            ContactsContract.CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE
+        )
+
+        val dataCursor = cr.query(
+            ContactsContract.Data.CONTENT_URI,
+            projection,
+            selection,
+            selectionArgs,
+            null
+        )
+
+        dataCursor?.use { dc ->
+            val idIdx = dc.getColumnIndex(ContactsContract.Data.CONTACT_ID)
+            val mimeIdx = dc.getColumnIndex(ContactsContract.Data.MIMETYPE)
+            val data1Idx = dc.getColumnIndex(ContactsContract.Data.DATA1)
+            val data2Idx = dc.getColumnIndex(ContactsContract.Data.DATA2)
+            val data3Idx = dc.getColumnIndex(ContactsContract.Data.DATA3)
+
+            while (dc.moveToNext()) {
+                val contactId = if (idIdx >= 0) dc.getString(idIdx) else null
+                val mime = if (mimeIdx >= 0) dc.getString(mimeIdx) else null
+                if (contactId == null || mime == null) continue
+                val holder = dataMap.getOrPut(contactId) { ContactDataHolder() }
+
+                when (mime) {
+                    ContactsContract.CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE -> {
+                        if (holder.givenName.isEmpty() && data2Idx >= 0) {
+                            holder.givenName = dc.getString(data2Idx).orEmpty().trim()
+                        }
+                        if (holder.familyName.isEmpty() && data3Idx >= 0) {
+                            holder.familyName = dc.getString(data3Idx).orEmpty().trim()
+                        }
+                    }
+                    ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE -> {
+                        val num = if (data1Idx >= 0) dc.getString(data1Idx) else null
+                        if (!num.isNullOrBlank()) holder.phones.add(num)
+                    }
+                    ContactsContract.CommonDataKinds.Email.CONTENT_ITEM_TYPE -> {
+                        val email = if (data1Idx >= 0) dc.getString(data1Idx) else null
+                        if (!email.isNullOrBlank()) holder.emails.add(email)
+                    }
+                    ContactsContract.CommonDataKinds.Organization.CONTENT_ITEM_TYPE -> {
+                        val org = if (data1Idx >= 0) dc.getString(data1Idx) else null
+                        if (!org.isNullOrBlank() && holder.organization.isEmpty()) {
+                            holder.organization = org
+                        }
+                    }
+                    ContactsContract.CommonDataKinds.Website.CONTENT_ITEM_TYPE -> {
+                        val u = if (data1Idx >= 0) dc.getString(data1Idx) else null
+                        if (!u.isNullOrBlank()) holder.urls.add(u)
+                    }
+                }
+            }
+        }
+
+        val contacts = mutableListOf<ContactIdentity>()
         val cursor: Cursor? = cr.query(
             ContactsContract.Contacts.CONTENT_URI,
             arrayOf(
@@ -63,23 +142,18 @@ class ContactsRepository(private val context: Context) {
                 val name = c.getString(nameIdx) ?: ""
                 val photoUri = if (photoUriIdx >= 0) c.getString(photoUriIdx) else null
                 val hasPhoto = if (photoIdIdx >= 0) c.getLong(photoIdIdx) > 0 else false
-
-                val phones = loadPhones(cr, id)
-                val emails = loadEmails(cr, id)
-                val org = loadOrganization(cr, id)
-                val urls = loadUrls(cr, id)
-                val structured = loadStructuredName(cr, id)
+                val data = dataMap[id] ?: ContactDataHolder()
 
                 contacts.add(
                     ContactIdentity(
                         id = id,
                         displayName = name,
-                        givenName = structured.first,
-                        familyName = structured.second,
-                        organization = org,
-                        phoneNumbers = phones,
-                        emailAddresses = emails,
-                        urls = urls,
+                        givenName = data.givenName,
+                        familyName = data.familyName,
+                        organization = data.organization,
+                        phoneNumbers = data.phones,
+                        emailAddresses = data.emails,
+                        urls = data.urls,
                         hasCustomPhoto = hasPhoto,
                         photoUri = photoUri
                     )
@@ -87,104 +161,6 @@ class ContactsRepository(private val context: Context) {
             }
         }
         contacts
-    }
-
-    private fun loadStructuredName(cr: ContentResolver, contactId: String): Pair<String, String> {
-        val cursor = cr.query(
-            ContactsContract.Data.CONTENT_URI,
-            arrayOf(
-                ContactsContract.CommonDataKinds.StructuredName.GIVEN_NAME,
-                ContactsContract.CommonDataKinds.StructuredName.FAMILY_NAME
-            ),
-            ContactsContract.Data.CONTACT_ID + " = ? AND " + ContactsContract.Data.MIMETYPE + " = ?",
-            arrayOf(contactId, ContactsContract.CommonDataKinds.StructuredName.CONTENT_ITEM_TYPE),
-            null
-        )
-        cursor?.use {
-            val givenIdx = it.getColumnIndex(ContactsContract.CommonDataKinds.StructuredName.GIVEN_NAME)
-            val familyIdx = it.getColumnIndex(ContactsContract.CommonDataKinds.StructuredName.FAMILY_NAME)
-            if (it.moveToFirst()) {
-                val given = if (givenIdx >= 0) it.getString(givenIdx).orEmpty().trim() else ""
-                val family = if (familyIdx >= 0) it.getString(familyIdx).orEmpty().trim() else ""
-                return given to family
-            }
-        }
-        return "" to ""
-    }
-
-    private fun loadPhones(cr: ContentResolver, contactId: String): List<String> {
-        val list = mutableListOf<String>()
-        val pCursor = cr.query(
-            ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
-            arrayOf(ContactsContract.CommonDataKinds.Phone.NUMBER),
-            ContactsContract.CommonDataKinds.Phone.CONTACT_ID + " = ?",
-            arrayOf(contactId),
-            null
-        )
-        pCursor?.use {
-            val idx = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
-            while (it.moveToNext()) {
-                val num = it.getString(idx)
-                if (!num.isNullOrBlank()) list.add(num)
-            }
-        }
-        return list
-    }
-
-    private fun loadEmails(cr: ContentResolver, contactId: String): List<String> {
-        val list = mutableListOf<String>()
-        val eCursor = cr.query(
-            ContactsContract.CommonDataKinds.Email.CONTENT_URI,
-            arrayOf(ContactsContract.CommonDataKinds.Email.ADDRESS),
-            ContactsContract.CommonDataKinds.Email.CONTACT_ID + " = ?",
-            arrayOf(contactId),
-            null
-        )
-        eCursor?.use {
-            val idx = it.getColumnIndex(ContactsContract.CommonDataKinds.Email.ADDRESS)
-            while (it.moveToNext()) {
-                val email = it.getString(idx)
-                if (!email.isNullOrBlank()) list.add(email)
-            }
-        }
-        return list
-    }
-
-    private fun loadOrganization(cr: ContentResolver, contactId: String): String {
-        var org = ""
-        val oCursor = cr.query(
-            ContactsContract.Data.CONTENT_URI,
-            arrayOf(ContactsContract.CommonDataKinds.Organization.COMPANY),
-            ContactsContract.Data.CONTACT_ID + " = ? AND " + ContactsContract.Data.MIMETYPE + " = ?",
-            arrayOf(contactId, ContactsContract.CommonDataKinds.Organization.CONTENT_ITEM_TYPE),
-            null
-        )
-        oCursor?.use {
-            val idx = it.getColumnIndex(ContactsContract.CommonDataKinds.Organization.COMPANY)
-            if (it.moveToNext()) {
-                org = it.getString(idx) ?: ""
-            }
-        }
-        return org
-    }
-
-    private fun loadUrls(cr: ContentResolver, contactId: String): List<String> {
-        val list = mutableListOf<String>()
-        val uCursor = cr.query(
-            ContactsContract.Data.CONTENT_URI,
-            arrayOf(ContactsContract.CommonDataKinds.Website.URL),
-            ContactsContract.Data.CONTACT_ID + " = ? AND " + ContactsContract.Data.MIMETYPE + " = ?",
-            arrayOf(contactId, ContactsContract.CommonDataKinds.Website.CONTENT_ITEM_TYPE),
-            null
-        )
-        uCursor?.use {
-            val idx = it.getColumnIndex(ContactsContract.CommonDataKinds.Website.URL)
-            while (it.moveToNext()) {
-                val u = it.getString(idx)
-                if (!u.isNullOrBlank()) list.add(u)
-            }
-        }
-        return list
     }
 
     /**
