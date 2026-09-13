@@ -269,6 +269,11 @@ public final class ReviewSession: ObservableObject {
             identitiesByID = Dictionary(uniqueKeysWithValues: targets.map { ($0.id, $0) })
             retryingIDs = []
             stage = .matching(done: 0, total: targets.count)
+            if cancelRequested || Task.isCancelled {
+                stage = .idle
+                return false
+            }
+
             let maxConcurrency = 8
             var indexedResults: [MatchResult?] = Array(repeating: nil, count: targets.count)
             var doneCount = 0
@@ -278,12 +283,17 @@ public final class ReviewSession: ObservableObject {
 
                 // Prime the group with up to maxConcurrency parallel tasks
                 for _ in 0..<min(maxConcurrency, targets.count) {
+                    if self.cancelRequested || Task.isCancelled {
+                        group.cancelAll()
+                        return false
+                    }
                     let idx = submitted
                     let contact = targets[idx]
                     submitted += 1
                     group.addTask {
                         if Task.isCancelled { return nil }
                         let res = await pipeline.match(contact)
+                        if Task.isCancelled { return nil }
                         return (idx, res)
                     }
                 }
@@ -304,13 +314,14 @@ public final class ReviewSession: ObservableObject {
                     doneCount += 1
                     self.stage = .matching(done: doneCount, total: targets.count)
 
-                    if submitted < targets.count {
+                    if !self.cancelRequested && !Task.isCancelled && submitted < targets.count {
                         let nextIdx = submitted
                         let nextContact = targets[nextIdx]
                         submitted += 1
                         group.addTask {
                             if Task.isCancelled { return nil }
                             let res = await pipeline.match(nextContact)
+                            if Task.isCancelled { return nil }
                             return (nextIdx, res)
                         }
                     }
