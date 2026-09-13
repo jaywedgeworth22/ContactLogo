@@ -41,6 +41,7 @@ export type BookContact = {
   websites?: string[];
   photoDataUrl?: string;
   hadExistingPhoto?: boolean;
+  existingPhotoUrl?: string;
   importSource?: "file" | "google" | "device";
   googleResourceName?: string;
 };
@@ -129,9 +130,16 @@ export function orderFlags(flags: readonly string[]): string[] {
 }
 
 function fieldValues(single: string | undefined, many: string[] | undefined): string[] {
-  return [single, ...(many ?? [])]
-    .map((v) => v?.trim() ?? "")
-    .filter((v) => v.length > 0);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const v of [single, ...(many ?? [])]) {
+    const trimmed = v?.trim() ?? "";
+    if (trimmed.length > 0 && !seen.has(trimmed)) {
+      seen.add(trimmed);
+      out.push(trimmed);
+    }
+  }
+  return out;
 }
 
 export function websiteFields(c: BookContact): string[] {

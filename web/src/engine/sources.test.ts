@@ -9,7 +9,19 @@ import {
   isFallbackTile,
   padAndSquareImage,
 } from "./logos.ts";
-import { fetchConnections, personToBookContact, updateGoogleContactPhoto, type Person } from "./google-contacts.ts";
+import {
+  clearGoogleSyncUndoBatch,
+  deleteGoogleContactPhoto,
+  fetchConnections,
+  getLatestGoogleSyncUndoBatch,
+  personToBookContact,
+  saveGoogleSyncUndoBatch,
+  undoGooglePhotoSync,
+  updateGoogleContactPhoto,
+  type GoogleSyncUndoBatch,
+  type Person,
+} from "./google-contacts.ts";
+import { resolveIdentity } from "./classify.ts";
 
 /** Swap `globalThis.fetch` for the duration of `fn`, always restoring it after. */
 async function withMockFetch<T>(mock: typeof fetch, fn: () => Promise<T>): Promise<T> {
@@ -127,6 +139,116 @@ test("personToBookContact keeps import source and existing-photo bookkeeping", (
   assert.equal(contact?.importSource, "google");
   assert.equal(contact?.hadExistingPhoto, true);
   assert.equal(contact?.googleResourceName, "people/42");
+});
+
+test("Issue #75: personToBookContact preserves multiple emails, phones, and websites", () => {
+  const person: Person = {
+    resourceName: "people/99",
+    names: [{ displayName: "Dana Reyes" }],
+    emailAddresses: [{ value: "dana@gmail.com" }, { value: "dana@stripe.com" }],
+    phoneNumbers: [{ value: "+15125550100" }, { value: "+15125550101" }],
+    urls: [{ value: "https://twitter.com/danareyes" }, { value: "https://stripe.com" }],
+    photos: [{ url: "https://lh3.googleusercontent.com/photo.jpg", default: false }],
+  };
+  const contact = personToBookContact(person);
+  assert.equal(contact?.displayName, "Dana Reyes");
+  assert.deepEqual(contact?.emails, ["dana@gmail.com", "dana@stripe.com"]);
+  assert.deepEqual(contact?.phones, ["+15125550100", "+15125550101"]);
+  assert.deepEqual(contact?.websites, ["https://twitter.com/danareyes", "https://stripe.com"]);
+  assert.equal(contact?.hadExistingPhoto, true);
+  assert.equal(contact?.existingPhotoUrl, "https://lh3.googleusercontent.com/photo.jpg");
+
+  // Secondary email resolves corporate identity
+  const res = resolveIdentity(contact!, "Dana Reyes");
+  assert.equal(res?.domain, "stripe.com");
+});
+
+test("Issue #72: deleteGoogleContactPhoto calls :deleteContactPhoto endpoint", async () => {
+  let calledUrl = "";
+  let calledMethod = "";
+  let authHeader = "";
+  await withMockFetch(
+    (async (input: string | URL, init?: RequestInit) => {
+      calledUrl = String(input);
+      calledMethod = init?.method ?? "GET";
+      authHeader = (init?.headers as Record<string, string>)?.Authorization ?? "";
+      return new Response("", { status: 200 });
+    }) as typeof fetch,
+    () => deleteGoogleContactPhoto("people/c123", "secret-token"),
+  );
+  assert.ok(calledUrl.includes("people/c123:deleteContactPhoto"));
+  assert.equal(calledMethod, "POST");
+  assert.equal(authHeader, "Bearer secret-token");
+});
+
+test("Issue #72: Google sync undo batch round-trips through storage and clears", async () => {
+  const originalStorage = globalThis.localStorage;
+  const store = new Map<string, string>();
+  const mockStorage = {
+    getItem: (k: string) => store.get(k) ?? null,
+    setItem: (k: string, v: string) => store.set(k, v),
+    removeItem: (k: string) => store.delete(k),
+    clear: () => store.clear(),
+  } as unknown as Storage;
+  Object.defineProperty(globalThis, "localStorage", { value: mockStorage, configurable: true });
+
+  try {
+    const batch: GoogleSyncUndoBatch = {
+      id: "batch-1",
+      timestamp: Date.now(),
+      records: [
+        { resourceName: "people/1", displayName: "User 1", hadExistingPhoto: false },
+        { resourceName: "people/2", displayName: "User 2", hadExistingPhoto: true, priorPhotoDataUrl: "data:image/jpeg;base64,prior" },
+      ],
+    };
+    await saveGoogleSyncUndoBatch(batch);
+    const retrieved = await getLatestGoogleSyncUndoBatch();
+    assert.equal(retrieved?.id, "batch-1");
+    assert.equal(retrieved?.records.length, 2);
+    assert.equal(retrieved?.records[0]?.hadExistingPhoto, false);
+    assert.equal(retrieved?.records[1]?.hadExistingPhoto, true);
+    assert.equal(retrieved?.records[1]?.priorPhotoDataUrl, "data:image/jpeg;base64,prior");
+
+    await clearGoogleSyncUndoBatch();
+    const afterClear = await getLatestGoogleSyncUndoBatch();
+    assert.equal(afterClear, null);
+  } finally {
+    Object.defineProperty(globalThis, "localStorage", { value: originalStorage, configurable: true });
+  }
+});
+
+test("Issue #72: undoGooglePhotoSync restores photos or deletes based on prior state", async () => {
+  const batch: GoogleSyncUndoBatch = {
+    id: "batch-2",
+    timestamp: Date.now(),
+    records: [
+      { resourceName: "people/no-photo", displayName: "New Logo Only", hadExistingPhoto: false },
+      { resourceName: "people/had-photo", displayName: "Overwritten Photo", hadExistingPhoto: true, priorPhotoDataUrl: "data:image/png;base64,AAAA" },
+    ],
+  };
+
+  const requests: { url: string; method?: string; body?: string }[] = [];
+  await withMockFetch(
+    (async (input: string | URL, init?: RequestInit) => {
+      requests.push({
+        url: String(input),
+        method: init?.method,
+        body: init?.body ? String(init.body) : undefined,
+      });
+      return new Response("{}", { status: 200 });
+    }) as typeof fetch,
+    () => undoGooglePhotoSync("auth-token", batch),
+  );
+
+  assert.equal(requests.length, 2);
+  const deleteReq = requests.find((r) => r.url.includes("no-photo"));
+  assert.ok(deleteReq?.url.includes(":deleteContactPhoto"));
+  assert.equal(deleteReq?.method, "POST");
+
+  const updateReq = requests.find((r) => r.url.includes("had-photo"));
+  assert.ok(updateReq?.url.includes(":updateContactPhoto"));
+  assert.equal(updateReq?.method, "POST");
+  assert.match(updateReq?.body ?? "", /photoBytes/);
 });
 
 // ---------------------------------------------------------------------------

@@ -191,6 +191,17 @@ function plain(properties: VcardProperty[], name: string): string | undefined {
   return text || undefined;
 }
 
+function allPlain(properties: VcardProperty[], name: string): string[] {
+  const values: string[] = [];
+  for (const p of properties) {
+    if (p.name === name && p.value.trim() !== "") {
+      const text = unescapeVcard(p.value).trim();
+      if (text) values.push(text);
+    }
+  }
+  return values;
+}
+
 function component(properties: VcardProperty[], name: string, index: number): string | undefined {
   const found = firstValued(properties, name);
   if (!found) return undefined;
@@ -204,9 +215,12 @@ function buildContact(properties: VcardProperty[]): VcardContact | null {
   const familyName = component(properties, "N", 0);
   const givenName = component(properties, "N", 1);
   const organization = component(properties, "ORG", 0);
-  const email = plain(properties, "EMAIL");
-  const phone = plain(properties, "TEL");
-  const website = plain(properties, "URL");
+  const emails = allPlain(properties, "EMAIL");
+  const phones = allPlain(properties, "TEL");
+  const websites = allPlain(properties, "URL");
+  const email = emails[0];
+  const phone = phones[0];
+  const website = websites[0];
   const photoLines = properties.filter((p) => p.name === "PHOTO");
   let photoDataUrl: string | undefined;
   for (const line of photoLines) {
@@ -227,6 +241,9 @@ function buildContact(properties: VcardProperty[]): VcardContact | null {
     email,
     phone,
     website,
+    emails: emails.length > 0 ? emails : undefined,
+    phones: phones.length > 0 ? phones : undefined,
+    websites: websites.length > 0 ? websites : undefined,
     photoDataUrl,
     hadExistingPhoto: photoLines.length > 0,
     vcard: { version, properties },
@@ -459,10 +476,17 @@ function synthesizeProperties(contact: BookContact): VcardProperty[] {
     properties.push(property("ORG", escapeVcard(contact.organization)));
     if (showsAsCompany(contact)) properties.push(property("X-ABShowAs", "COMPANY"));
   }
-  if (contact.email) properties.push(property("EMAIL;TYPE=INTERNET", escapeVcard(contact.email)));
-  if (contact.phone) properties.push(property("TEL;TYPE=WORK,VOICE", escapeVcard(contact.phone)));
-  if (contact.website) {
-    properties.push(property("URL", escapeVcard(normalizedWebsite(contact.website))));
+  const emails = contact.emails?.length ? contact.emails : contact.email ? [contact.email] : [];
+  for (const email of emails) {
+    properties.push(property("EMAIL;TYPE=INTERNET", escapeVcard(email)));
+  }
+  const phones = contact.phones?.length ? contact.phones : contact.phone ? [contact.phone] : [];
+  for (const phone of phones) {
+    properties.push(property("TEL;TYPE=WORK,VOICE", escapeVcard(phone)));
+  }
+  const websites = contact.websites?.length ? contact.websites : contact.website ? [contact.website] : [];
+  for (const website of websites) {
+    properties.push(property("URL", escapeVcard(normalizedWebsite(website))));
   }
   if (contact.photoDataUrl) {
     const photo = photoProperty(contact.photoDataUrl, "3.0");
