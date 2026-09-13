@@ -33,7 +33,7 @@ import {
 } from "./engine/settings.ts";
 import { backupFilename, contactsToVcard, downloadText, parseVcard } from "./engine/vcard.ts";
 import { reportClientError } from "./observability/datadog.ts";
-import { countLogoMatch } from "./observability/sentry.ts";
+import { countLogoMatch, openSentryFeedback } from "./observability/sentry.ts";
 
 export type FilterStatus = "all" | "ready" | "review" | "notfound" | "missingphoto";
 
@@ -1785,6 +1785,12 @@ function mountShell(root: HTMLElement): Shell {
   }
   app.append(review);
 
+  const reportBtn = el("a", { href: "#report-problem" }, "Report a Problem");
+  reportBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    openSentryFeedback();
+  });
+
   app.append(
     el(
       "p",
@@ -1793,6 +1799,8 @@ function mountShell(root: HTMLElement): Shell {
       el("a", { href: "/privacy" }, "Privacy"),
       " · ",
       el("a", { href: "/terms" }, "Terms"),
+      " · ",
+      reportBtn,
     ),
   );
 

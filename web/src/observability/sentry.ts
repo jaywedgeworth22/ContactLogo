@@ -85,7 +85,11 @@ export function startSentry(): void {
       Sentry.browserTracingIntegration(),
       Sentry.feedbackIntegration({
         colorScheme: "system",
-        autoInject: true,
+        autoInject: false,
+        showBranding: false,
+        buttonLabel: "Report a Problem",
+        submitButtonLabel: "Send",
+        formTitle: "Report a Problem",
       }),
       ...(!replayDisabled
         ? [
@@ -120,3 +124,33 @@ export function countLogoMatch(n: number): void {
 
 export const captureException = Sentry.captureException;
 export const captureMessage = Sentry.captureMessage;
+
+/** Open the Sentry user feedback dialog programmatically. */
+export function openSentryFeedback(): void {
+  try {
+    const feedback = Sentry.getFeedback?.();
+    if (feedback?.createForm) {
+      void feedback.createForm().then((form) => {
+        form.appendToDom();
+        form.open();
+      }).catch(() => {});
+      return;
+    }
+
+    if (typeof window !== "undefined") {
+      const windowFeedback = (window as unknown as { Sentry?: { getFeedback?: () => { createForm?: () => Promise<{ appendToDom: () => void; open: () => void }> } } }).Sentry?.getFeedback?.();
+      if (windowFeedback?.createForm) {
+        void windowFeedback.createForm().then((form) => {
+          form.appendToDom();
+          form.open();
+        }).catch(() => {});
+      }
+    }
+  } catch {
+    // Safe no-op if feedback is not initialized or fails
+  }
+}
+
+if (typeof window !== "undefined") {
+  (window as unknown as { openSentryFeedback?: typeof openSentryFeedback }).openSentryFeedback = openSentryFeedback;
+}

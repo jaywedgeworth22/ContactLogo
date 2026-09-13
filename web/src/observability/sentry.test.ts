@@ -29,3 +29,14 @@ test("Android native Sentry inits masked Replay and profiling", () => {
   assert.match(app, /profilesSampleRate = 0\.1/);
   assert.match(app, /setMaskAllText\(true\)/);
 });
+
+test("sentry configures subtle feedback integration", () => {
+  const sentrySrc = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), "sentry.ts"),
+    "utf8",
+  );
+  assert.match(sentrySrc, /feedbackIntegration\(/);
+  assert.match(sentrySrc, /autoInject:\s*false/);
+  assert.match(sentrySrc, /formTitle:\s*"Report a Problem"/);
+  assert.match(sentrySrc, /export function openSentryFeedback/);
+});
