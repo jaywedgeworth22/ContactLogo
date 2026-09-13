@@ -269,25 +269,62 @@ public final class ReviewSession: ObservableObject {
             identitiesByID = Dictionary(uniqueKeysWithValues: targets.map { ($0.id, $0) })
             retryingIDs = []
             stage = .matching(done: 0, total: targets.count)
-            var out: [MatchResult] = []
-            for (i, contact) in targets.enumerated() {
-                if cancelRequested || Task.isCancelled {
-                    stage = .idle
-                    return false
+            let maxConcurrency = 8
+            var indexedResults: [MatchResult?] = Array(repeating: nil, count: targets.count)
+            var doneCount = 0
+
+            let completedAll = await withTaskGroup(of: (Int, MatchResult)?.self) { group in
+                var submitted = 0
+
+                // Prime the group with up to maxConcurrency parallel tasks
+                for _ in 0..<min(maxConcurrency, targets.count) {
+                    let idx = submitted
+                    let contact = targets[idx]
+                    submitted += 1
+                    group.addTask {
+                        if Task.isCancelled { return nil }
+                        let res = await pipeline.match(contact)
+                        return (idx, res)
+                    }
                 }
-                out.append(await pipeline.match(contact))
-                // Re-checked *after* the await, not only before it.  A
-                // BGProcessingTask can expire while this contact is matching —
-                // including the last one, or the only one — and MatchPipeline
-                // absorbs cancellation as source failures and returns normally.
-                // Without this the loop would fall through, publish, and report
-                // success for an expired task, posting "your queue is ready".
-                if cancelRequested || Task.isCancelled {
-                    stage = .idle
-                    return false
+
+                // As worker tasks finish, collect results and submit next targets
+                while let result = await group.next() {
+                    if self.cancelRequested || Task.isCancelled {
+                        group.cancelAll()
+                        return false
+                    }
+
+                    guard let (idx, matchResult) = result else {
+                        group.cancelAll()
+                        return false
+                    }
+
+                    indexedResults[idx] = matchResult
+                    doneCount += 1
+                    self.stage = .matching(done: doneCount, total: targets.count)
+
+                    if submitted < targets.count {
+                        let nextIdx = submitted
+                        let nextContact = targets[nextIdx]
+                        submitted += 1
+                        group.addTask {
+                            if Task.isCancelled { return nil }
+                            let res = await pipeline.match(nextContact)
+                            return (nextIdx, res)
+                        }
+                    }
                 }
-                stage = .matching(done: i + 1, total: targets.count)
+
+                return doneCount == targets.count && !self.cancelRequested && !Task.isCancelled
             }
+
+            guard completedAll else {
+                stage = .idle
+                return false
+            }
+
+            let out = indexedResults.compactMap { $0 }
             results = out
             chosenIndex = [:]
             selected = Set(out.filter { $0.confidence == .high }.map(\.contactID))
