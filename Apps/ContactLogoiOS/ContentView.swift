@@ -92,6 +92,21 @@ struct ReviewQueueView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            if model.totalScannedCount > 0 {
+                HStack(spacing: 6) {
+                    Image(systemName: "shield.checkmark.fill")
+                        .foregroundColor(.green)
+                    Text("\(model.totalScannedCount) scanned · \(model.protectedPersonCount) personal protected")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    if model.affiliatedTargetsCount > 0 {
+                        Text("· \(model.affiliatedTargetsCount) affiliated")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.horizontal)
+            }
             Picker("Bucket", selection: $bucket) {
                 Text("Ready (\(model.autoAccepted.count))").tag(ReviewSession.Bucket.auto)
                 Text("Review (\(model.needsReview.count))").tag(ReviewSession.Bucket.review)
@@ -229,6 +244,15 @@ struct ReviewRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text(model.displayName(for: result.contactID)).font(.headline)
+                    if result.flags.contains("affiliated") {
+                        Text("Affiliated")
+                            .font(.caption2.bold())
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.blue.opacity(0.15))
+                            .foregroundStyle(.blue)
+                            .clipShape(Capsule())
+                    }
                     if result.isRetryable {
                         RetryableBadge()
                     }

@@ -995,4 +995,44 @@ final class RetryMatchTests: XCTestCase {
         XCTAssertTrue(session.results[0].candidates.isEmpty)
     }
 }
+
+final class AffiliatedContactTests: XCTestCase {
+    let pipeline = MatchPipeline(sources: [], fetchImage: { _ in Data() })
+
+    func testPurePersonalContactHasNoAffiliation() {
+        let alice = ContactIdentity(id: "1", displayName: "Alice Smith", givenName: "Alice", familyName: "Smith",
+                                    emailDomains: ["gmail.com"])
+        XCTAssertNil(pipeline.affiliation(for: alice))
+    }
+
+    func testPersonWithOrganizationHasAffiliation() {
+        let tim = ContactIdentity(id: "2", displayName: "Tim Cook", givenName: "Tim", familyName: "Cook",
+                                  organization: "Apple")
+        let aff = pipeline.affiliation(for: tim)
+        XCTAssertNotNil(aff)
+        XCTAssertEqual(aff?.brandName, "Apple")
+        XCTAssertEqual(aff?.domain, "apple.com")
+    }
+
+    func testPersonWithWorkEmailHasAffiliation() {
+        let john = ContactIdentity(id: "3", displayName: "John Doe", givenName: "John", familyName: "Doe",
+                                   emailDomains: ["stripe.com"])
+        let aff = pipeline.affiliation(for: john)
+        XCTAssertNotNil(aff)
+        XCTAssertEqual(aff?.domain, "stripe.com")
+        XCTAssertEqual(aff?.brandName, "Stripe")
+    }
+
+    func testPersonWithBrandTailHasAffiliation() {
+        let maya = ContactIdentity(id: "4", displayName: "Maya Chen - Root Insurance", givenName: "Maya", familyName: "Chen")
+        let aff = pipeline.affiliation(for: maya)
+        XCTAssertNotNil(aff)
+        XCTAssertEqual(aff?.brandName, "Root Insurance")
+    }
+
+    func testLoneFirmNameIsNotAnAffiliation() {
+        let target = ContactIdentity(id: "5", displayName: "Target", givenName: "Target")
+        XCTAssertNil(pipeline.affiliation(for: target))
+    }
+}
 #endif

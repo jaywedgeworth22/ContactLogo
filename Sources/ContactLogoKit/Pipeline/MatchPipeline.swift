@@ -181,6 +181,69 @@ public struct MatchPipeline: Sendable {
         return nil
     }
 
+    /// Affiliated company name or domain for a named person with employer/company metadata.
+    public func affiliation(for c: ContactIdentity) -> (brandName: String, domain: String?)? {
+        let given = (c.givenName ?? "").trimmingCharacters(in: .whitespaces)
+        let family = (c.familyName ?? "").trimmingCharacters(in: .whitespaces)
+        let hasPersonName = !given.isEmpty || !family.isEmpty
+        guard hasPersonName else { return nil }
+        if inferCompanyFromLoneName(c) != nil { return nil }
+
+        // 1. Organization field (e.g. "Apple", "Stripe")
+        if let org = c.organization?.trimmingCharacters(in: .whitespaces), !org.isEmpty {
+            let cleanOrg = NameNormalizer.clean(org)
+            if !GenericBlocklist.isNonBrand(cleanOrg) {
+                let domain = IdentityResolver.resolveDetailed(c, brandName: cleanOrg).identity?.domain
+                return (cleanOrg, domain)
+            }
+        }
+
+        // 2. Brand tail in display name ("Maya Chen - Apple")
+        let segment = NameNormalizer.segment(c.displayName)
+        if segment.isBrandTail, !GenericBlocklist.isNonBrand(segment.query) {
+            let domain = IdentityResolver.resolveDetailed(c, brandName: segment.query).identity?.domain
+            return (segment.query, domain)
+        }
+
+        if let domain = DomainDeriver.derive(websiteHosts: c.websiteHosts, emailDomains: c.emailDomains) {
+            let label = Self.domainLabel(domain)
+            let brand = label.capitalized
+            return (brand, domain)
+        }
+
+        return nil
+    }
+
+    /// Matches an affiliated person against their company/organization mark.
+    /// Confidence is strictly capped at .medium (never .high) and flagged "affiliated"
+    /// so the contact is treated as less certain and requires explicit user opt-in.
+    public func matchAffiliated(_ c: ContactIdentity) async -> MatchResult? {
+        guard let aff = affiliation(for: c) else { return nil }
+        let fake = ContactIdentity(
+            id: c.id,
+            displayName: aff.brandName,
+            organization: aff.brandName,
+            emailDomains: c.emailDomains,
+            websiteHosts: c.websiteHosts,
+            phoneNumbers: c.phoneNumbers,
+            hasImage: c.hasImage
+        )
+        let result = await match(fake)
+        guard !result.candidates.isEmpty else { return nil }
+        var flags = result.flags
+        flags.append("affiliated")
+        flags.append("opt-in-review")
+        let cappedConfidence = min(result.confidence, .medium)
+        return MatchResult(
+            contactID: c.id,
+            contactClass: .person,
+            candidates: result.candidates,
+            confidence: cappedConfidence,
+            flags: flags,
+            sourceErrors: result.sourceErrors
+        )
+    }
+
     public func match(_ c: ContactIdentity) async -> MatchResult {
         let stat = staticMatch(c)
         guard stat.contactClass == .businessCard, let query = stat.query else {
