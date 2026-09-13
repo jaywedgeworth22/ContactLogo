@@ -176,7 +176,7 @@ test("Issue #72: deleteGoogleContactPhoto calls :deleteContactPhoto endpoint", a
     }) as typeof fetch,
     () => deleteGoogleContactPhoto("people/c123", "secret-token"),
   );
-  assert.ok(calledUrl.includes("people%2Fc123:deleteContactPhoto"));
+  assert.ok(calledUrl.includes("people/c123:deleteContactPhoto"));
   assert.equal(calledMethod, "POST");
   assert.equal(authHeader, "Bearer secret-token");
 });

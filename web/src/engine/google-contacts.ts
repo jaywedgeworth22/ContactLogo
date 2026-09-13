@@ -216,6 +216,13 @@ export async function importGoogleContacts(onProgress?: (n: number) => void): Pr
   return people.map(personToBookContact).filter((c): c is BookContact => Boolean(c));
 }
 
+function encodeResourceName(resourceName: string): string {
+  return resourceName
+    .split("/")
+    .map((part) => encodeURIComponent(part))
+    .join("/");
+}
+
 /** Update contact photo in Google People API */
 export async function updateGoogleContactPhoto(
   resourceName: string,
@@ -225,7 +232,7 @@ export async function updateGoogleContactPhoto(
   const base64Data = photoDataUrlOrBase64.includes(",")
     ? photoDataUrlOrBase64.split(",")[1]
     : photoDataUrlOrBase64;
-  const url = `https://people.googleapis.com/v1/${encodeURIComponent(resourceName)}:updateContactPhoto`;
+  const url = `https://people.googleapis.com/v1/${encodeResourceName(resourceName)}:updateContactPhoto`;
   // Bulk photo sync walks every selected contact sequentially; on a large
   // book the People API 429s partway through (CL-10). fetchWithRetry backs
   // off and retries in place so a transient rate limit doesn't fail the
@@ -250,7 +257,7 @@ export async function deleteGoogleContactPhoto(
   resourceName: string,
   token: string,
 ): Promise<void> {
-  const url = `https://people.googleapis.com/v1/${encodeURIComponent(resourceName)}:deleteContactPhoto`;
+  const url = `https://people.googleapis.com/v1/${encodeResourceName(resourceName)}:deleteContactPhoto`;
   const res = await fetchWithRetry(url, {
     method: "POST",
     headers: {
@@ -301,7 +308,7 @@ export async function saveGoogleSyncUndoBatch(batch: GoogleSyncUndoBatch): Promi
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction("google_sync_undo", "readwrite");
       const store = tx.objectStore("google_sync_undo");
-      store.put(batch);
+      store.clear();
       store.put({ ...batch, id: "latest" });
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
@@ -366,7 +373,7 @@ export async function clearGoogleSyncUndoBatch(): Promise<void> {
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction("google_sync_undo", "readwrite");
       const store = tx.objectStore("google_sync_undo");
-      store.delete("latest");
+      store.clear();
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
