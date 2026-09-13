@@ -1,5 +1,6 @@
 # ContactLogo Effort Log — cross-agent board
 - **2026-09-13 — AG — IN PROGRESS — Make Sentry bug reporter subtle (autoInject false + footer trigger) (board `bc309c8b`, branch `ag/sentry-subtle-feedback`, worktree `~/apps/contactlogo-ag-sentry-subtle`).**  Set `autoInject: false` in `web/src/observability/sentry.ts` to eliminate floating action button.  Export `openSentryFeedback()` helper and wire subtle link into web footer.
+- **2026-09-13 — FX — IN PROGRESS — Skip pointless Vercel production deploys (`fx/vercel-skip-pointless`, worktree `~/apps/contactlogo-fx-deploy`, board `0934111e`).**
 - **2026-09-13 — FX — IN PROGRESS — Merge to main is Vercel production (`fx/merge-equals-live`, worktree `~/apps/contactlogo-fx-deploy`, board `ef71d6c1`).**
 - **2026-09-07 — AG — IN PROGRESS — Fix Vercel auto-deploy rate-limit query (&state=READY) (branch `ag/vercel-ignore-state-ready`, worktree `~/apps/contactlogo-ag-vercel-fix`).**
 - **2026-09-04 — GROK — IN PR #62 — Sentry max-features: iOS profiling + Session Replay + Android native (board `af1ab6e9`, branch `grok/sentry-max-features`, worktree `~/apps/contactlogo-grok-sentry-max`).**  Android ENABLE (masked Replay 10%/100% error, profiling 0.1).  Rollout: `docs/rollouts/2026-09-04-sentry-max-features.md`.
