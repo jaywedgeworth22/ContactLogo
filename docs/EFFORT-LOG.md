@@ -16,6 +16,8 @@ Protocol: /Users/jay/apps/EFFORT-LOG-PROTOCOL.md (canonical). Live board: this f
 - **Production host is Vercel** at https://contactlogo.com (auto-deploy from `main`, `web/` as the project root).  Coolify/Cloudflare are not the live host.  Grok Publish at https://contact-logo.grok.me is legacy only.
 
 ## Completed
+- **2026-09-15 — AG — COMPLETED — ContactLogo PR #65 Needs A Slug-Map Reconciliation Decision.** <!-- wb-agent-report:9e5328999a984e9b9bbc72f6d4a9e597 --> PR #65 is already merged which resolves this.
+- **2026-09-15 — AG — COMPLETED — [P1] Onboard ContactLogo to the fleet.** Board item 3b9ca6cf. Added dependabot config and created seat worktrees.
 - **2026-08-26 — ANTIGRAVITY — COMPLETED — Add Vercel free feature optimizations (branch `antigravity/vercel-optimizations`).**  Created `web/vercel.json` with Vite framework preset, 1-year immutable cache headers for build assets (`/assets/(.*)`), stale-while-revalidate headers for static media/fonts, strict security headers (nosniff, sameorigin, referrer-policy, permissions-policy), clean URLs, and trailing slash normalization.
 - **2026-08-25 — AG — COMPLETED — Set inline navigation bar title display mode in ContactLogo iOS (branch ag/ios-inline-nav-titles).**  Set .navigationBarTitleDisplayMode(.inline) on root NavigationStack.
 - **2026-08-21 — CURSOR — COMPLETED — Local folder `~/Code/ContactLogo` + GitHub `jaywedgeworth22/ContactLogo` + Cursor project name ContactLogo.**  `mv` of `/Users/jay/Code/BadgeBook` (git history, uncommitted merge, `backups/`, `vendor/crest/` intact).  GitHub already renamed (0 forks, old BadgeBook slug redirects).  Origin set to `https://github.com/jaywedgeworth22/ContactLogo.git`.  Cursor project list name/path updated; `~/.cursor/projects/Users-jay-Code-ContactLogo` created.  Frozen snapshots stay `backups/badgebook/` (`18fcf25`) and `backups/crest/` (`8b4ca72`).  Product docs/homepages use `contact-logo.grok.me` (live 200; unhyphenated host 404s).
@@ -53,8 +55,7 @@ Protocol: /Users/jay/apps/EFFORT-LOG-PROTOCOL.md (canonical). Live board: this f
 - **2026-08-22 — CURSOR — IN PROGRESS — Domain + CI leftovers (uncommitted).**  Official host `contactlogo.com`.  Added `.github/workflows/ci.yml` (web Node job + macOS `swift test`) and `AGENTS.md`.  Did not run `onboard-new-app.sh` (must be from a fleet worktree, not `~/Code`).  Cloudflare jay account has no `contactlogo.com` zone; no DNS invented.  Personal-Site project list now points at ContactLogo + contactlogo.com.
 
 ## Planned / Reserved
-- **2026-08-21 — KIMI — PLANNED — [P1] Onboard ContactLogo to the fleet.**  Board item 3b9ca6cf.  Still absent from fleet-apps.json and the digest.  CI workflow now exists locally (see In Progress); dependabot and seat worktrees still missing.  `jaywedgeworth22/crest` is archived (2026-08-21); `vendor/crest` remains a subtree path, not a second product.
-- **2026-08-22 — CURSOR — PLANNED — Attach contactlogo.com to Coolify + Cloudflare.**  Domain is owned (Grok tapspin log).  Zone not in Cloudflare yet.  Do not use Render.
+- **2026-08-22 — CURSOR — PLANNED — Attach contactlogo.com to Coolify + Cloudflare.**  Domain is owned (Grok tapspin log).  Zone not in Cloudflare yet.  Do not use Render. (Blocked on owner dashboard actions per ONBOARDING-NEW-APP.md).
 
 ## Changelog of this log
 - 2026-09-01 — GROK — claimed issue #37 Simple Icons slug cleanup (board 32be84ad).
