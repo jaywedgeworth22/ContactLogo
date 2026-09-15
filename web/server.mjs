@@ -5,7 +5,7 @@
  */
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
-import { extname, join, normalize, resolve } from "node:path";
+import { extname, join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const rootDir = fileURLToPath(new URL(".", import.meta.url));
@@ -62,7 +62,7 @@ function safeFile(urlPath) {
   }
   const relative = raw === "/" ? "index.html" : raw.replace(/^\/+/, "");
   const resolved = normalize(join(distDir, relative));
-  if (!resolved.startsWith(distDir)) return null;
+  if (!resolved.startsWith(distDir + sep) && resolved !== distDir) return null;
   return resolved;
 }
 
