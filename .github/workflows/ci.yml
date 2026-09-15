@@ -106,7 +106,11 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # Default packages include the retired `tools` package; sdkmanager then
+      # exits 1 with "Failed to find package 'tools'" on current GH runners.
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
 
       - uses: gradle/actions/setup-gradle@v4
         with:

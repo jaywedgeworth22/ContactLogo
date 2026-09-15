@@ -1,4 +1,5 @@
 # ContactLogo Effort Log — cross-agent board
+- **2026-09-15 — GROK — IN PROGRESS — Land ContactLogo #81 (board `80eacca5`, branch `fx/vercel-skip-pointless`, worktree `~/apps/contactlogo-grok-land-sweep`).**  Android CI failed on `sdkmanager tools` (retired package).  Pin `android-actions/setup-android@v3` to `packages: platform-tools`.
 - **2026-09-13 — AG — IN PROGRESS — Make Sentry bug reporter subtle (autoInject false + footer trigger) (board `bc309c8b`, branch `ag/sentry-subtle-feedback`, worktree `~/apps/contactlogo-ag-sentry-subtle`).**  Set `autoInject: false` in `web/src/observability/sentry.ts` to eliminate floating action button.  Export `openSentryFeedback()` helper and wire subtle link into web footer.
 - **2026-09-13 — FX — IN PROGRESS — Skip pointless Vercel production deploys (`fx/vercel-skip-pointless`, worktree `~/apps/contactlogo-fx-deploy`, board `0934111e`).**
 - **2026-09-13 — FX — IN PROGRESS — Merge to main is Vercel production (`fx/merge-equals-live`, worktree `~/apps/contactlogo-fx-deploy`, board `ef71d6c1`).**
