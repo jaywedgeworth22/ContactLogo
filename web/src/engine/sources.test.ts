@@ -13,9 +13,12 @@ import {
   clearGoogleSyncUndoBatch,
   deleteGoogleContactPhoto,
   fetchConnections,
+  fetchPhotoAsDataUrl,
   getLatestGoogleSyncUndoBatch,
+  isUndoablePriorPhoto,
   personToBookContact,
   saveGoogleSyncUndoBatch,
+  snapshotPriorGooglePhoto,
   undoGooglePhotoSync,
   updateGoogleContactPhoto,
   type GoogleSyncUndoBatch,
@@ -249,6 +252,100 @@ test("Issue #72: undoGooglePhotoSync restores photos or deletes based on prior s
   assert.ok(updateReq?.url.includes(":updateContactPhoto"));
   assert.equal(updateReq?.method, "POST");
   assert.match(updateReq?.body ?? "", /photoBytes/);
+});
+
+test("Google undo snapshot: in-memory data URL wins over a stale People photo URL", async () => {
+  let fetches = 0;
+  const prior = await withMockFetch(
+    (async () => {
+      fetches += 1;
+      return new Response("should-not-fetch", { status: 500 });
+    }) as typeof fetch,
+    () =>
+      snapshotPriorGooglePhoto(
+        {
+          hadExistingPhoto: true,
+          existingPhotoUrl: "https://lh3.googleusercontent.com/stale.jpg",
+          photoDataUrl: "data:image/png;base64,QQQQ",
+        },
+        "auth-token",
+      ),
+  );
+  assert.equal(prior, "data:image/png;base64,QQQQ");
+  assert.equal(fetches, 0);
+});
+
+test("Google undo snapshot: refuse overwrite when the existing photo cannot be fetched", async () => {
+  const prior = await withMockFetch(
+    (async () => new Response("", { status: 404 })) as typeof fetch,
+    () =>
+      snapshotPriorGooglePhoto(
+        {
+          hadExistingPhoto: true,
+          existingPhotoUrl: "https://lh3.googleusercontent.com/photo.jpg",
+          photoDataUrl: "https://lh3.googleusercontent.com/photo.jpg",
+        },
+        "auth-token",
+      ),
+  );
+  assert.equal(prior, undefined);
+  assert.equal(isUndoablePriorPhoto(prior), false);
+});
+
+test("Google undo snapshot: photo CDN fetch does not send the OAuth bearer", async () => {
+  let auth: string | undefined;
+  await withMockFetch(
+    (async (_input: string | URL, init?: RequestInit) => {
+      auth = (init?.headers as Record<string, string> | undefined)?.Authorization;
+      return new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { "Content-Type": "image/jpeg" } });
+    }) as typeof fetch,
+    () => fetchPhotoAsDataUrl("https://lh3.googleusercontent.com/photo.jpg", "secret-token"),
+  );
+  assert.equal(auth, undefined);
+});
+
+test("Google undo snapshot: People API hosts still receive the bearer token", async () => {
+  let auth = "";
+  await withMockFetch(
+    (async (_input: string | URL, init?: RequestInit) => {
+      auth = (init?.headers as Record<string, string> | undefined)?.Authorization ?? "";
+      return new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { "Content-Type": "image/jpeg" } });
+    }) as typeof fetch,
+    () => fetchPhotoAsDataUrl("https://people.googleapis.com/v1/people/c1/photo", "secret-token"),
+  );
+  assert.equal(auth, "Bearer secret-token");
+});
+
+test("Google undo keeps the batch when a prior photo cannot be restored", async () => {
+  const originalStorage = globalThis.localStorage;
+  const store = new Map<string, string>();
+  const mockStorage = {
+    getItem: (k: string) => store.get(k) ?? null,
+    setItem: (k: string, v: string) => store.set(k, v),
+    removeItem: (k: string) => store.delete(k),
+    clear: () => store.clear(),
+  } as unknown as Storage;
+  Object.defineProperty(globalThis, "localStorage", { value: mockStorage, configurable: true });
+
+  try {
+    const batch: GoogleSyncUndoBatch = {
+      id: "batch-keep-on-fail",
+      timestamp: Date.now(),
+      records: [
+        { resourceName: "people/lost", displayName: "Lost Portrait", hadExistingPhoto: true },
+      ],
+    };
+    await saveGoogleSyncUndoBatch(batch);
+    const result = await undoGooglePhotoSync("auth-token", batch);
+    assert.equal(result.restored, 0);
+    assert.equal(result.failed, 1);
+    const remaining = await getLatestGoogleSyncUndoBatch();
+    assert.equal(remaining?.id, "batch-keep-on-fail");
+    assert.equal(remaining?.records.length, 1);
+  } finally {
+    await clearGoogleSyncUndoBatch();
+    Object.defineProperty(globalThis, "localStorage", { value: originalStorage, configurable: true });
+  }
 });
 
 // ---------------------------------------------------------------------------

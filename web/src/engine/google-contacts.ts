@@ -408,14 +408,56 @@ export async function blobToDataUrl(blob: Blob): Promise<string> {
   return `data:${type};base64,${btoa(binary)}`;
 }
 
+/** People API hosts accept the OAuth bearer.  Photo CDNs do not, and a
+ *  cross-origin `Authorization` header forces a CORS preflight that
+ *  `lh3.googleusercontent.com` rejects — so the snapshot fetch fails
+ *  and the caller used to overwrite the portrait with no undo bytes.
+ */
+function shouldAttachGoogleToken(url: string): boolean {
+  try {
+    const host = new URL(url).hostname;
+    return host === "googleapis.com" || host.endsWith(".googleapis.com");
+  } catch {
+    return false;
+  }
+}
+
+export function isUndoablePriorPhoto(priorPhotoDataUrl?: string): boolean {
+  return Boolean(priorPhotoDataUrl?.startsWith("data:") && priorPhotoDataUrl.includes(","));
+}
+
+/**
+ * Bytes we can hand back to `:updateContactPhoto`.  Prefer an in-memory
+ * data URL (the card after a previous apply).  Otherwise fetch the
+ * People API photo URL.  `undefined` means the contact has a photo we
+ * could not snapshot — the caller MUST skip the write.
+ */
+export async function snapshotPriorGooglePhoto(
+  contact: {
+    hadExistingPhoto?: boolean;
+    existingPhotoUrl?: string;
+    photoDataUrl?: string;
+  },
+  token: string,
+): Promise<string | undefined> {
+  if (!contact.hadExistingPhoto) return undefined;
+  if (isUndoablePriorPhoto(contact.photoDataUrl)) return contact.photoDataUrl;
+  if (contact.existingPhotoUrl) {
+    const fetched = await fetchPhotoAsDataUrl(contact.existingPhotoUrl, token);
+    if (isUndoablePriorPhoto(fetched)) return fetched;
+  }
+  return undefined;
+}
+
 export async function fetchPhotoAsDataUrl(url: string, token?: string): Promise<string | undefined> {
   try {
     const headers: Record<string, string> = {};
-    if (token) headers.Authorization = `Bearer ${token}`;
+    if (token && shouldAttachGoogleToken(url)) headers.Authorization = `Bearer ${token}`;
     const res = await fetchWithRetry(url, { headers });
     if (!res.ok) return undefined;
     const blob = await res.blob();
-    return await blobToDataUrl(blob);
+    const dataUrl = await blobToDataUrl(blob);
+    return isUndoablePriorPhoto(dataUrl) ? dataUrl : undefined;
   } catch {
     return undefined;
   }
@@ -438,8 +480,8 @@ export async function undoGooglePhotoSync(
   for (const record of currentBatch.records) {
     onProgress?.(restored + failed + 1, total, record.displayName);
     try {
-      if (record.hadExistingPhoto && record.priorPhotoDataUrl) {
-        await updateGoogleContactPhoto(record.resourceName, record.priorPhotoDataUrl, token);
+      if (record.hadExistingPhoto && isUndoablePriorPhoto(record.priorPhotoDataUrl)) {
+        await updateGoogleContactPhoto(record.resourceName, record.priorPhotoDataUrl!, token);
         restored += 1;
       } else if (!record.hadExistingPhoto) {
         await deleteGoogleContactPhoto(record.resourceName, token);
@@ -453,6 +495,10 @@ export async function undoGooglePhotoSync(
     }
   }
 
-  await clearGoogleSyncUndoBatch();
+  // Native undo keeps the log when restore fails so Retry still has bytes.
+  // Clearing here made a CORS-failed snapshot permanently unrestorable.
+  if (failed === 0) {
+    await clearGoogleSyncUndoBatch();
+  }
   return { restored, failed };
 }
