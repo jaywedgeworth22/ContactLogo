@@ -44,6 +44,7 @@ const DOMAINS: Record<string, string> = {
   "allstate insurance": "allstate.com",
   usaa: "usaa.com",
   "usaa insurance": "usaa.com",
+  "root insurance": "rootinsurance.com",
   verizon: "verizon.com",
   "at&t": "att.com",
   att: "att.com",

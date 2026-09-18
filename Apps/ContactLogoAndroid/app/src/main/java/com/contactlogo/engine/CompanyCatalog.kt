@@ -35,6 +35,7 @@ object CompanyCatalog {
         "fidelity" to "fidelity.com", "vanguard" to "vanguard.com",
         "progressive" to "progressive.com", "geico" to "geico.com",
         "state farm" to "statefarm.com", "allstate" to "allstate.com",
+        "root insurance" to "rootinsurance.com",
         "at&t" to "att.com", "att" to "att.com", "verizon" to "verizon.com",
         "t-mobile" to "t-mobile.com", "tmobile" to "t-mobile.com",
         "comcast" to "xfinity.com", "xfinity" to "xfinity.com", "spectrum" to "spectrum.com",

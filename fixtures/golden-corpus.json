@@ -1570,6 +1570,92 @@
       "why": "Rule 8 is not limited to person heads: a franchise-style 'local name - brand' entry queries the brand tail, capped at medium."
     },
     {
+      "id": "rule8-brand-tail-catalog-over-unrelated-email",
+      "contact": {
+        "displayName": "Front Office - Root Insurance",
+        "givenName": null,
+        "familyName": null,
+        "organization": null,
+        "emails": [
+          "hello@someagency.com"
+        ],
+        "websites": [],
+        "phones": [],
+        "hasImage": false
+      },
+      "expect": {
+        "class": "businessCard",
+        "query": "Root Insurance",
+        "domain": "rootinsurance.com",
+        "via": "catalog",
+        "maxConfidence": "medium",
+        "flags": [
+          "brand-tail",
+          "via-catalog"
+        ],
+        "simpleIconsSlug": null
+      },
+      "rule": "MATCHING-ENGINE §2b brand-tail exception (issue #36); ENGINE-CONTRACT R8.1b",
+      "why": "An org-only card's brand tail is what the card claims to be. 'hello@someagency.com' shares no token with 'Root Insurance', so the catalog domain for the tail wins over the unrelated inbox: the card says Root Insurance, and the logo does too, not someagency.com's favicon."
+    },
+    {
+      "id": "rule8-brand-tail-catalog-no-email",
+      "contact": {
+        "displayName": "Front Office - Root Insurance",
+        "givenName": null,
+        "familyName": null,
+        "organization": null,
+        "emails": [],
+        "websites": [],
+        "phones": [],
+        "hasImage": false
+      },
+      "expect": {
+        "class": "businessCard",
+        "query": "Root Insurance",
+        "domain": "rootinsurance.com",
+        "via": "catalog",
+        "maxConfidence": "medium",
+        "flags": [
+          "brand-tail",
+          "via-catalog"
+        ],
+        "simpleIconsSlug": null
+      },
+      "rule": "MATCHING-ENGINE §2b brand-tail exception (issue #36); ENGINE-CONTRACT R8.1b",
+      "why": "No email at all: the catalog hit for the tail resolves exactly as it did before the amendment.  The exception only changes what happens when a contact email disagrees with the tail; with no email to disagree, R8.3's ordinary catalog step already produced this answer."
+    },
+    {
+      "id": "rule8-brand-tail-no-catalog-keeps-email",
+      "contact": {
+        "displayName": "Front Office - Riverside Plumbing",
+        "givenName": null,
+        "familyName": null,
+        "organization": null,
+        "emails": [
+          "hello@someagency.com"
+        ],
+        "websites": [],
+        "phones": [],
+        "hasImage": false
+      },
+      "expect": {
+        "class": "businessCard",
+        "query": "Riverside Plumbing",
+        "domain": "someagency.com",
+        "via": "email",
+        "maxConfidence": "medium",
+        "flags": [
+          "brand-tail",
+          "email-domain-unrelated",
+          "via-email"
+        ],
+        "simpleIconsSlug": null
+      },
+      "rule": "MATCHING-ENGINE §2b brand-tail exception (issue #36) scope guard; ENGINE-CONTRACT R8.1b, R10.1b",
+      "why": "'Riverside Plumbing' has no catalog entry, so the brand-tail exception's own precondition fails and it does not fire: the existing order stands, the unrelated email domain wins, and R10.1b's medium cap plus flag are unchanged from before the amendment."
+    },
+    {
       "id": "decoration-apple-australia",
       "contact": {
         "displayName": "Apple - Australia",

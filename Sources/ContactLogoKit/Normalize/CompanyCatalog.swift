@@ -72,6 +72,7 @@ public enum CompanyCatalog {
         "comcast": "xfinity.com", "xfinity": "xfinity.com", "spectrum": "spectrum.com",
         "progressive": "progressive.com", "liberty mutual": "libertymutual.com",
         "farmers": "farmers.com", "nationwide": "nationwide.com",
+        "root insurance": "rootinsurance.com",
         "heb": "heb.com", "h-e-b": "heb.com",
         "kroger": "kroger.com", "randalls": "randalls.com", "safeway": "safeway.com",
         "publix": "publix.com", "walgreens": "walgreens.com", "cvs": "cvs.com",

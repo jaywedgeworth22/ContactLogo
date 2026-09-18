@@ -128,7 +128,7 @@ export function matchContact(contact: BookContact): ReviewItem {
     };
   }
 
-  const identity = resolveIdentity(contact, query);
+  const identity = resolveIdentity(contact, query, { isBrandTail: flags.includes("brand-tail") });
   const all = [...flags, ...(identity?.flags ?? [])];
   if (identity) {
     all.push(`via-${identity.via}`);

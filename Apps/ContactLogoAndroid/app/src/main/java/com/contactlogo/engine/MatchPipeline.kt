@@ -133,7 +133,7 @@ object MatchPipeline {
         }
 
         // R8 — identity resolution, strict order.
-        val identity = resolveIdentity(contact, resolvedQuery, organization, displayName)
+        val identity = resolveIdentity(contact, resolvedQuery, organization, displayName, "brand-tail" in flags)
             ?: run {
                 flags.add("no-identity")
                 return EngineResult(ContactClass.BUSINESS_CARD, resolvedQuery, null, null, flags, Confidence.SKIP)
@@ -288,7 +288,8 @@ object MatchPipeline {
         contact: ContactIdentity,
         query: String,
         organization: String,
-        displayName: String
+        displayName: String,
+        isBrandTail: Boolean
     ): Identity? {
         var socialIgnored = false
         var platformIgnored = false
@@ -315,7 +316,12 @@ object MatchPipeline {
             return Identity(d, "website", flags)
         }
 
-        // R8.2 Work email
+        // R8.2 Work email — computed ahead of the R8.1b check below (rather
+        // than returned immediately) so the domain it would select can be
+        // compared against a catalog hit for the tail before either is
+        // committed. `socialIgnored` still accumulates for a rejected email,
+        // exactly as if this were the terminal step.
+        var emailWinner: Pair<String, Set<String>>? = null
         for (e in contact.emailAddresses) {
             val at = e.lastIndexOf('@')
             if (at < 0) continue
@@ -331,8 +337,35 @@ object MatchPipeline {
             val flags = mutableSetOf<String>()
             if (socialIgnored) flags.add("social-url-ignored")
             if (Normalize.isSubdomainReduced(fullHost, d)) flags.add("subdomain-reduced")
-            return Identity(d, "email", flags)
+            emailWinner = d to flags
+            break
         }
+
+        // R8.1b — §2b brand-tail exception (issue #36). An org-only card's
+        // brand-tail query is what the card claims to be (R6.2): "Front Office
+        // - Root Insurance" claims to be Root Insurance, not whatever domain
+        // happens to sit behind a work email on the card. When the tail has a
+        // catalog domain and the email R8.2 would otherwise select shares no
+        // token with the query, the catalog domain wins instead — the tail
+        // names the brand, the unrelated inbox does not. R10.3 already caps
+        // every brand-tail card at MEDIUM regardless of `via`, so this changes
+        // which domain (and `via`) is reported, never the confidence tier. No
+        // catalog hit for the tail, or an email that *does* share a token with
+        // the query (the two sources already agree), leaves R8.2 in charge
+        // exactly as before: the email domain wins, capped at medium and
+        // flagged `email-domain-unrelated` when it disagrees.
+        if (isBrandTail) {
+            val tailCatalog = CompanyCatalog.domainForName(query)
+            val emailAgrees = emailWinner != null && Normalize.passesSimilarity(query, domainLabel(emailWinner.first))
+            if (tailCatalog != null && !emailAgrees) {
+                val flags = mutableSetOf<String>()
+                if (socialIgnored) flags.add("social-url-ignored")
+                if (platformIgnored) flags.add("platform-host-ignored")
+                return Identity(tailCatalog, "catalog", flags)
+            }
+        }
+
+        emailWinner?.let { (d, flags) -> return Identity(d, "email", flags) }
 
         // R8.3 Catalog: catalogDomain(query) ?? catalogDomain(organization) ?? catalogDomain(displayName)
         for (candidate in listOf(query, organization, displayName)) {
