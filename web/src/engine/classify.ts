@@ -8,6 +8,7 @@ import {
   isAcronym,
   isOrgSignalWord,
   isRoleOrPlace,
+  passesSimilarity,
   splitSegments,
 } from "./normalize.ts";
 import {
@@ -385,8 +386,16 @@ function note(flags: string[], flag: string): void {
  * R8 — website → work email → catalog → phone → guess.  The first step that
  * yields a domain wins; a rejection inside a step falls through to the next
  * candidate in that step, then to the next step.
+ *
+ * `isBrandTail` — true when the query carries the `brand-tail` flag (R6.2),
+ * which R6.2's own scope restricts to a card with no given/family name — wires
+ * in the R8.1b brand-tail catalog preference (§2b amendment, issue #36) below.
  */
-export function resolveIdentity(c: BookContact, brandName: string): ResolvedIdentity | undefined {
+export function resolveIdentity(
+  c: BookContact,
+  brandName: string,
+  opts?: { isBrandTail?: boolean },
+): ResolvedIdentity | undefined {
   const flags: string[] = [];
 
   for (const raw of websiteFields(c)) {
@@ -405,16 +414,43 @@ export function resolveIdentity(c: BookContact, brandName: string): ResolvedIden
     return identity(h.domain, "website", flags);
   }
 
+  // R8.2 — work email.  Computed ahead of the R8.1b check below (rather than
+  // returned immediately) so the domain it would select can be compared
+  // against a catalog hit for the tail before either is committed; every
+  // rejection along the way still lands on `flags`, exactly as if this were
+  // the terminal step.
+  let emailWinner: string | undefined;
   for (const raw of emailFields(c)) {
-    const h = deriveHost(emailHost(raw)); // R8.2 — R3.2 extends SOCIAL to email
+    const h = deriveHost(emailHost(raw)); // R3.2 extends SOCIAL to email
     if (!h || FREEMAIL.has(h.domain)) continue;
     if (isSocialHost(h)) {
       note(flags, "social-url-ignored");
       continue;
     }
     if (h.subdomainReduced) note(flags, "subdomain-reduced");
-    return identity(h.domain, "email", flags);
+    emailWinner = h.domain;
+    break;
   }
+
+  // R8.1b — §2b brand-tail exception (issue #36).  An org-only card's
+  // brand-tail query is what the card claims to be (R6.2): "Front Office -
+  // Root Insurance" claims to be Root Insurance, not whatever domain happens
+  // to sit behind a work email on the card.  When the tail has a catalog
+  // domain and the email R8.2 would otherwise select shares no token with the
+  // query, the catalog domain wins instead — the tail names the brand, the
+  // unrelated inbox does not.  R10.3 already caps every brand-tail card at
+  // MEDIUM regardless of `via`, so this changes which domain (and `via`) is
+  // reported, never the confidence tier.  No catalog hit for the tail, or an
+  // email that *does* share a token with the query (the two sources already
+  // agree), leaves R8.2 in charge exactly as before: the email domain wins,
+  // capped at medium and flagged `email-domain-unrelated` when it disagrees.
+  if (opts?.isBrandTail) {
+    const tailCatalog = lookupCompanyDomain(brandName);
+    const emailAgrees = emailWinner !== undefined && passesSimilarity(brandName, emailWinner.replace(/\.[^.]+$/, ""));
+    if (tailCatalog && !emailAgrees) return identity(tailCatalog, "catalog", flags);
+  }
+
+  if (emailWinner) return identity(emailWinner, "email", flags);
 
   const catalog =
     lookupCompanyDomain(brandName) || // R8.3

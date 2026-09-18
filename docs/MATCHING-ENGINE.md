@@ -42,6 +42,29 @@ Resolve a domain before any logo fetch, in this order:
 A lone given or family name that is a catalog firm (and has no personal email)
 is a business card, not a person. People who *work at* a company stay people.
 
+**Brand-tail exception (owner decision, 2026-09-18, issue #36).**  Steps 2 and
+3 swap for one shape only: an org-only card (no given/family name — §5 rule 8)
+whose display-name brand tail (§5 rule 8) has a catalog hit.  The tail is what
+the card claims to be, so a work email that shares no token with it is more
+likely an unrelated inbox — an agency, a subsidiary, a shared review address —
+than the brand actually named in the tail.  The catalog domain for the tail
+wins.  "Front Office - Root Insurance" + `hello@someagency.com` resolves
+`rootinsurance.com` via catalog, not `someagency.com` via email; the same card
+with no email at all resolved `rootinsurance.com` via catalog already, and
+still does.
+
+This is narrow, not a general reordering of §2b.  It fires only when **all**
+of: (a) the card has no given/family name, (b) the display-name tail carries
+the `brand-tail` flag (§5 rule 8), and (c) the tail itself has a catalog
+domain.  When any of those is false — a named person, a query that is not a
+brand tail, or a brand tail with no catalog entry — the existing order stands
+unchanged: the email domain is used, capped at MEDIUM, flagged
+`email-domain-unrelated`.  An email domain that *does* share a token with the
+tail is unaffected either way, because the two sources already agree on the
+brand.  Every brand-tail card is already capped at MEDIUM regardless of `via`
+(§6), so the exception changes which domain is reported, never the confidence
+tier.
+
 ## 3. Sources, in priority order
 
 1. **Preferred marks** — hand-reviewed iconic SVGs (Delta triangle).

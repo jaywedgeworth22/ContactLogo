@@ -1,15 +1,16 @@
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
     namespace = "com.contactlogo"
     // Google Play has required targetSdk 35 for new and updated app submissions
-    // since August 2025 (CL-24). AGP 8.5.2 already supports compiling and
-    // targeting API 35; Kotlin 1.9.24 / compose compiler 1.5.14 are unaffected
-    // and stay pinned together.
-    compileSdk = 35
+    // since August 2025 (CL-24); targetSdk stays at 35. compileSdk is bumped to
+    // 37 because Compose BOM 2026.08.00's artifacts require compiling against
+    // API 37 or later (androidx.compose.* 1.12.0) -- this is a compile-time-only
+    // change and does not affect targetSdk/minSdk runtime behavior.
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.contactlogo"
@@ -47,16 +48,15 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
-    }
+    // jvmTarget defaults to compileOptions.targetCompatibility under built-in
+    // Kotlin (AGP 9+), so no separate kotlinOptions/kotlin.compilerOptions
+    // block is needed here.
     buildFeatures {
         compose = true
         buildConfig = true
     }
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.14"
-    }
+    // Compose compiler version now tracks the org.jetbrains.kotlin.plugin.compose
+    // plugin version above; kotlinCompilerExtensionVersion is obsolete post-Kotlin 2.0.
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -80,7 +80,7 @@ dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
     implementation("androidx.activity:activity-compose:1.9.1")
-    implementation(platform("androidx.compose:compose-bom:2024.06.00"))
+    implementation(platform("androidx.compose:compose-bom:2026.08.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")

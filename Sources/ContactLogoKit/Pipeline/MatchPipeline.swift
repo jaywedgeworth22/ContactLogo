@@ -98,7 +98,7 @@ public struct MatchPipeline: Sendable {
         let homonym = GenericBlocklist.isHomonymRisk(query)
         if homonym { flags.append("homonym-risk") }
 
-        let outcome = IdentityResolver.resolveDetailed(c, brandName: query)
+        let outcome = IdentityResolver.resolveDetailed(c, brandName: query, isBrandTail: flags.contains("brand-tail"))
         let redirectRisk = outcome.identity.map { DomainDeriver.mergedDomains.contains($0.domain) } ?? false
         if redirectRisk { flags.append("brand-redirect-risk") }
         flags.append(contentsOf: outcome.flags)

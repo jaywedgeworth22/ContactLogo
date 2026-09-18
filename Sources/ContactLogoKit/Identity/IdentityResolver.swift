@@ -27,11 +27,15 @@ public enum IdentityResolver {
         public let flags: [String]
     }
 
-    public static func resolve(_ c: ContactIdentity, brandName: String) -> ResolvedIdentity? {
-        resolveDetailed(c, brandName: brandName).identity
+    public static func resolve(_ c: ContactIdentity, brandName: String, isBrandTail: Bool = false) -> ResolvedIdentity? {
+        resolveDetailed(c, brandName: brandName, isBrandTail: isBrandTail).identity
     }
 
-    public static func resolveDetailed(_ c: ContactIdentity, brandName: String) -> Outcome {
+    /// `isBrandTail` — true when the query carries the `brand-tail` flag (R6.2),
+    /// which R6.2's own scope restricts to a card with no given/family name —
+    /// wires in the R8.1b brand-tail catalog preference (§2b amendment, issue
+    /// #36) below.
+    public static func resolveDetailed(_ c: ContactIdentity, brandName: String, isBrandTail: Bool = false) -> Outcome {
         var flags: [String] = []
 
         func note(_ flag: String) {
@@ -50,14 +54,45 @@ public enum IdentityResolver {
             return Outcome(identity: ResolvedIdentity(domain: d.domain, via: .website), flags: flags)
         }
 
-        // R8.2 — work email.  R3.2: a social host is no better here.
+        // R8.2 — work email.  R3.2: a social host is no better here.  Computed
+        // ahead of the R8.1b check below (rather than returned immediately) so
+        // the domain it would select can be compared against a catalog hit for
+        // the tail before either is committed; every rejection along the way
+        // still lands on `flags`, exactly as if this were the terminal step.
+        var emailWinner: String?
         for raw in c.emailDomains {
             guard let d = DomainDeriver.reduce(DomainDeriver.emailHost(raw)) else { continue }
             if DomainDeriver.freemail.contains(d.domain) { continue }
             if DomainDeriver.isSocial(d) { note("social-url-ignored"); continue }
             if d.subdomainReduced { note("subdomain-reduced") }
+            emailWinner = d.domain
+            break
+        }
+
+        // R8.1b — §2b brand-tail exception (issue #36).  An org-only card's
+        // brand-tail query is what the card claims to be (R6.2): "Front Office -
+        // Root Insurance" claims to be Root Insurance, not whatever domain
+        // happens to sit behind a work email on the card.  When the tail has a
+        // catalog domain and the email R8.2 would otherwise select shares no
+        // token with the query, the catalog domain wins instead — the tail
+        // names the brand, the unrelated inbox does not.  R10.3 already caps
+        // every brand-tail card at MEDIUM regardless of `via`, so this changes
+        // which domain (and `via`) is reported, never the confidence tier.  No
+        // catalog hit for the tail, or an email that *does* share a token with
+        // the query (the two sources already agree), leaves R8.2 in charge
+        // exactly as before: the email domain wins, capped at medium and
+        // flagged `email-domain-unrelated` when it disagrees.
+        if isBrandTail, let tailCatalog = CompanyCatalog.domain(forName: brandName) {
+            let emailAgrees = emailWinner.map { NameNormalizer.passesSimilarity(query: brandName, brandName: Self.domainLabel($0)) } ?? false
+            if !emailAgrees {
+                note("via-catalog")
+                return Outcome(identity: ResolvedIdentity(domain: tailCatalog, via: .catalog), flags: flags)
+            }
+        }
+
+        if let emailWinner {
             note("via-email")
-            return Outcome(identity: ResolvedIdentity(domain: d.domain, via: .email), flags: flags)
+            return Outcome(identity: ResolvedIdentity(domain: emailWinner, via: .email), flags: flags)
         }
 
         // R8.3 — offline catalog.
@@ -94,5 +129,14 @@ public enum IdentityResolver {
         if let known = CompanyCatalog.domain(forName: name) { return known }
         guard let slug = NameNormalizer.guessSlug(name) else { return nil }
         return "\(slug).com"
+    }
+
+    /// R10.1b — the registrable domain minus its final label, for the R8.1b
+    /// relatedness check ("bluebonnetdental.com" -> "bluebonnetdental").  Kept
+    /// identical to `MatchPipeline.domainLabel` and the TypeScript/Kotlin
+    /// engines.
+    static func domainLabel(_ domain: String) -> String {
+        guard let dot = domain.lastIndex(of: ".") else { return domain }
+        return String(domain[domain.startIndex..<dot])
     }
 }

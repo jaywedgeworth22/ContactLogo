@@ -29,6 +29,14 @@ class ContactsRepository(private val context: Context) {
             .build()
     }
 
+    /**
+     * The write/delete control flow, testable on its own (see
+     * `ContactPhotoOps`'s doc comment).  [AndroidContactPhotoPlatform] below is
+     * the real, framework-touching implementation; `readPhoto`/`writePhoto`/
+     * `removePhoto` delegate to it unchanged.
+     */
+    private val photoOps = ContactPhotoOps(AndroidContactPhotoPlatform(context))
+
     private companion object {
         /** Contacts renders small; 512 matches the Swift kit and stays under the
          *  ~1 MB the provider will accept for a full-size photo. */
@@ -168,14 +176,7 @@ class ContactsRepository(private val context: Context) {
      * Prefers the high-res display photo; falls back to the thumbnail stream.
      */
     suspend fun readPhoto(contactId: String): ByteArray? = withContext(Dispatchers.IO) {
-        val id = contactId.toLongOrNull() ?: return@withContext null
-        val contactUri = ContentUris.withAppendedId(ContactsContract.Contacts.CONTENT_URI, id)
-        try {
-            ContactsContract.Contacts.openContactPhotoInputStream(context.contentResolver, contactUri, true)
-                ?.use { it.readBytes() }
-        } catch (_: Exception) {
-            null
-        }
+        photoOps.readExistingPhoto(contactId)
     }
 
     suspend fun prepareLogo(photoUrl: String): ByteArray? = withContext(Dispatchers.IO) {
@@ -188,9 +189,52 @@ class ContactsRepository(private val context: Context) {
     }
 
     suspend fun writePhoto(contactId: String, bytes: ByteArray): Boolean = withContext(Dispatchers.IO) {
-        try {
+        photoOps.write(contactId, bytes)
+    }
+
+    suspend fun removePhoto(contactId: String): Boolean = withContext(Dispatchers.IO) {
+        photoOps.remove(contactId)
+    }
+
+    suspend fun applyPhoto(contactId: String, photoUrl: String): Boolean {
+        val bytes = prepareLogo(photoUrl) ?: return false
+        return writePhoto(contactId, bytes)
+    }
+
+    /**
+     * The real, framework-touching implementation of [ContactPhotoPlatform].
+     * Bodies are unchanged from the pre-extraction `ContactsRepository` —
+     * moved here, not rewritten — so this refactor is a seam, not a behavior
+     * change.
+     */
+    private class AndroidContactPhotoPlatform(private val context: Context) : ContactPhotoPlatform {
+
+        override fun rawContactId(contactId: String): Long? {
+            val cursor = context.contentResolver.query(
+                ContactsContract.RawContacts.CONTENT_URI,
+                arrayOf(ContactsContract.RawContacts._ID),
+                "${ContactsContract.RawContacts.CONTACT_ID} = ?",
+                arrayOf(contactId),
+                null
+            )
+            cursor?.use {
+                if (it.moveToFirst()) {
+                    val idx = it.getColumnIndex(ContactsContract.RawContacts._ID)
+                    return it.getLong(idx)
+                }
+            }
+            return null
+        }
+
+        override fun readPhoto(contactId: String): ByteArray? {
+            val id = contactId.toLongOrNull() ?: return null
+            val contactUri = ContentUris.withAppendedId(ContactsContract.Contacts.CONTENT_URI, id)
+            return ContactsContract.Contacts.openContactPhotoInputStream(context.contentResolver, contactUri, true)
+                ?.use { it.readBytes() }
+        }
+
+        override fun writePhoto(rawContactId: Long, bytes: ByteArray): Boolean {
             val cr = context.contentResolver
-            val rawContactId = getRawContactId(cr, contactId) ?: return@withContext false
             val ops = ArrayList<ContentProviderOperation>()
             ops.add(deletePhotoOp(rawContactId))
             ops.add(
@@ -201,51 +245,21 @@ class ContactsRepository(private val context: Context) {
                     .build()
             )
             cr.applyBatch(ContactsContract.AUTHORITY, ops)
-            true
-        } catch (_: Exception) {
-            false
+            return true
         }
-    }
 
-    suspend fun removePhoto(contactId: String): Boolean = withContext(Dispatchers.IO) {
-        try {
-            val cr = context.contentResolver
-            val rawContactId = getRawContactId(cr, contactId) ?: return@withContext false
-            cr.applyBatch(ContactsContract.AUTHORITY, arrayListOf(deletePhotoOp(rawContactId)))
-            true
-        } catch (_: Exception) {
-            false
+        override fun deletePhoto(rawContactId: Long): Boolean {
+            context.contentResolver.applyBatch(ContactsContract.AUTHORITY, arrayListOf(deletePhotoOp(rawContactId)))
+            return true
         }
-    }
 
-    suspend fun applyPhoto(contactId: String, photoUrl: String): Boolean {
-        val bytes = prepareLogo(photoUrl) ?: return false
-        return writePhoto(contactId, bytes)
-    }
-
-    private fun deletePhotoOp(rawContactId: Long): ContentProviderOperation =
-        ContentProviderOperation.newDelete(ContactsContract.Data.CONTENT_URI)
-            .withSelection(
-                "${ContactsContract.Data.RAW_CONTACT_ID} = ? AND ${ContactsContract.Data.MIMETYPE} = ?",
-                arrayOf(rawContactId.toString(), ContactsContract.CommonDataKinds.Photo.CONTENT_ITEM_TYPE)
-            )
-            .build()
-
-    private fun getRawContactId(cr: ContentResolver, contactId: String): Long? {
-        val cursor = cr.query(
-            ContactsContract.RawContacts.CONTENT_URI,
-            arrayOf(ContactsContract.RawContacts._ID),
-            "${ContactsContract.RawContacts.CONTACT_ID} = ?",
-            arrayOf(contactId),
-            null
-        )
-        cursor?.use {
-            if (it.moveToFirst()) {
-                val idx = it.getColumnIndex(ContactsContract.RawContacts._ID)
-                return it.getLong(idx)
-            }
-        }
-        return null
+        private fun deletePhotoOp(rawContactId: Long): ContentProviderOperation =
+            ContentProviderOperation.newDelete(ContactsContract.Data.CONTENT_URI)
+                .withSelection(
+                    "${ContactsContract.Data.RAW_CONTACT_ID} = ? AND ${ContactsContract.Data.MIMETYPE} = ?",
+                    arrayOf(rawContactId.toString(), ContactsContract.CommonDataKinds.Photo.CONTENT_ITEM_TYPE)
+                )
+                .build()
     }
 
     /**

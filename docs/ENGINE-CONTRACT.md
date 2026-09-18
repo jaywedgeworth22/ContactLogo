@@ -436,6 +436,31 @@ registrableDomain(value)`. Reject (and flag) when
 `social-url-ignored`); full host or `d ∈ PLATFORM` (flag
 `platform-host-ignored`). Otherwise → `{d, website}`.
 
+**R8.1b Brand-tail catalog preference (§2b amendment, issue #36, owner
+decision 2026-09-18).** Applies only when `query` carries the `brand-tail`
+flag (R6.2) — which R6.2's own scope restricts to a card with no given/family
+name — and `catalogDomain(query) != null`.  Let `d = catalogDomain(query)`,
+and let `e` be the domain R8.2 would select from the contact's emails (its
+first non-rejected candidate, evaluated with R8.2's own rules; a rejection
+there still emits its flag).  If `e` is undefined, or
+`passesSimilarity(query, e-without-its-final-label)` (R9.1) is false, return
+`{d, catalog}` and do not evaluate R8.2.  Otherwise (`e` shares a token with
+`query`) proceed to R8.2 normally, which will select `e`.
+
+This is the one place a name-derived domain outranks contact-owned evidence,
+and it is deliberately narrow: `query` is a brand tail only when R6.2 already
+found a catalog hit, an `ORG_SIGNAL` word, or a written acronym for it — never
+an unattested string — so the tail is what an org-only card claims to be.  A
+work email that shares no token with it is more likely to be an unrelated
+inbox (an agency, a subsidiary, a shared review address) than the tail's own
+brand.  R10.3 already caps every brand-tail card at MEDIUM regardless of
+`via`, so this changes which domain and flag are correct, never the
+confidence tier: `via` becomes `catalog` and `email-domain-unrelated`
+(R10.1b) does not fire, because the email step never ran.  When there is no
+catalog hit for the tail, R8.2 runs exactly as written below: the email
+domain wins, capped at MEDIUM by R10.1b's `email-domain-unrelated` flag when
+it shares no token with the query.
+
 **R8.2 Work email.** For each email in contact order: `d =
 registrableDomain(part after the last '@')`. Reject when `d == null`,
 `d ∈ FREEMAIL`, or `d ∈ SOCIAL` (flag `social-url-ignored`) — see R3.2.
@@ -490,8 +515,9 @@ The canonical table is `Sources/ContactLogoKit/Normalize/CompanyCatalog.swift`
 (≈150 keys). The TypeScript table is a subset and the Kotlin table a smaller
 subset; both MUST be brought to parity. Entries the corpus depends on:
 `apple, apple inc, amazon, at&t, att, chase, costco, delta, exxon, exxonmobil,
-fedex, gcx, h&r block, h-e-b, heb, kroger, publix, raise, southwest,
-southwest airlines, texas by texas, txt, united, walgreens, 7-eleven`.
+fedex, gcx, h&r block, h-e-b, heb, kroger, publix, raise, root insurance,
+southwest, southwest airlines, texas by texas, txt, united, walgreens,
+7-eleven`.
 
 **R8.4 Phone.** For each phone in contact order, `phoneDomain(p)`:
 digits only; 11 digits starting `1` → drop the `1`; >10 digits → last 10; look
