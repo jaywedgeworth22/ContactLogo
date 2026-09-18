@@ -37,7 +37,37 @@
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
-    <div id="app"></div>
+    <!--
+      Static prerender shell for no-JS browsers and crawlers (board 6da13af2).
+      This is real markup, not a <noscript> fallback — crawlers that parse
+      HTML without executing scripts still render it, and it displays fine
+      with JS disabled.  mountShell() in src/app.ts calls
+      root.replaceChildren() on first render, so the SPA fully replaces this
+      content once it boots.  Keep this copy in sync with the hero copy and
+      buildLanding()'s "what" section in src/app.ts if either changes.
+    -->
+    <div id="app">
+      <main class="app">
+        <header class="hero">
+          <div class="hero-row">
+            <div class="wordmark">
+              <img class="hero-mark" src="/icon-192.png" width="40" height="40" alt="" />
+              <h1>ContactLogo</h1>
+            </div>
+          </div>
+          <p>
+            Brand icons for your address book.  Import a vCard, Google CSV, or Google Contacts, review every match, then download an updated card or sync directly to Google.  Existing person photos are never replaced.
+          </p>
+        </header>
+        <section class="section">
+          <h2>Every Business in Your Contacts, With Its Real Logo</h2>
+          <p>
+            Your address book is full of grey initial circles.  ContactLogo finds the official mark for each business card in it — the pharmacy, the bank, the school, the plumber — so calls, messages and mail arrive with a face you recognize instead of two letters.
+          </p>
+        </section>
+        <p><a class="btn secondary" href="https://github.com/jaywedgeworth22/ContactLogo">View Source on GitHub</a></p>
+      </main>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
