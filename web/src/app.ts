@@ -6,11 +6,12 @@ import {
 import { looksLikeContactCsv, parseGoogleCsv } from "./engine/csv.ts";
 import {
   clearGoogleSyncUndoBatch,
-  fetchPhotoAsDataUrl,
   getLatestGoogleSyncUndoBatch,
   importGoogleContacts,
+  isUndoablePriorPhoto,
   requestAccessToken,
   saveGoogleSyncUndoBatch,
+  snapshotPriorGooglePhoto,
   undoGooglePhotoSync,
   updateGoogleContactPhoto,
   type GoogleSyncUndoRecord,
@@ -607,14 +608,12 @@ async function syncToGoogleContacts() {
           throw new Error(`logo could not be prepared (${failure})`);
         }
 
-        // Capture prior photo state BEFORE mutating
-        let priorPhotoDataUrl: string | undefined;
-        if (item.contact.hadExistingPhoto) {
-          if (item.contact.existingPhotoUrl) {
-            priorPhotoDataUrl = await fetchPhotoAsDataUrl(item.contact.existingPhotoUrl, token);
-          } else if (item.contact.photoDataUrl?.startsWith("data:")) {
-            priorPhotoDataUrl = item.contact.photoDataUrl;
-          }
+        // Capture prior photo bytes BEFORE mutating.  If the contact already
+        // has a photo and we cannot snapshot it, skip the write — otherwise
+        // Undo has nothing to restore and the original portrait is gone.
+        const priorPhotoDataUrl = await snapshotPriorGooglePhoto(item.contact, token);
+        if (item.contact.hadExistingPhoto && !isUndoablePriorPhoto(priorPhotoDataUrl)) {
+          throw new Error("could not back up the existing photo for undo");
         }
         const undoRecord: GoogleSyncUndoRecord = {
           resourceName: item.contact.googleResourceName,
@@ -684,7 +683,12 @@ async function undoGoogleContactsSync() {
       render();
     });
 
-    state.hasGoogleUndoBatch = false;
+    if (failed === 0) {
+      state.hasGoogleUndoBatch = false;
+    } else {
+      const remaining = await getLatestGoogleSyncUndoBatch();
+      state.hasGoogleUndoBatch = Boolean(remaining && remaining.records.length > 0);
+    }
 
     // Update in-memory contacts
     const byResource = new Map(batch.records.map((r) => [r.resourceName, r]));
