@@ -213,7 +213,11 @@ object MatchPipeline {
 
     private fun looksLikePersonName(n: String): Boolean {
         val parts = Normalize.clean(n).replace(",", " ").split(Regex("""\s+""")).filter { it.isNotBlank() }
-        if (parts.size !in 2..4) return false
+        // 2026-09-20 audit: the upper bound of 4 tokens caused long
+        // real-world names ("Juan Carlos de la Cruz") to fall through
+        // and be mis-promoted by looksLikeBusinessName's ≥3-token branch.
+        // Kept identical to the Swift engine.
+        if (parts.size < 2) return false
         return parts.all { it.matches(Regex("""^[A-Za-z][A-Za-z'.-]{1,30}$""")) }
     }
 
@@ -238,8 +242,12 @@ object MatchPipeline {
         val cleaned = Normalize.clean(candidate)
         val parts = cleaned.split(Regex("""\s+""")).filter { it.isNotBlank() }
         if (parts.size < 2) return false
-        if (parts.any { Normalize.isBusinessSuffixWord(it) }) return true
-        if (parts.any { Normalize.isOrgSignalWord(it) }) return true
+        // 2026-09-20 audit: strip trailing punctuation before signal/suffix
+        // checks ("Joe's Plumbing." → "Plumbing") so a sentence-ending period
+        // doesn't drop a real business.  Mirrors the Swift engine.
+        val stripped = parts.map { it.trimEnd('.', ',', ';', '!', '?') }
+        if (stripped.any { Normalize.isBusinessSuffixWord(it) }) return true
+        if (stripped.any { Normalize.isOrgSignalWord(it) }) return true
         if (parts.size >= 3 && !looksLikePersonName(cleaned)) return true
         return false
     }

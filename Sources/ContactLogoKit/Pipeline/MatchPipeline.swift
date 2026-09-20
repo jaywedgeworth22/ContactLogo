@@ -517,7 +517,13 @@ public struct MatchPipeline: Sendable {
     private func looksLikePersonName(_ name: String) -> Bool {
         let cleaned = NameNormalizer.clean(name).replacingOccurrences(of: ",", with: " ")
         let parts = cleaned.split(separator: " ").map(String.init)
-        guard (2...4).contains(parts.count) else { return false }
+        guard parts.count >= 2 else { return false }
+        // 2026-09-20 audit: the upper bound of 4 tokens caused long
+        // real-world names ("Juan Carlos de la Cruz", "María del Carmen
+        // Reyes") to fall through and be mis-promoted to .businessCard by
+        // looksLikeBusinessName's ≥3-token branch.  The shape is the
+        // same regardless of token count: every part is a short
+        // alphabetic word, possibly with apostrophes or hyphens.
         return parts.allSatisfy { $0.range(of: #"^[A-Za-z][A-Za-z'.-]{1,30}$"#, options: .regularExpression) != nil }
     }
 }

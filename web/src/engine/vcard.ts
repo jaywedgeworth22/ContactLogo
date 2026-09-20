@@ -188,17 +188,28 @@ function firstValued(properties: VcardProperty[], name: string): VcardProperty |
  * 2026-09-20 audit — prefer work/business labels over home/personal so the
  * brand-relevant inbox or URL is the one the engine sees.  vCard TYPE
  * parameters can be a single token (`TYPE=WORK`), comma-separated
- * (`TYPE=WORK,VOICE`), or repeated on adjacent lines (`;TYPE=WORK;TYPE=HOME`).
+ * (`TYPE=INTERNET,WORK`), or repeated on adjacent lines
+ * (`;TYPE=WORK;TYPE=HOME`).  Split each TYPE= value into its tokens so
+ * WORK is recognized regardless of position in the comma list.
  */
 function labelScore(params: string): number {
   const upper = params.toUpperCase();
+  const typeTokens = new Set<string>();
+  // Each `TYPE=...` value runs until the next parameter separator (`;`) or
+  // the end of the params string.  Allow commas INSIDE the value so a
+  // comma-separated label list (`TYPE=INTERNET,WORK`) is tokenised into
+  // {"INTERNET", "WORK"}, not just {"INTERNET"}.
+  for (const match of upper.matchAll(/TYPE\s*=\s*([^;]+)/g)) {
+    for (const token of match[1].split(",").map((s) => s.trim()).filter(Boolean)) {
+      typeTokens.add(token);
+    }
+  }
   // Lower wins.  Work/business beats school; home/iCloud lose.
-  if (/\bTYPE\s*=\s*[^,;]*\bWORK\b/i.test(upper)) return 0;
-  if (/\bTYPE\s*=\s*[^,;]*\bBUSINESS\b/i.test(upper)) return 0;
-  if (/\bTYPE\s*=\s*[^,;]*\b(?:SCHOOL|EDU)\b/i.test(upper)) return 2;
-  if (/\bTYPE\s*=\s*[^,;]*\bHOME\b/i.test(upper)) return 3;
+  if (typeTokens.has("WORK") || typeTokens.has("BUSINESS")) return 0;
+  if (typeTokens.has("SCHOOL") || typeTokens.has("EDU")) return 2;
+  if (typeTokens.has("HOME")) return 3;
   // Unlabeled: assume personal but only as a last resort.
-  return 1;
+  return 4;
 }
 
 function firstPreferred(properties: VcardProperty[], name: string): VcardProperty | undefined {

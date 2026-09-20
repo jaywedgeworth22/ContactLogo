@@ -416,6 +416,24 @@ test("Issue #75 fallback: unlabeled vCard emails keep original order but the eng
   assert.equal(res?.via, "email");
 });
 
+test("vCard TYPE=WORK recognized anywhere in a comma-separated TYPE list", () => {
+  // 2026-09-20 audit — real-world vCards list labels in any order
+  // (`TYPE=INTERNET,WORK`, `TYPE=VOICE,CELL`).  The labelScore parser must
+  // find WORK regardless of position, not just when WORK is the first
+  // token after TYPE=.
+  const card = [
+    "BEGIN:VCARD",
+    "VERSION:3.0",
+    "FN:Acme Consulting",
+    "EMAIL:contact@gmail.com",
+    "EMAIL;TYPE=INTERNET,WORK:contact@acme.example",
+    "END:VCARD",
+  ].join("\r\n");
+  const contacts = parseVcard(card);
+  assert.equal(contacts.length, 1);
+  assert.deepEqual(contacts[0]?.emails, ["contact@acme.example", "contact@gmail.com"]);
+});
+
 test("Issue #75: secondary corporate website on vCard resolves domain when primary is social", () => {
   const card = [
     "BEGIN:VCARD",

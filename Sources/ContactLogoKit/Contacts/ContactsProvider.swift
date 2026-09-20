@@ -126,10 +126,13 @@ public final class CNContactsProvider: ContactsProvider, @unchecked Sendable {
     }
 
     /// Order `contact.emailAddresses` so work/business labels come first.
-    /// Tie-break on declaration order.  Returns just the host portion
-    /// (`gmail.com`) the same way the previous flat pass did.
+    /// Tie-break on declaration order, never on alphabetised hostname — an
+    /// alphabetical tie-break silently reorders the user's address book
+    /// (the web `google-contacts.ts` already pinned this rule, see the 2026-
+    /// 09-20 audit).  Returns just the host portion (`gmail.com`) the same
+    /// way the previous flat pass did.
     private static func rankedEmailDomains(from contact: CNContact) -> [String] {
-        let scored: [(Int, String)] = contact.emailAddresses.compactMap { labeled -> (Int, String)? in
+        let indexed: [(Int, String, Int)] = contact.emailAddresses.enumerated().compactMap { (idx, labeled) -> (Int, String, Int)? in
             let email = labeled.value as String
             guard let host = email.split(separator: "@").last.map(String.init) else { return nil }
             let label = labeled.label ?? ""
@@ -143,12 +146,16 @@ public final class CNContactsProvider: ContactsProvider, @unchecked Sendable {
             } else if label.contains(CNLabelHome) || label == CNLabelHome {
                 score = 3
             } else {
-                score = 1 // unlabeled or iCloud — treat as personal but only
-                // after a work label; we don't second-guess the contact.
+                // Unlabeled / iCloud / custom — last resort; the user's
+                // declaration order survives via the index tie-break.
+                score = 4
             }
-            return (score, host.lowercased())
+            return (score, host.lowercased(), idx)
         }
-        return scored.sorted { $0.0 < $1.0 || ($0.0 == $1.0 && $0.1 < $1.1) }.map(\.1)
+        return indexed.sorted { lhs, rhs in
+            if lhs.0 != rhs.0 { return lhs.0 < rhs.0 }
+            return lhs.2 < rhs.2
+        }.map(\.1)
     }
 
     private func mutableContact(id: String) throws -> CNMutableContact {
