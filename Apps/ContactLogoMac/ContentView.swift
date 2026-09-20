@@ -27,8 +27,19 @@ struct ContentView: View {
                     ContentUnavailableView("Scan your contacts",
                                            systemImage: "person.crop.square.filled.and.at.rectangle",
                                            description: Text("ContactLogo finds brand logos for the businesses in your address book — you approve every change."))
+                    if model.limitedAccessGranted {
+                        LimitedAccessBanner()
+                    }
                     Button("Scan contacts") { Task { await model.scanAndMatch() } }
                         .buttonStyle(.borderedProminent)
+                    if model.totalScannedCount > 0 {
+                        MacScanBreakdown(
+                            scanned: model.totalScannedCount,
+                            business: model.businessTargetsCount,
+                            affiliated: model.affiliatedTargetsCount,
+                            protected: model.protectedPersonCount
+                        )
+                    }
                 case .scanning:
                     ProgressView("Reading contacts…")
                 case .matching(let done, let total):
@@ -42,6 +53,51 @@ struct ContentView: View {
             .padding()
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
+    }
+}
+
+/// 2026-09-20 audit — surfaces Apple `.limited` Contacts access on macOS.
+struct LimitedAccessBanner: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("Limited contacts access", systemImage: "person.crop.circle.badge.exclamationmark")
+                .font(.subheadline.bold())
+                .foregroundStyle(.orange)
+            Text("ContactLogo can only see the contacts you chose.  Open System Settings → Privacy & Security → Contacts to grant full access.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Button("Open System Settings") {
+                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Contacts") {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+            .font(.caption.bold())
+            .padding(.top, 2)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.10))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+/// macOS idle scan breakdown — same shape as the iOS card, no UIKit import.
+struct MacScanBreakdown: View {
+    let scanned: Int
+    let business: Int
+    let affiliated: Int
+    let protected: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Last scan breakdown")
+                .font(.caption.bold())
+                .foregroundStyle(.secondary)
+            Text("\(scanned.formatted()) contacts scanned · \(business.formatted()) business · \(affiliated.formatted()) affiliated · \(protected.formatted()) personal protected")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.top, 8)
     }
 }
 
@@ -69,6 +125,9 @@ struct ReviewQueueView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            if model.limitedAccessGranted {
+                LimitedAccessBanner()
+            }
             HStack {
                 Text("Review queue").font(.title2.bold())
                 Spacer()

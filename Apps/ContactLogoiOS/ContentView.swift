@@ -54,15 +54,75 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Brand icons for your address book.  Review every logo before it is written.")
                 .foregroundStyle(.secondary)
+            if model.limitedAccessGranted {
+                LimitedAccessBanner()
+            }
             Label("Ready to apply (\(model.autoAccepted.count))", systemImage: "checkmark.circle.fill")
             Label("Needs review (\(model.needsReview.count))", systemImage: "questionmark.circle")
             Label("Not found (\(model.notFound.count))", systemImage: "minus.circle")
+            if model.totalScannedCount > 0 {
+                ScanBreakdownRow(
+                    scanned: model.totalScannedCount,
+                    business: model.businessTargetsCount,
+                    affiliated: model.affiliatedTargetsCount,
+                    protected: model.protectedPersonCount
+                )
+            }
             Button("Scan contacts") { Task { await model.scanAndMatch() } }
                 .buttonStyle(.borderedProminent)
             Spacer()
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// 2026-09-20 audit — surfaces Apple `.limited` Contacts access.  Without
+/// this, a user who picks "Only selected contacts" sees a tiny queue with
+/// no explanation (the canonical "only 25 of 15k contacts" symptom).
+struct LimitedAccessBanner: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("Limited contacts access", systemImage: "person.crop.circle.badge.exclamationmark")
+                .font(.subheadline.bold())
+                .foregroundStyle(.orange)
+            Text("ContactLogo can only see the contacts you chose in iOS Settings.  Grant full access to scan your whole address book.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Button("Open iOS Settings") {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            }
+            .font(.caption.bold())
+            .padding(.top, 2)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.10))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+/// Bottom-of-idle scan breakdown so a user can tell at a glance whether
+/// the address book was actually scanned (vs. an empty `.limited` subset)
+/// and how the 15k contacts split across business / affiliated / personal.
+struct ScanBreakdownRow: View {
+    let scanned: Int
+    let business: Int
+    let affiliated: Int
+    let protected: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Last scan breakdown")
+                .font(.caption.bold())
+                .foregroundStyle(.secondary)
+            Text("\(scanned.formatted()) contacts scanned · \(business.formatted()) business · \(affiliated.formatted()) affiliated · \(protected.formatted()) personal protected")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.top, 8)
     }
 }
 
@@ -92,6 +152,10 @@ struct ReviewQueueView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            if model.limitedAccessGranted {
+                LimitedAccessBanner()
+                    .padding(.horizontal)
+            }
             if model.totalScannedCount > 0 {
                 HStack(spacing: 6) {
                     Image(systemName: "shield.checkmark.fill")
