@@ -184,6 +184,32 @@ function firstValued(properties: VcardProperty[], name: string): VcardProperty |
   return properties.find((p) => p.name === name && p.value.trim() !== "");
 }
 
+/**
+ * 2026-09-20 audit — prefer work/business labels over home/personal so the
+ * brand-relevant inbox or URL is the one the engine sees.  vCard TYPE
+ * parameters can be a single token (`TYPE=WORK`), comma-separated
+ * (`TYPE=WORK,VOICE`), or repeated on adjacent lines (`;TYPE=WORK;TYPE=HOME`).
+ */
+function labelScore(params: string): number {
+  const upper = params.toUpperCase();
+  // Lower wins.  Work/business beats school; home/iCloud lose.
+  if (/\bTYPE\s*=\s*[^,;]*\bWORK\b/i.test(upper)) return 0;
+  if (/\bTYPE\s*=\s*[^,;]*\bBUSINESS\b/i.test(upper)) return 0;
+  if (/\bTYPE\s*=\s*[^,;]*\b(?:SCHOOL|EDU)\b/i.test(upper)) return 2;
+  if (/\bTYPE\s*=\s*[^,;]*\bHOME\b/i.test(upper)) return 3;
+  // Unlabeled: assume personal but only as a last resort.
+  return 1;
+}
+
+function firstPreferred(properties: VcardProperty[], name: string): VcardProperty | undefined {
+  const matches = properties.filter((p) => p.name === name && p.value.trim() !== "");
+  if (matches.length === 0) return undefined;
+  const scored = [...matches].sort(
+    (a, b) => labelScore(a.params) - labelScore(b.params),
+  );
+  return scored[0];
+}
+
 function plain(properties: VcardProperty[], name: string): string | undefined {
   const found = firstValued(properties, name);
   if (!found) return undefined;
@@ -202,6 +228,22 @@ function allPlain(properties: VcardProperty[], name: string): string[] {
   return values;
 }
 
+/** All plain values, ordered work → school → home → unlabeled (ties keep
+ *  declaration order so unlabeled cards round-trip the user's input).
+ */
+function allPlainPreferred(properties: VcardProperty[], name: string): string[] {
+  const matched = properties.filter((p) => p.name === name && p.value.trim() !== "");
+  const indexed = matched.map((p, idx) => ({
+    value: unescapeVcard(p.value).trim(),
+    score: labelScore(p.params),
+    idx,
+  }));
+  return indexed
+    .filter((row): row is { value: string; score: number; idx: number } => Boolean(row.value))
+    .sort((a, b) => a.score - b.score || a.idx - b.idx)
+    .map((row) => row.value);
+}
+
 function component(properties: VcardProperty[], name: string, index: number): string | undefined {
   const found = firstValued(properties, name);
   if (!found) return undefined;
@@ -215,9 +257,9 @@ function buildContact(properties: VcardProperty[]): VcardContact | null {
   const familyName = component(properties, "N", 0);
   const givenName = component(properties, "N", 1);
   const organization = component(properties, "ORG", 0);
-  const emails = allPlain(properties, "EMAIL");
+  const emails = allPlainPreferred(properties, "EMAIL");
   const phones = allPlain(properties, "TEL");
-  const websites = allPlain(properties, "URL");
+  const websites = allPlainPreferred(properties, "URL");
   const email = emails[0];
   const phone = phones[0];
   const website = websites[0];

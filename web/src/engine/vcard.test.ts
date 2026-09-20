@@ -377,6 +377,29 @@ test("a dangling = before END:VCARD does not swallow the card boundary", () => {
 });
 
 test("Issue #75: secondary corporate email on vCard resolves domain when primary is freemail", () => {
+  // 2026-09-20 audit — vCard carries `TYPE=WORK` on the corporate email;
+  // when present, the work-labeled entry surfaces first and the engine
+  // resolves the brand identity without scanning further.
+  const card = [
+    "BEGIN:VCARD",
+    "VERSION:3.0",
+    "FN:Acme Consulting",
+    "EMAIL:contact@gmail.com",
+    "EMAIL;TYPE=WORK:contact@acme.example",
+    "END:VCARD",
+  ].join("\r\n");
+  const contacts = parseVcard(card);
+  assert.equal(contacts.length, 1);
+  assert.deepEqual(contacts[0]?.emails, ["contact@acme.example", "contact@gmail.com"]);
+  const res = resolveIdentity(contacts[0]!, "Acme");
+  assert.equal(res?.domain, "acme.example");
+  assert.equal(res?.via, "email");
+});
+
+test("Issue #75 fallback: unlabeled vCard emails keep original order but the engine still resolves", () => {
+  // Without TYPE parameters the parser can't tell which is work — preserve
+  // the user's declared order and let the multi-value resolveIdentity path
+  // from issue #75 do its job.
   const card = [
     "BEGIN:VCARD",
     "VERSION:3.0",

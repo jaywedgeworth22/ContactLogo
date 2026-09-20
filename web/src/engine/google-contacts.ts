@@ -122,12 +122,29 @@ async function fetchWithRetry(input: string | URL, init?: RequestInit): Promise<
 export type Person = {
   resourceName?: string;
   names?: Array<{ displayName?: string; givenName?: string; familyName?: string }>;
-  emailAddresses?: Array<{ value?: string }>;
-  phoneNumbers?: Array<{ value?: string }>;
+  emailAddresses?: Array<{ value?: string; type?: string }>;
+  phoneNumbers?: Array<{ value?: string; type?: string }>;
   organizations?: Array<{ name?: string }>;
-  urls?: Array<{ value?: string }>;
+  urls?: Array<{ value?: string; type?: string }>;
   photos?: Array<{ url?: string; default?: boolean }>;
 };
+
+/**
+ * 2026-09-20 audit — order labels work > school > home > iCloud > undefined
+ * so the brand-relevant inbox (work) wins over the personal one when the
+ * same contact lists both.  Previously the first-listed email was used,
+ * which is usually the personal one — the whole contact was then mis-
+ * attributed.
+ */
+function preferredLabelScore(type: string | undefined): number {
+  const t = (type ?? "").toLowerCase();
+  if (t === "work") return 0;
+  if (t.startsWith("work_")) return 0;
+  if (t === "school") return 2;
+  if (t === "home") return 3;
+  if (t.startsWith("home_")) return 3;
+  return 1; // undefined / iCloud / other
+}
 
 /**
  * Not a real expectation of the address book's size — a sanity backstop
@@ -176,14 +193,26 @@ export function personToBookContact(person: Person): BookContact | null {
   const name = primary?.displayName?.trim() || organization;
   if (!name) return null;
   const photo = person.photos?.find((p) => p.url && !p.default);
-  const emails = person.emailAddresses
-    ?.map((e) => e.value?.trim())
-    .filter((v): v is string => Boolean(v));
+  type LabeledString = { value: string; type: string | undefined; idx: number };
+  const rawEmails: LabeledString[] = (person.emailAddresses ?? [])
+    .map((e, idx): LabeledString => ({ value: e.value?.trim() ?? "", type: e.type, idx }))
+    .filter((e) => Boolean(e.value));
+  const rawWebsites: LabeledString[] = (person.urls ?? [])
+    .map((u, idx): LabeledString => ({ value: u.value?.trim() ?? "", type: u.type, idx }))
+    .filter((u) => Boolean(u.value));
+  // Tie on label score → keep original declaration order.  Otherwise
+  // unlabeled entries get alphabetized and "agencies" with mixed types
+  // silently reorder.
+  const sortedEmails = [...rawEmails].sort(
+    (a, b) => preferredLabelScore(a.type) - preferredLabelScore(b.type) || a.idx - b.idx,
+  );
+  const sortedWebsites = [...rawWebsites].sort(
+    (a, b) => preferredLabelScore(a.type) - preferredLabelScore(b.type) || a.idx - b.idx,
+  );
+  const emails = sortedEmails.map((e) => e.value);
+  const websites = sortedWebsites.map((u) => u.value);
   const phones = person.phoneNumbers
     ?.map((p) => p.value?.trim())
-    .filter((v): v is string => Boolean(v));
-  const websites = person.urls
-    ?.map((u) => u.value?.trim())
     .filter((v): v is string => Boolean(v));
 
   return {
@@ -192,12 +221,12 @@ export function personToBookContact(person: Person): BookContact | null {
     givenName: primary?.givenName,
     familyName: primary?.familyName,
     organization,
-    email: emails?.[0] ?? person.emailAddresses?.[0]?.value,
+    email: emails[0],
     phone: phones?.[0] ?? person.phoneNumbers?.[0]?.value,
-    website: websites?.[0] ?? person.urls?.[0]?.value,
-    emails: emails && emails.length > 0 ? emails : undefined,
+    website: websites[0],
+    emails: emails.length > 0 ? emails : undefined,
     phones: phones && phones.length > 0 ? phones : undefined,
-    websites: websites && websites.length > 0 ? websites : undefined,
+    websites: websites.length > 0 ? websites : undefined,
     photoDataUrl: photo?.url,
     hadExistingPhoto: Boolean(photo),
     existingPhotoUrl: photo?.url,
