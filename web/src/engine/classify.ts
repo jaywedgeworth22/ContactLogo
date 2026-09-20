@@ -275,6 +275,13 @@ function worksAt(c: BookContact, affiliation: string): boolean {
  * a personal email backup — the brand is decided by the name, not the
  * inbox) and added a multi-token business-shape fallback for catalogs
  * that miss the brand ("Joe's Plumbing", "Acme Roofing LLC").
+ *
+ * The `looksLikePersonName` guard from earlier revisions is dropped —
+ * `looksLikeBusinessName` already covers the legitimate-person case
+ * (the 2-token no-suffix branch returns false), and the guard was the
+ * reason "Acme Roofing LLC" was rejected despite a clear business
+ * suffix.  Kept identical to the Swift and Kotlin engines so all three
+ * share one rule.
  */
 export function inferCompanyFromLoneName(c: BookContact): string | undefined {
   const given = cleanName(c.givenName ?? "");
@@ -284,7 +291,7 @@ export function inferCompanyFromLoneName(c: BookContact): string | undefined {
   const unstructured = !given && !family;
   if (!onlyGiven && !onlyFamily && !unstructured) return undefined;
   const candidate = cleanName(onlyGiven ? given : onlyFamily ? family : c.displayName);
-  if (!candidate || looksLikePersonName(candidate)) return undefined;
+  if (!candidate) return undefined;
   if (lookupCompanyDomain(candidate)) return candidate;
   if (looksLikeBusinessName(candidate)) return candidate;
   return undefined;

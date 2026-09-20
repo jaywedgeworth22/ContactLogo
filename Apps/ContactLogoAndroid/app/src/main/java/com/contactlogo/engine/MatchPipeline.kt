@@ -251,8 +251,13 @@ object MatchPipeline {
      *  - Dropped the freemail short-circuit.  A real business contact can
      *    carry a personal email backup; the brand is decided by the name.
      *    The 15k contacts / 25 visible symptom was largely caused by this.
+     *  - Dropped the `looksLikePersonName` early-return: it was the
+     *    reason "Acme Roofing LLC" was rejected despite the legal suffix
+     *    that unambiguously marks a business.
      *  - Added a `looksLikeBusinessName` fallback for catalog misses
-     *    ("Joe's Plumbing", "Acme Roofing LLC").
+     *    ("Joe's Plumbing", "Acme Roofing LLC").  Kept identical to the
+     *    Swift and TypeScript engines — all three share the same
+     *    fixtures/golden-corpus.json conformance test.
      */
     private fun inferLoneFirmName(contact: ContactIdentity): String? {
         val given = Normalize.clean(contact.givenName)
@@ -267,7 +272,7 @@ object MatchPipeline {
             onlyFamily -> family
             else -> Normalize.clean(contact.displayName)
         }
-        if (candidate.isEmpty() || looksLikePersonName(candidate)) return null
+        if (candidate.isEmpty()) return null
         if (CompanyCatalog.domainForName(candidate) != null) return candidate
         if (looksLikeBusinessName(candidate)) return candidate
         return null
