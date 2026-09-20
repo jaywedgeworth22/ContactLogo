@@ -48,7 +48,7 @@ public final class CNContactsProvider: ContactsProvider, @unchecked Sendable {
     public func isLimitedAccess() async -> Bool {
         #if compiler(>=5.10) && canImport(Contacts) && os(iOS)
         if #available(iOS 18, *) {
-            return store.authorizationStatus(for: .contacts) == .limited
+            return CNContactStore.authorizationStatus(for: .contacts) == .limited
         }
         #endif
         return false
