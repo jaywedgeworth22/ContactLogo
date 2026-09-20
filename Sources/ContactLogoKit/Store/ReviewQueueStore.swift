@@ -11,7 +11,7 @@ import Contacts
 /// write.  Display names travel with the contact identifiers so the review
 /// UI can re-open without a second Contacts pass.
 public struct PersistedReviewQueue: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 1
+    public static let currentSchemaVersion = 2
 
     public var schemaVersion: Int
     public var scannedAt: Date
@@ -27,6 +27,10 @@ public struct PersistedReviewQueue: Codable, Equatable, Sendable {
     public var protectedPersonCount: Int?
     public var businessTargetsCount: Int?
     public var affiliatedTargetsCount: Int?
+    /// 2026-09-20 audit — preserve the `.limited` Contacts authorization
+    /// status across app restarts so the banner that explains the small
+    /// restored queue is shown, not hidden, when the user re-launches.
+    public var limitedAccessGranted: Bool?
 
     public init(schemaVersion: Int = PersistedReviewQueue.currentSchemaVersion,
                 scannedAt: Date,
@@ -38,7 +42,8 @@ public struct PersistedReviewQueue: Codable, Equatable, Sendable {
                 totalScannedCount: Int? = nil,
                 protectedPersonCount: Int? = nil,
                 businessTargetsCount: Int? = nil,
-                affiliatedTargetsCount: Int? = nil) {
+                affiliatedTargetsCount: Int? = nil,
+                limitedAccessGranted: Bool? = nil) {
         self.schemaVersion = schemaVersion
         self.scannedAt = scannedAt
         self.contactStoreChangeToken = contactStoreChangeToken
@@ -50,6 +55,7 @@ public struct PersistedReviewQueue: Codable, Equatable, Sendable {
         self.protectedPersonCount = protectedPersonCount
         self.businessTargetsCount = businessTargetsCount
         self.affiliatedTargetsCount = affiliatedTargetsCount
+        self.limitedAccessGranted = limitedAccessGranted
     }
 }
 
@@ -125,12 +131,16 @@ public struct ReviewQueueStore: Sendable {
         return try Self.makeDecoder().decode(PersistedReviewQueue.self, from: data)
     }
 
-    /// Production read: returns a non-empty, current-schema snapshot whose
-    /// change token still matches.  Anything else is deleted.
+    /// Production read: returns a non-empty snapshot whose change token
+    /// still matches.  2026-09-20 audit: a schema-version bump alone does
+    /// not discard the snapshot — older payloads decode cleanly because
+    /// new fields are optional.  Only an undecodable file or a stale
+    /// change token clears the queue; the previous "schema mismatch
+    /// deletes everything" policy was silently dropping user review work
+    /// across a routine persistence bump.
     public func loadFresh() throws -> PersistedReviewQueue? {
         guard let snapshot = try load() else { return nil }
-        let usable = snapshot.schemaVersion == PersistedReviewQueue.currentSchemaVersion
-            && !snapshot.results.isEmpty
+        let usable = !snapshot.results.isEmpty
             && Self.tokensMatch(stored: snapshot.contactStoreChangeToken,
                                 current: currentChangeToken())
         if usable { return snapshot }

@@ -89,6 +89,30 @@ test("UID survives export so re-import updates instead of duplicating", () => {
   assert.ok(logicalLines(contactToVcard(updated)).includes(uid));
 });
 
+test("2026-09-20 audit: rewrite updates the work-labeled line, not the first line", () => {
+  // With work-labeled selection in allPlainPreferred, contact.email is
+  // the work email even if it appears second on the source card.  Without
+  // a label-aware rewrite path, updateFlat overwrites the home email and
+  // the round-trip loses it.  Pin the fix.
+  const card = [
+    "BEGIN:VCARD",
+    "VERSION:3.0",
+    "FN:Acme Consulting",
+    "EMAIL:home@example.com",
+    "EMAIL;TYPE=WORK:work@example.com",
+    "END:VCARD",
+  ].join("\r\n");
+  const contacts = parseVcard(card);
+  const rewritten = contactsToVcard(contacts);
+  const lines = logicalLines(rewritten);
+  // Both lines survive the rewrite — neither replaced by the other.
+  assert.ok(lines.some((l) => l === "EMAIL:home@example.com"), "home email must survive rewrite");
+  assert.ok(
+    lines.some((l) => /^EMAIL(;TYPE=.*)?:work@example\.com$/.test(l)),
+    "work email must survive rewrite",
+  );
+});
+
 test("repeated properties all come back", () => {
   const lines = logicalLines(contactToVcard(parseVcard(RICH_CARD)[0]!));
   assert.equal(lines.filter((l) => l.startsWith("EMAIL")).length, 2);
@@ -377,6 +401,29 @@ test("a dangling = before END:VCARD does not swallow the card boundary", () => {
 });
 
 test("Issue #75: secondary corporate email on vCard resolves domain when primary is freemail", () => {
+  // 2026-09-20 audit — vCard carries `TYPE=WORK` on the corporate email;
+  // when present, the work-labeled entry surfaces first and the engine
+  // resolves the brand identity without scanning further.
+  const card = [
+    "BEGIN:VCARD",
+    "VERSION:3.0",
+    "FN:Acme Consulting",
+    "EMAIL:contact@gmail.com",
+    "EMAIL;TYPE=WORK:contact@acme.example",
+    "END:VCARD",
+  ].join("\r\n");
+  const contacts = parseVcard(card);
+  assert.equal(contacts.length, 1);
+  assert.deepEqual(contacts[0]?.emails, ["contact@acme.example", "contact@gmail.com"]);
+  const res = resolveIdentity(contacts[0]!, "Acme");
+  assert.equal(res?.domain, "acme.example");
+  assert.equal(res?.via, "email");
+});
+
+test("Issue #75 fallback: unlabeled vCard emails keep original order but the engine still resolves", () => {
+  // Without TYPE parameters the parser can't tell which is work — preserve
+  // the user's declared order and let the multi-value resolveIdentity path
+  // from issue #75 do its job.
   const card = [
     "BEGIN:VCARD",
     "VERSION:3.0",
@@ -391,6 +438,42 @@ test("Issue #75: secondary corporate email on vCard resolves domain when primary
   const res = resolveIdentity(contacts[0]!, "Acme");
   assert.equal(res?.domain, "acme.example");
   assert.equal(res?.via, "email");
+});
+
+test("vCard TYPE=WORK recognized anywhere in a comma-separated TYPE list", () => {
+  // 2026-09-20 audit — real-world vCards list labels in any order
+  // (`TYPE=INTERNET,WORK`, `TYPE=VOICE,CELL`).  The labelScore parser must
+  // find WORK regardless of position, not just when WORK is the first
+  // token after TYPE=.
+  const card = [
+    "BEGIN:VCARD",
+    "VERSION:3.0",
+    "FN:Acme Consulting",
+    "EMAIL:contact@gmail.com",
+    "EMAIL;TYPE=INTERNET,WORK:contact@acme.example",
+    "END:VCARD",
+  ].join("\r\n");
+  const contacts = parseVcard(card);
+  assert.equal(contacts.length, 1);
+  assert.deepEqual(contacts[0]?.emails, ["contact@acme.example", "contact@gmail.com"]);
+});
+
+test("vCard quoted TYPE=WORK values are unwrapped before comparison", () => {
+  // 2026-09-20 audit — RFC 6350 §3.3 allows parameter values to be
+  // double-quoted.  A label like TYPE="WORK" must score the same as
+  // TYPE=WORK, otherwise work labels in real Apple Contacts exports
+  // are silently demoted to "unlabeled".
+  const card = [
+    "BEGIN:VCARD",
+    "VERSION:3.0",
+    "FN:Acme Consulting",
+    "EMAIL:contact@gmail.com",
+    `EMAIL;TYPE="WORK":contact@acme.example`,
+    "END:VCARD",
+  ].join("\r\n");
+  const contacts = parseVcard(card);
+  assert.equal(contacts.length, 1);
+  assert.deepEqual(contacts[0]?.emails, ["contact@acme.example", "contact@gmail.com"]);
 });
 
 test("Issue #75: secondary corporate website on vCard resolves domain when primary is social", () => {

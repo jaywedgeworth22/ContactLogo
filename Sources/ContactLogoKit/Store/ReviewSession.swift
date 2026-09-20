@@ -43,6 +43,11 @@ public final class ReviewSession: ObservableObject {
     @Published public internal(set) var protectedPersonCount: Int = 0
     @Published public internal(set) var businessTargetsCount: Int = 0
     @Published public internal(set) var affiliatedTargetsCount: Int = 0
+    /// True when the most recent scan ran under Apple `.limited` contacts
+    /// authorization — only the contacts the user picked are visible.  A
+    /// tiny scan with `.limited == true` is the canonical "why am I only
+    /// seeing 25 contacts" symptom.  Shells surface this as a banner.
+    @Published public internal(set) var limitedAccessGranted: Bool = false
 
     public var autoAccepted: [MatchResult] { results.filter { $0.confidence == .high } }
     public var needsReview: [MatchResult] { results.filter { $0.confidence == .medium || $0.confidence == .low } }
@@ -107,6 +112,17 @@ public final class ReviewSession: ObservableObject {
         protectedPersonCount = snapshot.protectedPersonCount ?? 0
         businessTargetsCount = snapshot.businessTargetsCount ?? 0
         affiliatedTargetsCount = snapshot.affiliatedTargetsCount ?? 0
+        // 2026-09-20 audit — the snapshot's authorization state is
+        // stale the moment the user changes Contacts access in
+        // Settings.  Restore the snapshot, then refresh from the live
+        // ContactsProvider so the banner tracks current state.
+        limitedAccessGranted = snapshot.limitedAccessGranted ?? false
+        Task { [weak self] in
+            guard let self else { return }
+            let provider = self.contactsProviderForTesting ?? CNContactsProvider()
+            let current = await provider.isLimitedAccess()
+            await MainActor.run { self.limitedAccessGranted = current }
+        }
         stage = .review
     }
 
@@ -131,7 +147,8 @@ public final class ReviewSession: ObservableObject {
                 totalScannedCount: totalScannedCount,
                 protectedPersonCount: protectedPersonCount,
                 businessTargetsCount: businessTargetsCount,
-                affiliatedTargetsCount: affiliatedTargetsCount
+                affiliatedTargetsCount: affiliatedTargetsCount,
+                limitedAccessGranted: limitedAccessGranted
             )
             try queueStore.save(snapshot)
             return true
@@ -279,6 +296,7 @@ public final class ReviewSession: ObservableObject {
                 stage = .idle
                 return false
             }
+            limitedAccessGranted = await provider.isLimitedAccess()
             let contacts = try await provider.fetchCandidates()
             totalScannedCount = contacts.count
             names = Dictionary(uniqueKeysWithValues: contacts.map { ($0.id, $0.displayName) })
@@ -335,7 +353,10 @@ public final class ReviewSession: ObservableObject {
                 return false
             }
 
-            let maxConcurrency = 8
+            // iOS recommends a max of 6 concurrent network tasks on cellular.
+            // 8 trips Apple's per-process NSURLSession ceiling on small
+            // devices and shows up in Sentry as flaky background runs.
+            let maxConcurrency = 6
             var indexedResults: [MatchResult?] = Array(repeating: nil, count: allTargets.count)
             var doneCount = 0
 

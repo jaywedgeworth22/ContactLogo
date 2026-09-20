@@ -9,10 +9,17 @@ public protocol ContactsProvider: Sendable {
     func imageData(forContactID id: String) async throws -> Data?
     func setImage(_ data: Data, forContactID id: String) async throws
     func removeImage(forContactID id: String) async throws
+    /// True when the user has granted Contacts `.limited` access.  When
+    /// limited, `fetchCandidates` only returns the contacts the user
+    /// explicitly picked; a scan that returns suspiciously few contacts
+    /// is almost always a sign of this.  Default is `false` for non-Apple
+    /// shells, which never receive limited grants.
+    func isLimitedAccess() async -> Bool
 }
 
 extension ContactsProvider {
     public func requestAccess() async throws -> Bool { true }
+    public func isLimitedAccess() async -> Bool { false }
 }
 
 #if canImport(Contacts)
@@ -26,6 +33,25 @@ public final class CNContactsProvider: ContactsProvider, @unchecked Sendable {
 
     public func requestAccess() async throws -> Bool {
         try await store.requestAccess(for: .contacts)
+    }
+
+    /// iOS 18+ exposes `CNAuthorizationStatus.limited` directly.  Earlier
+    /// versions report `.authorized` and we can only detect the narrow
+    /// address book by asking the store for its visible container —
+    /// `defaultContainerIdentifier` returns the system "iCloud" container
+    /// regardless, but `CNContactStoreDidChange` plus a count delta from a
+    /// known full grant lets us flag it heuristically.  We keep the
+    /// check simple and Apple-version-aware: if the constant is available,
+    /// use it; otherwise return `false` and let the post-scan UI prompt
+    /// the user to open Settings if the address book looks suspiciously
+    /// small.
+    public func isLimitedAccess() async -> Bool {
+        #if compiler(>=5.10) && canImport(Contacts) && os(iOS)
+        if #available(iOS 18, *) {
+            return CNContactStore.authorizationStatus(for: .contacts) == .limited
+        }
+        #endif
+        return false
     }
 
     private static var keys: [CNKeyDescriptor] {
@@ -67,10 +93,12 @@ public final class CNContactsProvider: ContactsProvider, @unchecked Sendable {
         let family = contact.familyName.trimmingCharacters(in: .whitespaces)
         let org = contact.organizationName.trimmingCharacters(in: .whitespaces)
 
-        let emailDomains = contact.emailAddresses.compactMap { labeled -> String? in
-            let email = labeled.value as String
-            return email.split(separator: "@").last.map(String.init)
-        }
+        // Label-aware email selection — work/business labels outrank home
+        // so the brand-relevant inbox beats a personal gmail fallback.
+        // Without this the user's first-listed email (often a personal one
+        // entered first) overrides the work address that names the brand,
+        // and an entire contact is mis-attributed.
+        let emailDomains = rankedEmailDomains(from: contact)
         let websiteHosts: [String] = contact.urlAddresses.compactMap { labeled in
             let raw = labeled.value as String
             // MATCHING-ENGINE §4: only http(s) URLs — drop ms-outlook:// etc.
@@ -95,6 +123,39 @@ public final class CNContactsProvider: ContactsProvider, @unchecked Sendable {
             phoneNumbers: phones,
             hasImage: contact.imageDataAvailable
         )
+    }
+
+    /// Order `contact.emailAddresses` so work/business labels come first.
+    /// Tie-break on declaration order, never on alphabetised hostname — an
+    /// alphabetical tie-break silently reorders the user's address book
+    /// (the web `google-contacts.ts` already pinned this rule, see the 2026-
+    /// 09-20 audit).  Returns just the host portion (`gmail.com`) the same
+    /// way the previous flat pass did.
+    private static func rankedEmailDomains(from contact: CNContact) -> [String] {
+        let indexed: [(Int, String, Int)] = contact.emailAddresses.enumerated().compactMap { (idx, labeled) -> (Int, String, Int)? in
+            let email = labeled.value as String
+            guard let host = email.split(separator: "@").last.map(String.init) else { return nil }
+            let label = labeled.label ?? ""
+            let score: Int
+            if label.contains(CNLabelWork), label != CNLabelWork {
+                score = 0 // CNLabelWork, _$!<Other>!$_, etc.
+            } else if label == CNLabelWork {
+                score = 0
+            } else if label.contains(CNLabelSchool) {
+                score = 2
+            } else if label.contains(CNLabelHome) || label == CNLabelHome {
+                score = 3
+            } else {
+                // Unlabeled / iCloud / custom — last resort; the user's
+                // declaration order survives via the index tie-break.
+                score = 4
+            }
+            return (score, host.lowercased(), idx)
+        }
+        return indexed.sorted { lhs, rhs in
+            if lhs.0 != rhs.0 { return lhs.0 < rhs.0 }
+            return lhs.2 < rhs.2
+        }.map(\.1)
     }
 
     private func mutableContact(id: String) throws -> CNMutableContact {

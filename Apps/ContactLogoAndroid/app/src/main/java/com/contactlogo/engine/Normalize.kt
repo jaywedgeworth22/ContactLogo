@@ -178,6 +178,21 @@ object Normalize {
     )
 
     /**
+     * 2026-09-20 audit — business legal-form suffixes.  Mirrors
+     * ContactLogoKit/Normalize/WordLists.swift ::businessSuffix and
+     * web/src/engine/classify.ts ::BUSINESS_SUFFIX_RE.  `companyKey` strips
+     * these before the catalog lookup, so `looksLikeBusinessName` re-checks
+     * the cleaned candidate.
+     */
+    val BUSINESS_SUFFIX: List<String> = listOf(
+        "inc", "incorporated", "llc", "l.l.c", "ltd", "limited",
+        "corp", "corporation", "co", "company", "gmbh", "ag", "plc",
+        "holdings", "group", "p.c", "llp", "lp", "pllc", "pa"
+    )
+
+    fun isBusinessSuffixWord(word: String): Boolean = word.lowercase() in BUSINESS_SUFFIX
+
+    /**
      * R8.3 — one word, tested whole, against the trade-word list.  The phrase
      * form searches anywhere in a segment; the catalog-tail test needs a
      * per-word answer.

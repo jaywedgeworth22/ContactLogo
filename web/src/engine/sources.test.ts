@@ -145,23 +145,32 @@ test("personToBookContact keeps import source and existing-photo bookkeeping", (
 });
 
 test("Issue #75: personToBookContact preserves multiple emails, phones, and websites", () => {
+  // 2026-09-20 audit — work-labeled entries are surfaced first so the
+  // engine sees the brand-relevant inbox without scanning the full list.
+  // Real Google People data carries `type`; tests now do too.
   const person: Person = {
     resourceName: "people/99",
     names: [{ displayName: "Dana Reyes" }],
-    emailAddresses: [{ value: "dana@gmail.com" }, { value: "dana@stripe.com" }],
+    emailAddresses: [
+      { value: "dana@gmail.com", type: "home" },
+      { value: "dana@stripe.com", type: "work" },
+    ],
     phoneNumbers: [{ value: "+15125550100" }, { value: "+15125550101" }],
-    urls: [{ value: "https://twitter.com/danareyes" }, { value: "https://stripe.com" }],
+    urls: [
+      { value: "https://twitter.com/danareyes", type: "home" },
+      { value: "https://stripe.com", type: "work" },
+    ],
     photos: [{ url: "https://lh3.googleusercontent.com/photo.jpg", default: false }],
   };
   const contact = personToBookContact(person);
   assert.equal(contact?.displayName, "Dana Reyes");
-  assert.deepEqual(contact?.emails, ["dana@gmail.com", "dana@stripe.com"]);
+  assert.deepEqual(contact?.emails, ["dana@stripe.com", "dana@gmail.com"]);
   assert.deepEqual(contact?.phones, ["+15125550100", "+15125550101"]);
-  assert.deepEqual(contact?.websites, ["https://twitter.com/danareyes", "https://stripe.com"]);
+  assert.deepEqual(contact?.websites, ["https://stripe.com", "https://twitter.com/danareyes"]);
   assert.equal(contact?.hadExistingPhoto, true);
   assert.equal(contact?.existingPhotoUrl, "https://lh3.googleusercontent.com/photo.jpg");
 
-  // Secondary email resolves corporate identity
+  // Work email resolves corporate identity
   const res = resolveIdentity(contact!, "Dana Reyes");
   assert.equal(res?.domain, "stripe.com");
 });

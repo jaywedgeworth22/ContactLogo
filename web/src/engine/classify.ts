@@ -185,8 +185,32 @@ export function isHomonymRisk(name: string): boolean {
 
 function looksLikePersonName(name: string): boolean {
   const parts = cleanName(name).replace(/,/g, " ").split(/\s+/).filter(Boolean);
-  if (parts.length < 2 || parts.length > 4) return false;
+  // 2026-09-20 audit: the upper bound of 4 tokens caused long real-world
+  // names ("Juan Carlos de la Cruz", "María del Carmen Reyes") to fall
+  // through and be mis-promoted by looksLikeBusinessName's ≥3-token
+  // branch.  Kept identical to the Swift and Kotlin engines.
+  if (parts.length < 2) return false;
   return parts.every((p) => /^[A-Za-z][A-Za-z'.-]{1,30}$/.test(p));
+}
+
+/**
+ * R7.4a — 2026-09-20 audit.  Multi-token lone-name shape that looks
+ * business rather than personal: org-signal word, business legal suffix,
+ * or ≥3 tokens with no person-name shape.  Used by
+ * `inferCompanyFromLoneName` to rescue multi-word businesses that the
+ * catalog misses ("Joe's Plumbing", "Acme Roofing LLC").
+ */
+const BUSINESS_SUFFIX_RE =
+  /\b(inc|incorporated|llc|l\.l\.c|ltd|limited|corp|corporation|co|company|gmbh|ag|plc|holdings|group|p\.c|llp|lp|pllc|pa)\b/i;
+
+function looksLikeBusinessName(name: string): boolean {
+  const cleaned = cleanName(name);
+  const parts = cleaned.split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return false;
+  if (BUSINESS_SUFFIX_RE.test(cleaned)) return true;
+  if (hasOrgSignal(cleaned)) return true;
+  if (parts.length >= 3 && !looksLikePersonName(cleaned)) return true;
+  return false;
 }
 
 /**
@@ -249,9 +273,21 @@ function worksAt(c: BookContact, affiliation: string): boolean {
   return workEmailDomains(c).includes(target);
 }
 
-/** R7.4 — a lone first/last that is a known firm, with no personal email. */
+/**
+ * R7.4 — a lone first/last that is a known firm.  2026-09-20 audit
+ * removed the freemail short-circuit (a real business contact can carry
+ * a personal email backup — the brand is decided by the name, not the
+ * inbox) and added a multi-token business-shape fallback for catalogs
+ * that miss the brand ("Joe's Plumbing", "Acme Roofing LLC").
+ *
+ * The `looksLikePersonName` guard from earlier revisions is dropped —
+ * `looksLikeBusinessName` already covers the legitimate-person case
+ * (the 2-token no-suffix branch returns false), and the guard was the
+ * reason "Acme Roofing LLC" was rejected despite a clear business
+ * suffix.  Kept identical to the Swift and Kotlin engines so all three
+ * share one rule.
+ */
 export function inferCompanyFromLoneName(c: BookContact): string | undefined {
-  if (emailFields(c).some(isFreemail)) return undefined;
   const given = cleanName(c.givenName ?? "");
   const family = cleanName(c.familyName ?? "");
   const onlyGiven = Boolean(given && !family);
@@ -259,8 +295,10 @@ export function inferCompanyFromLoneName(c: BookContact): string | undefined {
   const unstructured = !given && !family;
   if (!onlyGiven && !onlyFamily && !unstructured) return undefined;
   const candidate = cleanName(onlyGiven ? given : onlyFamily ? family : c.displayName);
-  if (!candidate || looksLikePersonName(candidate)) return undefined;
-  return lookupCompanyDomain(candidate) ? candidate : undefined;
+  if (!candidate) return undefined;
+  if (lookupCompanyDomain(candidate)) return candidate;
+  if (looksLikeBusinessName(candidate)) return candidate;
+  return undefined;
 }
 
 /** R6.2 — is this tail the brand rather than the decoration? */

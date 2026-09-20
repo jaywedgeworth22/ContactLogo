@@ -1032,9 +1032,35 @@ final class AffiliatedContactTests: XCTestCase {
         XCTAssertEqual(aff?.brandName, "Root Insurance")
     }
 
-    func testLoneFirmNameIsNotAnAffiliation() {
+    func testLoneFirmNameIsAffiliatedToItself() {
+        // 2026-09-20 audit: a lone-name business contact is its own
+        // affiliation.  Without this, classifying as a business but then
+        // failing to match leaves the row invisible — the bug that made
+        // iOS report "only 25 of 15k contacts" for lone-name businesses.
         let target = ContactIdentity(id: "5", displayName: "Target", givenName: "Target")
-        XCTAssertNil(pipeline.affiliation(for: target))
+        let aff = pipeline.affiliation(for: target)
+        XCTAssertNotNil(aff)
+        XCTAssertEqual(aff?.brandName, "Target")
+        XCTAssertEqual(aff?.domain, "target.com")
+    }
+
+    func testLoneFirmNameNotInCatalogGetsGuessedDomain() {
+        let plumbing = ContactIdentity(id: "10", displayName: "Joe's Plumbing", givenName: "Joe's Plumbing")
+        let aff = pipeline.affiliation(for: plumbing)
+        XCTAssertNotNil(aff)
+        XCTAssertEqual(aff?.brandName, "Joe's Plumbing")
+        XCTAssertEqual(aff?.domain, "joesplumbing.com")
+    }
+
+    func testLoneFirmNameWithFreemailStillCatalogWins() {
+        // The old behavior blocked lone-firm-name inference for any contact
+        // with a consumer email — the dominant "only 25" failure mode.
+        let walgreens = ContactIdentity(id: "11", displayName: "Walgreens",
+                                        givenName: "Walgreens",
+                                        emailDomains: ["gmail.com"])
+        let aff = pipeline.affiliation(for: walgreens)
+        XCTAssertNotNil(aff)
+        XCTAssertEqual(aff?.domain, "walgreens.com")
     }
 
     func testRoleOrTitleInOrganizationIsNotAnAffiliation() {

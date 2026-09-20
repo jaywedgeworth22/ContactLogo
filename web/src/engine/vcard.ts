@@ -184,6 +184,50 @@ function firstValued(properties: VcardProperty[], name: string): VcardProperty |
   return properties.find((p) => p.name === name && p.value.trim() !== "");
 }
 
+/**
+ * 2026-09-20 audit — prefer work/business labels over home/personal so the
+ * brand-relevant inbox or URL is the one the engine sees.  vCard TYPE
+ * parameters can be a single token (`TYPE=WORK`), comma-separated
+ * (`TYPE=INTERNET,WORK`), or repeated on adjacent lines
+ * (`;TYPE=WORK;TYPE=HOME`).  vCard 2.1 also accepts bare type keywords
+ * (`EMAIL;WORK:`) which we have to detect as well — split each TYPE=
+ * value into tokens, and also collect bare labels between `;` separators.
+ * Each token may be double-quoted (RFC 6350 §3.3); strip surrounding
+ * quotes before comparison.
+ */
+function labelScore(params: string): number {
+  const upper = params.toUpperCase();
+  const typeTokens = new Set<string>();
+  const unwrap = (s: string) => s.replace(/^"+|"+$/g, "").trim();
+  for (const match of upper.matchAll(/TYPE\s*=\s*([^;]+)/g)) {
+    for (const token of match[1].split(",").map(unwrap).filter(Boolean)) {
+      typeTokens.add(token);
+    }
+  }
+  // Bare vCard 2.1 labels (e.g. `EMAIL;WORK:`) sit as `;WORK` segments
+  // without a `TYPE=` prefix.  Split on `;` and ignore empty / TYPE= pieces.
+  for (const segment of upper.split(";")) {
+    const trimmed = segment.trim();
+    if (!trimmed || trimmed.startsWith("TYPE=")) continue;
+    typeTokens.add(unwrap(trimmed.split(",")[0]));
+  }
+  // Lower wins.  Work/business beats school; home/iCloud lose.
+  if (typeTokens.has("WORK") || typeTokens.has("BUSINESS")) return 0;
+  if (typeTokens.has("SCHOOL") || typeTokens.has("EDU")) return 2;
+  if (typeTokens.has("HOME")) return 3;
+  // Unlabeled: assume personal but only as a last resort.
+  return 4;
+}
+
+function firstPreferred(properties: VcardProperty[], name: string): VcardProperty | undefined {
+  const matches = properties.filter((p) => p.name === name && p.value.trim() !== "");
+  if (matches.length === 0) return undefined;
+  const scored = [...matches].sort(
+    (a, b) => labelScore(a.params) - labelScore(b.params),
+  );
+  return scored[0];
+}
+
 function plain(properties: VcardProperty[], name: string): string | undefined {
   const found = firstValued(properties, name);
   if (!found) return undefined;
@@ -202,6 +246,22 @@ function allPlain(properties: VcardProperty[], name: string): string[] {
   return values;
 }
 
+/** All plain values, ordered work → school → home → unlabeled (ties keep
+ *  declaration order so unlabeled cards round-trip the user's input).
+ */
+function allPlainPreferred(properties: VcardProperty[], name: string): string[] {
+  const matched = properties.filter((p) => p.name === name && p.value.trim() !== "");
+  const indexed = matched.map((p, idx) => ({
+    value: unescapeVcard(p.value).trim(),
+    score: labelScore(p.params),
+    idx,
+  }));
+  return indexed
+    .filter((row): row is { value: string; score: number; idx: number } => Boolean(row.value))
+    .sort((a, b) => a.score - b.score || a.idx - b.idx)
+    .map((row) => row.value);
+}
+
 function component(properties: VcardProperty[], name: string, index: number): string | undefined {
   const found = firstValued(properties, name);
   if (!found) return undefined;
@@ -215,9 +275,9 @@ function buildContact(properties: VcardProperty[]): VcardContact | null {
   const familyName = component(properties, "N", 0);
   const givenName = component(properties, "N", 1);
   const organization = component(properties, "ORG", 0);
-  const emails = allPlain(properties, "EMAIL");
+  const emails = allPlainPreferred(properties, "EMAIL");
   const phones = allPlain(properties, "TEL");
-  const websites = allPlain(properties, "URL");
+  const websites = allPlainPreferred(properties, "URL");
   const email = emails[0];
   const phone = phones[0];
   const website = websites[0];
@@ -360,10 +420,25 @@ function normalizedWebsite(website: string): string {
  * one the app changed — gets the scheme normalization that synthesized cards
  * need to stay clickable in Apple Contacts.
  */
+/**
+ * Compare the new website against the SAME property line that the
+ * rewrite will update, so a scheme-less preferred value isn't normalised
+ * (silently adding `https://`) when the first line already matches.
+ *
+ * 2026-09-20 audit: rewriteProperties now passes "WORK" through
+ * updateFlat's preferredLabel path; websiteForRewrite must mirror that
+ * label preference when deciding whether the value already exists.
+ */
 function websiteForRewrite(properties: VcardProperty[], website: string | undefined): string | undefined {
   const wanted = website?.trim();
   if (!wanted) return undefined;
-  const index = properties.findIndex((p) => p.name === "URL" && p.value.trim() !== "");
+  const labelOf = (p: VcardProperty) => p.params.toUpperCase();
+  const isWork = (p: VcardProperty) =>
+    p.name === "URL" && /\bWORK\b/.test(labelOf(p)) || /\bBUSINESS\b/.test(labelOf(p));
+  const hasValue = (p: VcardProperty) => p.name === "URL" && p.value.trim() !== "";
+  const preferredIndex = properties.findIndex((p) => hasValue(p) && isWork(p));
+  const fallbackIndex = properties.findIndex(hasValue);
+  const index = preferredIndex >= 0 ? preferredIndex : fallbackIndex;
   if (index >= 0) {
     const current = unescapeVcard(properties[index]!.value).trim();
     if (current && normalizedWebsite(current) === normalizedWebsite(wanted)) return current;
@@ -371,16 +446,41 @@ function websiteForRewrite(properties: VcardProperty[], website: string | undefi
   return normalizedWebsite(wanted);
 }
 
-/** Update a modelled value in place, without ever blanking a line the card had. */
+/** Update a modelled value in place, without ever blanking a line the card had.
+ *
+ * `preferredLabel` (optional) — when set, find the property line whose
+ * params carry that label token first, instead of always overwriting the
+ * first line.  The 2026-09-20 audit introduced work-labeled selection in
+ * `allPlainPreferred`; without this fix, `contact.email` is the work email
+ * (which can be the SECOND or THIRD property on the source card) but
+ * `updateFlat` would still overwrite the FIRST property — losing the
+ * original home email and corrupting "Download Backup".
+ */
 function updateFlat(
   properties: VcardProperty[],
   name: string,
   next: string | undefined,
   template: string,
+  preferredLabel?: "WORK" | "BUSINESS",
 ): void {
   const trimmed = next?.trim();
   if (!trimmed) return;
-  const index = properties.findIndex((p) => p.name === name && p.value.trim() !== "");
+  const labelOf = (p: VcardProperty) => p.params.toUpperCase();
+  const isPreferred = (p: VcardProperty) => {
+    if (!preferredLabel) return false;
+    const params = labelOf(p);
+    return new RegExp(`\\b${preferredLabel}\\b`).test(params)
+      || (preferredLabel === "WORK" && /\bBUSINESS\b/.test(params));
+    // The labelScore tokenizer now strips surrounding double-quotes
+    // (RFC 6350 §3.3); isPreferred can rely on the regex above since
+    // the same comparison happens in both passes.
+  };
+  const hasValue = (p: VcardProperty) => p.name === name && p.value.trim() !== "";
+  const preferredIndex = preferredLabel
+    ? properties.findIndex((p) => hasValue(p) && isPreferred(p))
+    : -1;
+  const fallbackIndex = properties.findIndex(hasValue);
+  const index = preferredIndex >= 0 ? preferredIndex : fallbackIndex;
   if (index < 0) {
     properties.push(property(template, escapeVcard(trimmed)));
     return;
@@ -456,9 +556,12 @@ function rewriteProperties(record: VcardRecord, contact: VcardContact): VcardPro
     5,
   );
   updateComponents(properties, "ORG", [{ index: 0, value: contact.organization }], "ORG", 1);
-  updateFlat(properties, "EMAIL", contact.email, "EMAIL;TYPE=INTERNET");
+  // 2026-09-20 audit — pick the work-labeled EMAIL / URL line (if any)
+  // so the rewrite doesn't overwrite the home value and silently drop
+  // it from the round-tripped vCard.
+  updateFlat(properties, "EMAIL", contact.email, "EMAIL;TYPE=INTERNET", "WORK");
   updateFlat(properties, "TEL", contact.phone, "TEL;TYPE=WORK,VOICE");
-  updateFlat(properties, "URL", websiteForRewrite(properties, contact.website), "URL");
+  updateFlat(properties, "URL", websiteForRewrite(properties, contact.website), "URL", "WORK");
   applyPhoto(properties, contact, record.version);
   return properties;
 }

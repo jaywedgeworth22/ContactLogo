@@ -121,4 +121,33 @@ class MatchPipelineTest {
             )
         )
     }
+
+    @Test
+    fun loneFirmNameWithFreemailBackupStillCatalogWins() {
+        // 2026-09-20 audit — the canonical "only 25 of 15k contacts"
+        // symptom.  Walgreens stored with a gmail backup now resolves via
+        // the catalog instead of being reclassified as a person.
+        val walgreens = ContactIdentity(
+            id = "6",
+            displayName = "Walgreens",
+            givenName = "Walgreens",
+            emailAddresses = listOf("wgreensrx@gmail.com")
+        )
+        assertEquals("Walgreens", MatchPipeline.inferCompanyFromLoneName(walgreens))
+        assertFalse(MatchPipeline.isPerson(walgreens))
+    }
+
+    @Test
+    fun loneFirmNameWithBusinessSuffixIsInferred() {
+        // Multi-token lone-name with a legal suffix (no catalog entry) is
+        // a business, not a person.  The golden-corpus fixture is the
+        // shape we got from issue #36 (brand-tail card resolves to the
+        // tail's brand); this is its lone-given-name sibling.
+        val acme = ContactIdentity(
+            id = "7",
+            displayName = "Acme Roofing LLC",
+            givenName = "Acme Roofing LLC"
+        )
+        assertEquals("Acme Roofing LLC", MatchPipeline.inferCompanyFromLoneName(acme))
+    }
 }
