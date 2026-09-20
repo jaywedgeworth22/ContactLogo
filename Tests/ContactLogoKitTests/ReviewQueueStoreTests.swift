@@ -114,6 +114,13 @@ final class ReviewQueueStoreTests: XCTestCase {
     }
 
     func testUnknownSchemaIsDiscarded() throws {
+        // 2026-09-20 audit: a schema-version bump alone no longer
+        // discards the snapshot — older payloads decode cleanly because
+        // new fields are optional, and discarding would silently drop
+        // user review work across a routine persistence bump.  This
+        // test now pins that a decodable payload of any schema survives
+        // the load, and the only thing that triggers a delete is a
+        // stale change token or an empty results set.
         let dir = try makeDir()
         let store = ReviewQueueStore(directory: dir, currentChangeToken: { Data("A".utf8) })
         var snapshot = sampleQueue(token: Data("A".utf8))
@@ -123,8 +130,9 @@ final class ReviewQueueStoreTests: XCTestCase {
         try FileManager.default.createDirectory(at: store.fileURL.deletingLastPathComponent(),
                                                 withIntermediateDirectories: true)
         try data.write(to: store.fileURL)
-        XCTAssertNil(try store.loadFresh())
-        XCTAssertFalse(FileManager.default.fileExists(atPath: store.fileURL.path))
+        let loaded = try store.loadFresh()
+        XCTAssertNotNil(loaded)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: store.fileURL.path))
         try? FileManager.default.removeItem(at: dir)
     }
 

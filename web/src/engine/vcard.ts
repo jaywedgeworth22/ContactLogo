@@ -417,10 +417,25 @@ function normalizedWebsite(website: string): string {
  * one the app changed — gets the scheme normalization that synthesized cards
  * need to stay clickable in Apple Contacts.
  */
+/**
+ * Compare the new website against the SAME property line that the
+ * rewrite will update, so a scheme-less preferred value isn't normalised
+ * (silently adding `https://`) when the first line already matches.
+ *
+ * 2026-09-20 audit: rewriteProperties now passes "WORK" through
+ * updateFlat's preferredLabel path; websiteForRewrite must mirror that
+ * label preference when deciding whether the value already exists.
+ */
 function websiteForRewrite(properties: VcardProperty[], website: string | undefined): string | undefined {
   const wanted = website?.trim();
   if (!wanted) return undefined;
-  const index = properties.findIndex((p) => p.name === "URL" && p.value.trim() !== "");
+  const labelOf = (p: VcardProperty) => p.params.toUpperCase();
+  const isWork = (p: VcardProperty) =>
+    p.name === "URL" && /\bWORK\b/.test(labelOf(p)) || /\bBUSINESS\b/.test(labelOf(p));
+  const hasValue = (p: VcardProperty) => p.name === "URL" && p.value.trim() !== "";
+  const preferredIndex = properties.findIndex((p) => hasValue(p) && isWork(p));
+  const fallbackIndex = properties.findIndex(hasValue);
+  const index = preferredIndex >= 0 ? preferredIndex : fallbackIndex;
   if (index >= 0) {
     const current = unescapeVcard(properties[index]!.value).trim();
     if (current && normalizedWebsite(current) === normalizedWebsite(wanted)) return current;
