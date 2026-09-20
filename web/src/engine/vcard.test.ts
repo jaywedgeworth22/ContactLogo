@@ -458,6 +458,24 @@ test("vCard TYPE=WORK recognized anywhere in a comma-separated TYPE list", () =>
   assert.deepEqual(contacts[0]?.emails, ["contact@acme.example", "contact@gmail.com"]);
 });
 
+test("vCard quoted TYPE=WORK values are unwrapped before comparison", () => {
+  // 2026-09-20 audit — RFC 6350 §3.3 allows parameter values to be
+  // double-quoted.  A label like TYPE="WORK" must score the same as
+  // TYPE=WORK, otherwise work labels in real Apple Contacts exports
+  // are silently demoted to "unlabeled".
+  const card = [
+    "BEGIN:VCARD",
+    "VERSION:3.0",
+    "FN:Acme Consulting",
+    "EMAIL:contact@gmail.com",
+    `EMAIL;TYPE="WORK":contact@acme.example`,
+    "END:VCARD",
+  ].join("\r\n");
+  const contacts = parseVcard(card);
+  assert.equal(contacts.length, 1);
+  assert.deepEqual(contacts[0]?.emails, ["contact@acme.example", "contact@gmail.com"]);
+});
+
 test("Issue #75: secondary corporate website on vCard resolves domain when primary is social", () => {
   const card = [
     "BEGIN:VCARD",

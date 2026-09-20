@@ -192,12 +192,15 @@ function firstValued(properties: VcardProperty[], name: string): VcardProperty |
  * (`;TYPE=WORK;TYPE=HOME`).  vCard 2.1 also accepts bare type keywords
  * (`EMAIL;WORK:`) which we have to detect as well — split each TYPE=
  * value into tokens, and also collect bare labels between `;` separators.
+ * Each token may be double-quoted (RFC 6350 §3.3); strip surrounding
+ * quotes before comparison.
  */
 function labelScore(params: string): number {
   const upper = params.toUpperCase();
   const typeTokens = new Set<string>();
+  const unwrap = (s: string) => s.replace(/^"+|"+$/g, "").trim();
   for (const match of upper.matchAll(/TYPE\s*=\s*([^;]+)/g)) {
-    for (const token of match[1].split(",").map((s) => s.trim()).filter(Boolean)) {
+    for (const token of match[1].split(",").map(unwrap).filter(Boolean)) {
       typeTokens.add(token);
     }
   }
@@ -206,7 +209,7 @@ function labelScore(params: string): number {
   for (const segment of upper.split(";")) {
     const trimmed = segment.trim();
     if (!trimmed || trimmed.startsWith("TYPE=")) continue;
-    typeTokens.add(trimmed.split(",")[0].trim());
+    typeTokens.add(unwrap(trimmed.split(",")[0]));
   }
   // Lower wins.  Work/business beats school; home/iCloud lose.
   if (typeTokens.has("WORK") || typeTokens.has("BUSINESS")) return 0;
@@ -468,6 +471,9 @@ function updateFlat(
     const params = labelOf(p);
     return new RegExp(`\\b${preferredLabel}\\b`).test(params)
       || (preferredLabel === "WORK" && /\bBUSINESS\b/.test(params));
+    // The labelScore tokenizer now strips surrounding double-quotes
+    // (RFC 6350 §3.3); isPreferred can rely on the regex above since
+    // the same comparison happens in both passes.
   };
   const hasValue = (p: VcardProperty) => p.name === name && p.value.trim() !== "";
   const preferredIndex = preferredLabel
