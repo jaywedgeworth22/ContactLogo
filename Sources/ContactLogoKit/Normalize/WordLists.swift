@@ -24,6 +24,17 @@ public enum WordLists {
         "industries", "systems", "technologies", "labs", "works"
     ]
 
+    /// Business legal-form suffixes that mark a lone-name contact as a
+    /// company even when the brand is not in `CompanyCatalog`
+    /// ("Acme Roofing LLC", "Pine Street Holdings Inc").
+    /// `companyKey` strips these before the catalog lookup, so the
+    /// caller re-checks the original candidate.
+    public static let businessSuffix: Set<String> = [
+        "inc", "incorporated", "llc", "l.l.c", "ltd", "limited",
+        "corp", "corporation", "co", "company", "gmbh", "ag", "plc",
+        "holdings", "group", "p.c", "llp", "lp", "pllc", "pa"
+    ]
+
     /// Job titles and contact-method junk ("… - Asst Treasurer").
     public static let roleWords: Set<String> = [
         "manager", "mgr", "gm", "asst", "assistant", "treasurer", "president",

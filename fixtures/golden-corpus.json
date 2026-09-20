@@ -458,7 +458,7 @@
       "why": "The tail is a role, so rule 8 does not fire and the contact stays a person."
     },
     {
-      "id": "person-lone-firm-name-with-freemail",
+      "id": "businesscard-lone-firm-name-with-freemail",
       "contact": {
         "displayName": "Walgreens",
         "givenName": "Walgreens",
@@ -472,17 +472,18 @@
         "hasImage": false
       },
       "expect": {
-        "class": "person",
-        "query": null,
-        "domain": null,
-        "via": null,
-        "maxConfidence": "skip",
+        "class": "businessCard",
+        "query": "Walgreens",
+        "domain": "walgreens.com",
+        "via": "catalog",
+        "maxConfidence": "high",
         "flags": [
-          "person"
+          "lone-firm-name",
+          "via-catalog"
         ]
       },
-      "rule": "MATCHING-ENGINE §2b 'no personal email'; ENGINE-CONTRACT R7.4",
-      "why": "The lone-firm-name promotion is blocked by a consumer email address — this is a human who happens to be filed oddly."
+      "rule": "ENGINE-CONTRACT R7.4 (revised 2026-09-20)",
+      "why": "A catalog hit beats a freemail backup — a real business contact can have a personal email address filed alongside the brand.  The original §2b freemail short-circuit was the root cause of the 'only 25 of 15k contacts' report: lone-name businesses stored with a gmail backup were systematically dropped as persons."
     },
     {
       "id": "businesscard-fedex",
