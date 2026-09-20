@@ -143,6 +143,21 @@ final class ReviewQueueStoreTests: XCTestCase {
         try? FileManager.default.removeItem(at: dir)
     }
 
+    func testLimitedAccessFlagSurvivesSaveAndLoad() throws {
+        // 2026-09-20 audit — the .limited Contacts banner must persist with
+        // the queue, otherwise the restored tiny-queue scenario (the
+        // canonical 'only 25 of 15k' symptom) loses its explanation
+        // immediately after relaunch.
+        let dir = try makeDir()
+        let store = ReviewQueueStore(directory: dir, currentChangeToken: { Data("A".utf8) })
+        var queue = sampleQueue(token: Data("A".utf8))
+        queue.limitedAccessGranted = true
+        try store.save(queue)
+        let loaded = try store.load()
+        XCTAssertEqual(loaded?.limitedAccessGranted, true)
+        try? FileManager.default.removeItem(at: dir)
+    }
+
     func testEmptyPayloadIsDiscarded() throws {
         let dir = try makeDir()
         let store = ReviewQueueStore(directory: dir, currentChangeToken: { Data("A".utf8) })

@@ -112,6 +112,10 @@ public final class ReviewSession: ObservableObject {
         protectedPersonCount = snapshot.protectedPersonCount ?? 0
         businessTargetsCount = snapshot.businessTargetsCount ?? 0
         affiliatedTargetsCount = snapshot.affiliatedTargetsCount ?? 0
+        // 2026-09-20 audit — restore the .limited banner so a tiny
+        // restored queue explains itself instead of looking like the
+        // engine dropped contacts.
+        limitedAccessGranted = snapshot.limitedAccessGranted ?? false
         stage = .review
     }
 
@@ -136,7 +140,8 @@ public final class ReviewSession: ObservableObject {
                 totalScannedCount: totalScannedCount,
                 protectedPersonCount: protectedPersonCount,
                 businessTargetsCount: businessTargetsCount,
-                affiliatedTargetsCount: affiliatedTargetsCount
+                affiliatedTargetsCount: affiliatedTargetsCount,
+                limitedAccessGranted: limitedAccessGranted
             )
             try queueStore.save(snapshot)
             return true

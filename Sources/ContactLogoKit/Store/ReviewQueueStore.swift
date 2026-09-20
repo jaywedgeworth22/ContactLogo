@@ -11,7 +11,7 @@ import Contacts
 /// write.  Display names travel with the contact identifiers so the review
 /// UI can re-open without a second Contacts pass.
 public struct PersistedReviewQueue: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 1
+    public static let currentSchemaVersion = 2
 
     public var schemaVersion: Int
     public var scannedAt: Date
@@ -27,6 +27,10 @@ public struct PersistedReviewQueue: Codable, Equatable, Sendable {
     public var protectedPersonCount: Int?
     public var businessTargetsCount: Int?
     public var affiliatedTargetsCount: Int?
+    /// 2026-09-20 audit — preserve the `.limited` Contacts authorization
+    /// status across app restarts so the banner that explains the small
+    /// restored queue is shown, not hidden, when the user re-launches.
+    public var limitedAccessGranted: Bool?
 
     public init(schemaVersion: Int = PersistedReviewQueue.currentSchemaVersion,
                 scannedAt: Date,
@@ -38,7 +42,8 @@ public struct PersistedReviewQueue: Codable, Equatable, Sendable {
                 totalScannedCount: Int? = nil,
                 protectedPersonCount: Int? = nil,
                 businessTargetsCount: Int? = nil,
-                affiliatedTargetsCount: Int? = nil) {
+                affiliatedTargetsCount: Int? = nil,
+                limitedAccessGranted: Bool? = nil) {
         self.schemaVersion = schemaVersion
         self.scannedAt = scannedAt
         self.contactStoreChangeToken = contactStoreChangeToken
@@ -50,6 +55,7 @@ public struct PersistedReviewQueue: Codable, Equatable, Sendable {
         self.protectedPersonCount = protectedPersonCount
         self.businessTargetsCount = businessTargetsCount
         self.affiliatedTargetsCount = affiliatedTargetsCount
+        self.limitedAccessGranted = limitedAccessGranted
     }
 }
 

@@ -189,20 +189,24 @@ function firstValued(properties: VcardProperty[], name: string): VcardProperty |
  * brand-relevant inbox or URL is the one the engine sees.  vCard TYPE
  * parameters can be a single token (`TYPE=WORK`), comma-separated
  * (`TYPE=INTERNET,WORK`), or repeated on adjacent lines
- * (`;TYPE=WORK;TYPE=HOME`).  Split each TYPE= value into its tokens so
- * WORK is recognized regardless of position in the comma list.
+ * (`;TYPE=WORK;TYPE=HOME`).  vCard 2.1 also accepts bare type keywords
+ * (`EMAIL;WORK:`) which we have to detect as well — split each TYPE=
+ * value into tokens, and also collect bare labels between `;` separators.
  */
 function labelScore(params: string): number {
   const upper = params.toUpperCase();
   const typeTokens = new Set<string>();
-  // Each `TYPE=...` value runs until the next parameter separator (`;`) or
-  // the end of the params string.  Allow commas INSIDE the value so a
-  // comma-separated label list (`TYPE=INTERNET,WORK`) is tokenised into
-  // {"INTERNET", "WORK"}, not just {"INTERNET"}.
   for (const match of upper.matchAll(/TYPE\s*=\s*([^;]+)/g)) {
     for (const token of match[1].split(",").map((s) => s.trim()).filter(Boolean)) {
       typeTokens.add(token);
     }
+  }
+  // Bare vCard 2.1 labels (e.g. `EMAIL;WORK:`) sit as `;WORK` segments
+  // without a `TYPE=` prefix.  Split on `;` and ignore empty / TYPE= pieces.
+  for (const segment of upper.split(";")) {
+    const trimmed = segment.trim();
+    if (!trimmed || trimmed.startsWith("TYPE=")) continue;
+    typeTokens.add(trimmed.split(",")[0].trim());
   }
   // Lower wins.  Work/business beats school; home/iCloud lose.
   if (typeTokens.has("WORK") || typeTokens.has("BUSINESS")) return 0;
