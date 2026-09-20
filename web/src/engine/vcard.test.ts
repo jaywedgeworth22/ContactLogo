@@ -89,6 +89,30 @@ test("UID survives export so re-import updates instead of duplicating", () => {
   assert.ok(logicalLines(contactToVcard(updated)).includes(uid));
 });
 
+test("2026-09-20 audit: rewrite updates the work-labeled line, not the first line", () => {
+  // With work-labeled selection in allPlainPreferred, contact.email is
+  // the work email even if it appears second on the source card.  Without
+  // a label-aware rewrite path, updateFlat overwrites the home email and
+  // the round-trip loses it.  Pin the fix.
+  const card = [
+    "BEGIN:VCARD",
+    "VERSION:3.0",
+    "FN:Acme Consulting",
+    "EMAIL:home@example.com",
+    "EMAIL;TYPE=WORK:work@example.com",
+    "END:VCARD",
+  ].join("\r\n");
+  const contacts = parseVcard(card);
+  const rewritten = contactsToVcard(contacts);
+  const lines = logicalLines(rewritten);
+  // Both lines survive the rewrite — neither replaced by the other.
+  assert.ok(lines.some((l) => l === "EMAIL:home@example.com"), "home email must survive rewrite");
+  assert.ok(
+    lines.some((l) => /^EMAIL(;TYPE=.*)?:work@example\.com$/.test(l)),
+    "work email must survive rewrite",
+  );
+});
+
 test("repeated properties all come back", () => {
   const lines = logicalLines(contactToVcard(parseVcard(RICH_CARD)[0]!));
   assert.equal(lines.filter((l) => l.startsWith("EMAIL")).length, 2);

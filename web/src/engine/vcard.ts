@@ -428,16 +428,38 @@ function websiteForRewrite(properties: VcardProperty[], website: string | undefi
   return normalizedWebsite(wanted);
 }
 
-/** Update a modelled value in place, without ever blanking a line the card had. */
+/** Update a modelled value in place, without ever blanking a line the card had.
+ *
+ * `preferredLabel` (optional) — when set, find the property line whose
+ * params carry that label token first, instead of always overwriting the
+ * first line.  The 2026-09-20 audit introduced work-labeled selection in
+ * `allPlainPreferred`; without this fix, `contact.email` is the work email
+ * (which can be the SECOND or THIRD property on the source card) but
+ * `updateFlat` would still overwrite the FIRST property — losing the
+ * original home email and corrupting "Download Backup".
+ */
 function updateFlat(
   properties: VcardProperty[],
   name: string,
   next: string | undefined,
   template: string,
+  preferredLabel?: "WORK" | "BUSINESS",
 ): void {
   const trimmed = next?.trim();
   if (!trimmed) return;
-  const index = properties.findIndex((p) => p.name === name && p.value.trim() !== "");
+  const labelOf = (p: VcardProperty) => p.params.toUpperCase();
+  const isPreferred = (p: VcardProperty) => {
+    if (!preferredLabel) return false;
+    const params = labelOf(p);
+    return new RegExp(`\\b${preferredLabel}\\b`).test(params)
+      || (preferredLabel === "WORK" && /\bBUSINESS\b/.test(params));
+  };
+  const hasValue = (p: VcardProperty) => p.name === name && p.value.trim() !== "";
+  const preferredIndex = preferredLabel
+    ? properties.findIndex((p) => hasValue(p) && isPreferred(p))
+    : -1;
+  const fallbackIndex = properties.findIndex(hasValue);
+  const index = preferredIndex >= 0 ? preferredIndex : fallbackIndex;
   if (index < 0) {
     properties.push(property(template, escapeVcard(trimmed)));
     return;
@@ -513,9 +535,12 @@ function rewriteProperties(record: VcardRecord, contact: VcardContact): VcardPro
     5,
   );
   updateComponents(properties, "ORG", [{ index: 0, value: contact.organization }], "ORG", 1);
-  updateFlat(properties, "EMAIL", contact.email, "EMAIL;TYPE=INTERNET");
+  // 2026-09-20 audit — pick the work-labeled EMAIL / URL line (if any)
+  // so the rewrite doesn't overwrite the home value and silently drop
+  // it from the round-tripped vCard.
+  updateFlat(properties, "EMAIL", contact.email, "EMAIL;TYPE=INTERNET", "WORK");
   updateFlat(properties, "TEL", contact.phone, "TEL;TYPE=WORK,VOICE");
-  updateFlat(properties, "URL", websiteForRewrite(properties, contact.website), "URL");
+  updateFlat(properties, "URL", websiteForRewrite(properties, contact.website), "URL", "WORK");
   applyPhoto(properties, contact, record.version);
   return properties;
 }
