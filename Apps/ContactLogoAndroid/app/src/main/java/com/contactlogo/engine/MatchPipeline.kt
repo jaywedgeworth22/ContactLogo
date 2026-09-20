@@ -234,6 +234,26 @@ object MatchPipeline {
         return d in Blocklists.FREEMAIL
     }
 
+    private fun looksLikeBusinessName(candidate: String): Boolean {
+        val cleaned = Normalize.clean(candidate)
+        val parts = cleaned.split(Regex("""\s+""")).filter { it.isNotBlank() }
+        if (parts.size < 2) return false
+        if (parts.any { Normalize.isBusinessSuffixWord(it) }) return true
+        if (parts.any { Normalize.isOrgSignalWord(it) }) return true
+        if (parts.size >= 3 && !looksLikePersonName(cleaned)) return true
+        return false
+    }
+
+    /**
+     * R7.4 — a lone first/last that is a known firm.
+     *
+     * 2026-09-20 audit:
+     *  - Dropped the freemail short-circuit.  A real business contact can
+     *    carry a personal email backup; the brand is decided by the name.
+     *    The 15k contacts / 25 visible symptom was largely caused by this.
+     *  - Added a `looksLikeBusinessName` fallback for catalog misses
+     *    ("Joe's Plumbing", "Acme Roofing LLC").
+     */
     private fun inferLoneFirmName(contact: ContactIdentity): String? {
         val given = Normalize.clean(contact.givenName)
         val family = Normalize.clean(contact.familyName)
@@ -241,7 +261,6 @@ object MatchPipeline {
         val onlyFamily = family.isNotEmpty() && given.isEmpty()
         val unstructured = given.isEmpty() && family.isEmpty()
         if (!onlyGiven && !onlyFamily && !unstructured) return null
-        if (contact.emailAddresses.any { isFreemailAddress(it) }) return null
 
         val candidate = when {
             onlyGiven -> given
@@ -250,6 +269,7 @@ object MatchPipeline {
         }
         if (candidate.isEmpty() || looksLikePersonName(candidate)) return null
         if (CompanyCatalog.domainForName(candidate) != null) return candidate
+        if (looksLikeBusinessName(candidate)) return candidate
         return null
     }
 
