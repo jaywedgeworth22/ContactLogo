@@ -112,10 +112,17 @@ public final class ReviewSession: ObservableObject {
         protectedPersonCount = snapshot.protectedPersonCount ?? 0
         businessTargetsCount = snapshot.businessTargetsCount ?? 0
         affiliatedTargetsCount = snapshot.affiliatedTargetsCount ?? 0
-        // 2026-09-20 audit — restore the .limited banner so a tiny
-        // restored queue explains itself instead of looking like the
-        // engine dropped contacts.
+        // 2026-09-20 audit — the snapshot's authorization state is
+        // stale the moment the user changes Contacts access in
+        // Settings.  Restore the snapshot, then refresh from the live
+        // ContactsProvider so the banner tracks current state.
         limitedAccessGranted = snapshot.limitedAccessGranted ?? false
+        Task { [weak self] in
+            guard let self else { return }
+            let provider = self.contactsProviderForTesting ?? CNContactsProvider()
+            let current = await provider.isLimitedAccess()
+            await MainActor.run { self.limitedAccessGranted = current }
+        }
         stage = .review
     }
 

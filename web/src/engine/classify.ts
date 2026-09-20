@@ -185,7 +185,11 @@ export function isHomonymRisk(name: string): boolean {
 
 function looksLikePersonName(name: string): boolean {
   const parts = cleanName(name).replace(/,/g, " ").split(/\s+/).filter(Boolean);
-  if (parts.length < 2 || parts.length > 4) return false;
+  // 2026-09-20 audit: the upper bound of 4 tokens caused long real-world
+  // names ("Juan Carlos de la Cruz", "María del Carmen Reyes") to fall
+  // through and be mis-promoted by looksLikeBusinessName's ≥3-token
+  // branch.  Kept identical to the Swift and Kotlin engines.
+  if (parts.length < 2) return false;
   return parts.every((p) => /^[A-Za-z][A-Za-z'.-]{1,30}$/.test(p));
 }
 
