@@ -22,7 +22,7 @@ struct ContactLogoiOSApp: App {
         // hops to MainActor; capturing `session` inside the register
         // closure itself is MainActor-isolated and crashed TestFlight 1.0.2
         // (`EXC_BREAKPOINT` / `_dispatch_assert_queue_fail` on queue
-        // `com.apple.BGTaskScheduler (com.contactlogo.match)`). Issue #59.
+        // `com.apple.BGTaskScheduler (com.contactlogo.ios.match)`). Issue #59.
         MatchBackgroundTask.bind(session)
         MatchBackgroundTask.register()
 
@@ -55,7 +55,7 @@ struct ContactLogoiOSApp: App {
 enum MatchBackgroundTask {
     /// Lives here, not on the App: a SwiftUI `App` is @MainActor under Swift 6,
     /// so a static on it cannot be read from this nonisolated enum.
-    static let identifier = "com.contactlogo.match"
+    static let identifier = "com.contactlogo.ios.match"
 
     /// Weak so the `@StateObject` remains the owner. Read only after hopping
     /// onto the main actor from the nonisolated launch handler.
@@ -68,7 +68,7 @@ enum MatchBackgroundTask {
     }
 
     /// Must stay `nonisolated`. `BGTaskScheduler` invokes the launch handler
-    /// on `com.apple.BGTaskScheduler (com.contactlogo.match)`, not the main
+    /// on `com.apple.BGTaskScheduler (com.contactlogo.ios.match)`, not the main
     /// actor. A MainActor-isolated closure traps under Swift 6.
     nonisolated static func register() {
         BGTaskScheduler.shared.register(

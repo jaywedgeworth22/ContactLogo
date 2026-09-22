@@ -1,5 +1,13 @@
 # 2026-09-03 — iOS TestFlight background crash (Swift 6 MainActor trap)
 
+<!-- 2026-09-22 [MM] archaeology note: references to BG identifier
+     `com.contactlogo.match` below reflect the pre-rename state; as of
+     2026-09-22 the iOS BGTaskScheduler identifier is `com.contactlogo.ios.match`
+     (matching the renamed iOS bundle ID `com.contactlogo.ios`).  The crash
+     analysis itself is unchanged — the Swift 6 MainActor trap on the launch
+     handler still applies to the renamed identifier.  See
+     docs/rollouts/2026-09-22-bundle-id-migration.md. -->
+
 ## Context
 
 ContactLogo TestFlight 1.0.2 (`202608311128`) crashed on Jay's iPhone 16 Pro Max

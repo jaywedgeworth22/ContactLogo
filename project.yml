@@ -15,6 +15,11 @@ packages:
 
 settings:
   base:
+    # 2026-09-22 [MM]: Bundle-identifier migration lane — see
+    # docs/rollouts/2026-09-22-bundle-id-migration.md.  iOS app + Kit-iOS
+    # gain the `.ios` suffix; macOS app + Kit-macOS stay (they already
+    # carried `.macos`).  New App Group group.com.contactlogo on both
+    # native shells; Associated Domain contactlogo.com on iOS.
     # Must stay >= the language mode implied by Package.swift's
     # `swift-tools-version: 6.0` — Apps/ uses `@retroactive` conformances,
     # which require Swift 5.10+, and Sources/ContactLogoKit is compiled by
@@ -49,7 +54,7 @@ targets:
       - path: Sources/ContactLogoKit
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.contactlogo.kit
+        PRODUCT_BUNDLE_IDENTIFIER: com.contactlogo.kit.ios
         CODE_SIGN_STYLE: Automatic
         DEFINES_MODULE: YES
         GENERATE_INFOPLIST_FILE: YES
@@ -81,7 +86,7 @@ targets:
         product: Sentry
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.contactlogo
+        PRODUCT_BUNDLE_IDENTIFIER: com.contactlogo.ios
         PRODUCT_NAME: "ContactLogo"
         CODE_SIGN_STYLE: Automatic
         TARGETED_DEVICE_FAMILY: "1,2"
@@ -98,6 +103,10 @@ targets:
         # do not merge from INFOPLIST_KEY_* on Xcode 26.  Apps/ContactLogoiOS/Info.plist
         # holds them; GENERATE_INFOPLIST_FILE still fills the scalar keys.  CL-05.
         INFOPLIST_FILE: Apps/ContactLogoiOS/Info.plist
+        # 2026-09-22 [MM]: App Group group.com.contactlogo + Universal Links / web
+        # credentials on the owned contactlogo.com domain.  See
+        # docs/rollouts/2026-09-22-bundle-id-migration.md.
+        CODE_SIGN_ENTITLEMENTS: Apps/ContactLogoiOS/ContactLogoiOS.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 
   ContactLogoMac:

@@ -1,10 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- 2026-09-22 [MM]: BGTaskScheduler identifier renamed com.contactlogo.match
+     → com.contactlogo.ios.match to track the renamed iOS bundle ID
+     (com.contactlogo → com.contactlogo.ios).  See
+     docs/rollouts/2026-09-22-bundle-id-migration.md. -->
 <plist version="1.0">
 <dict>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
-		<string>com.contactlogo.match</string>
+		<string>com.contactlogo.ios.match</string>
 	</array>
 	<key>UIBackgroundModes</key>
 	<array>
