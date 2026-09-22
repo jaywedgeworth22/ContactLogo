@@ -27,7 +27,11 @@ struct ContentView: View {
                     ContentUnavailableView("Scan your contacts",
                                            systemImage: "person.crop.square.filled.and.at.rectangle",
                                            description: Text("ContactLogo finds brand logos for the businesses in your address book — you approve every change."))
-                    if model.limitedAccessGranted {
+                    if case .definite = model.limitedAccessState {
+                        MacLimitedAccessBlocker()
+                    } else if case .heuristic(let count) = model.limitedAccessState {
+                        MacLimitedAccessHeuristicNotice(visibleCount: count)
+                    } else if model.limitedAccessGranted {
                         LimitedAccessBanner()
                     }
                     Button("Scan contacts") { Task { await model.scanAndMatch() } }
@@ -125,7 +129,11 @@ struct ReviewQueueView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if model.limitedAccessGranted {
+            if case .definite = model.limitedAccessState {
+                MacLimitedAccessBlocker()
+            } else if case .heuristic = model.limitedAccessState {
+                MacLimitedAccessHeuristicNotice(visibleCount: 0)
+            } else if model.limitedAccessGranted {
                 LimitedAccessBanner()
             }
             HStack {
@@ -369,6 +377,63 @@ struct LogoThumb: View {
         Image(systemName: "photo")
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// 2026-09-21 follow-up — macOS blocking call to action when Limited
+/// contacts access is detected.  Same shape as the iOS blocker but with
+/// a System Settings deep-link to Privacy & Security → Contacts.
+struct MacLimitedAccessBlocker: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Limited contacts access detected", systemImage: "person.crop.circle.badge.exclamationmark.fill")
+                .font(.headline)
+                .foregroundStyle(.orange)
+            Text("ContactLogo is set to 'Only selected contacts'. To scan your full address book, open System Settings → Privacy & Security → Contacts and select 'All Contacts' for ContactLogo.")
+                .font(.subheadline)
+            Button {
+                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Contacts") {
+                    NSWorkspace.shared.open(url)
+                }
+            } label: {
+                Label("Open System Settings", systemImage: "arrow.up.right.square.fill")
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.12))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+/// 2026-09-21 — pre-macOS-14 / pre-iOS-18 fallback when the OS is silent
+/// about Limited.  Soft warning + the same fix instructions.
+struct MacLimitedAccessHeuristicNotice: View {
+    let visibleCount: Int
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("Only \(visibleCount) contacts are visible", systemImage: "exclamationmark.triangle.fill")
+                .font(.subheadline.bold())
+                .foregroundStyle(.orange)
+            Text("ContactLogo scanned your address book and only found \(visibleCount) entries. If you granted Limited access in System Settings, only the contacts you selected are visible.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Button("Open System Settings") {
+                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Contacts") {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+            .font(.caption.bold())
+            .padding(.top, 2)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.10))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
 

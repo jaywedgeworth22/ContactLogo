@@ -1063,6 +1063,36 @@ final class AffiliatedContactTests: XCTestCase {
         XCTAssertEqual(aff?.domain, "walgreens.com")
     }
 
+    func testLimitedAccessStateEquatableAndSendable() {
+        // 2026-09-21 follow-up — the new diagnostic state must be a
+        // regular value type so the iOS UI can pattern-match on it.
+        let a: LimitedAccessState = .open
+        let b: LimitedAccessState = .open
+        let c: LimitedAccessState = .definite
+        XCTAssertEqual(a, b)
+        XCTAssertNotEqual(a, c)
+        let d: LimitedAccessState = .heuristic(25)
+        let e: LimitedAccessState = .heuristic(25)
+        let f: LimitedAccessState = .heuristic(15000)
+        XCTAssertEqual(d, e)
+        XCTAssertNotEqual(d, f)
+    }
+
+    func testSampleDroppedContactEquality() {
+        // 2026-09-21 follow-up — the published sampleDroppedContacts must
+        // be a regular value type so the iOS list can use the id-based
+        // diff.
+        let a = ReviewSession.SampleDroppedContact(
+            displayName: "Maya Chen", reason: "Person with no org",
+            givenName: "Maya", familyName: "Chen", organization: nil
+        )
+        let b = ReviewSession.SampleDroppedContact(
+            displayName: "Maya Chen", reason: "Person with no org",
+            givenName: "Maya", familyName: "Chen", organization: nil
+        )
+        XCTAssertEqual(a, b)
+    }
+
     func testRoleOrTitleInOrganizationIsNotAnAffiliation() {
         let director = ContactIdentity(id: "6", displayName: "Jane Doe", givenName: "Jane", familyName: "Doe",
                                        organization: "Director")

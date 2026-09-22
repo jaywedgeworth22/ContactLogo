@@ -48,6 +48,32 @@ public final class ReviewSession: ObservableObject {
     /// tiny scan with `.limited == true` is the canonical "why am I only
     /// seeing 25 contacts" symptom.  Shells surface this as a banner.
     @Published public internal(set) var limitedAccessGranted: Bool = false
+    /// 2026-09-21 follow-up audit — finer-grained authorization view so the
+    /// iOS UI can render a blocking banner on pre-iOS-18 too.  Promoted
+    /// from `limitedAccessGranted` (Bool, iOS-18-only signal) to
+    /// `LimitedAccessState` (definite | heuristic | denied | restricted).
+    @Published public internal(set) var limitedAccessState: LimitedAccessState = .open
+    /// 2026-09-21 — sample of dropped contacts (people with no business
+    /// signals) so a Settings → Diagnostic screen can explain "your other
+    /// 14,975 contacts are personal entries with no business signals —
+    /// see a sample below".  Refreshed on every `scanAndMatch`.
+    @Published public internal(set) var sampleDroppedContacts: [SampleDroppedContact] = []
+    /// 2026-09-21 — when the engine filter rejects a contact BEFORE scoring,
+    /// the reason is captured here so the Diagnostic screen can group them.
+    public struct SampleDroppedContact: Sendable, Equatable, Hashable {
+        public let displayName: String
+        public let reason: String
+        public let givenName: String?
+        public let familyName: String?
+        public let organization: String?
+        public init(displayName: String, reason: String, givenName: String?, familyName: String?, organization: String?) {
+            self.displayName = displayName
+            self.reason = reason
+            self.givenName = givenName
+            self.familyName = familyName
+            self.organization = organization
+        }
+    }
 
     public var autoAccepted: [MatchResult] { results.filter { $0.confidence == .high } }
     public var needsReview: [MatchResult] { results.filter { $0.confidence == .medium || $0.confidence == .low } }
@@ -296,11 +322,25 @@ public final class ReviewSession: ObservableObject {
                 stage = .idle
                 return false
             }
-            limitedAccessGranted = await provider.isLimitedAccess()
+            // 2026-09-21 follow-up — finer-grained authorization view so
+            // the iOS UI can render a blocking banner on pre-iOS-18 too.
+            // The simpler `limitedAccessGranted` Bool is kept for callers
+            // that only want the boolean (it equals `state == .definite`
+            // OR `state == .heuristic(_)`).
+            let diag = await provider.limitedAccessDiagnosis()
+            limitedAccessState = diag
+            switch diag {
+            case .definite, .heuristic: limitedAccessGranted = true
+            case .open, .denied, .restricted: limitedAccessGranted = false
+            }
             let contacts = try await provider.fetchCandidates()
             totalScannedCount = contacts.count
             names = Dictionary(uniqueKeysWithValues: contacts.map { ($0.id, $0.displayName) })
             let pipeline = configuredPipeline()
+            // 2026-09-21 — sample 20 dropped contacts with their drop reason
+            // so the user can see in Diagnostic view what the engine
+            // decided and why.
+            var droppedSamples: [SampleDroppedContact] = []
             // Default off: a business card with a photo stays in the queue as
             // `replace-existing` (MATCHING-ENGINE section 1, CONTACTLOGO.md:53).
             let skipPhotos = settings?.skipContactsWithExistingPhoto ?? false
@@ -314,19 +354,46 @@ public final class ReviewSession: ObservableObject {
                 if klass == .businessCard {
                     if !(skipPhotos && c.hasImage) {
                         businessTargets.append(c)
+                    } else if droppedSamples.count < 20 {
+                        droppedSamples.append(SampleDroppedContact(
+                            displayName: c.displayName,
+                            reason: "Business card with existing photo (Skip Photos)",
+                            givenName: c.givenName,
+                            familyName: c.familyName,
+                            organization: c.organization
+                        ))
                     }
                 } else if klass == .person {
                     if c.hasImage {
                         // People with existing headshots are NEVER logo targets,
                         // regardless of skipPhotos setting.
                         protectedCount += 1
+                        if droppedSamples.count < 20 {
+                            droppedSamples.append(SampleDroppedContact(
+                                displayName: c.displayName,
+                                reason: "Person with existing photo",
+                                givenName: c.givenName,
+                                familyName: c.familyName,
+                                organization: c.organization
+                            ))
+                        }
                     } else if pipeline.affiliation(for: c) != nil {
                         affiliatedTargets.append(c)
                     } else {
                         protectedCount += 1
+                        if droppedSamples.count < 20 {
+                            droppedSamples.append(SampleDroppedContact(
+                                displayName: c.displayName,
+                                reason: "Person with no org / work email / brand-tail",
+                                givenName: c.givenName,
+                                familyName: c.familyName,
+                                organization: c.organization
+                            ))
+                        }
                     }
                 }
             }
+            sampleDroppedContacts = droppedSamples
 
             protectedPersonCount = protectedCount
             businessTargetsCount = businessTargets.count
