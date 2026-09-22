@@ -110,9 +110,12 @@ public final class CNContactsProvider: ContactsProvider, @unchecked Sendable {
         let request = CNContactFetchRequest(keysToFetch: keys)
         var count = 0
         do {
-            try store.enumerateContacts(with: request) { _, _ in
+            try store.enumerateContacts(with: request) { _, stop in
                 count += 1
-                if count > 1_000 { return } // upper bound — we only need the signal
+                // `stop.pointee = true` halts the entire enumeration, not just the
+                // current callback.  Without this the "1,000 contact bound" was a
+                // no-op — every contact still ran, doubling scan cost.
+                if count > 1_000 { stop.pointee = true }
             }
         } catch {
             return 0

@@ -231,8 +231,8 @@ struct ReviewQueueView: View {
             if case .definite = model.limitedAccessState {
                 LimitedAccessBlocker()
                     .padding(.horizontal)
-            } else if case .heuristic = model.limitedAccessState {
-                LimitedAccessHeuristicNotice(visibleCount: 0)
+            } else if case .heuristic(let count) = model.limitedAccessState {
+                LimitedAccessHeuristicNotice(visibleCount: count)
                     .padding(.horizontal)
             } else if model.limitedAccessGranted {
                 LimitedAccessBanner()
@@ -655,7 +655,7 @@ struct DiagnosticView: View {
                 }
                 if !model.sampleDroppedContacts.isEmpty {
                     Section("Sample of dropped contacts (max 20)") {
-                        ForEach(model.sampleDroppedContacts, id: \.self) { sample in
+                        ForEach(model.sampleDroppedContacts) { sample in
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(sample.displayName.isEmpty ? "(unnamed contact)" : sample.displayName)
                                     .font(.subheadline.bold())

@@ -60,13 +60,19 @@ public final class ReviewSession: ObservableObject {
     @Published public internal(set) var sampleDroppedContacts: [SampleDroppedContact] = []
     /// 2026-09-21 — when the engine filter rejects a contact BEFORE scoring,
     /// the reason is captured here so the Diagnostic screen can group them.
-    public struct SampleDroppedContact: Sendable, Equatable, Hashable {
+    /// `contactID` is the CNContact identifier — used as the SwiftUI
+    /// `ForEach` ID so duplicate "John Smith / no org" rows are still
+    /// distinct entries rather than collapsing under `\.self` identity.
+    public struct SampleDroppedContact: Sendable, Equatable, Hashable, Identifiable {
+        public let contactID: String
         public let displayName: String
         public let reason: String
         public let givenName: String?
         public let familyName: String?
         public let organization: String?
-        public init(displayName: String, reason: String, givenName: String?, familyName: String?, organization: String?) {
+        public var id: String { contactID }
+        public init(contactID: String, displayName: String, reason: String, givenName: String?, familyName: String?, organization: String?) {
+            self.contactID = contactID
             self.displayName = displayName
             self.reason = reason
             self.givenName = givenName
@@ -143,11 +149,25 @@ public final class ReviewSession: ObservableObject {
         // Settings.  Restore the snapshot, then refresh from the live
         // ContactsProvider so the banner tracks current state.
         limitedAccessGranted = snapshot.limitedAccessGranted ?? false
+        // 2026-09-21 follow-up — limitedAccessState is a richer signal than
+        // the persisted Bool, so derive the closest equivalent from the
+        // snapshot and let the live diagnosis below converge to the true
+        // state.  Without this restore, the diagnostic screen shows the
+        // default `.open` until the next scan — confusing the user who
+        // came to the diagnostic to verify the small subset.
+        limitedAccessState = limitedAccessGranted ? .definite : .open
         Task { [weak self] in
             guard let self else { return }
             let provider = self.contactsProviderForTesting ?? CNContactsProvider()
-            let current = await provider.isLimitedAccess()
-            await MainActor.run { self.limitedAccessGranted = current }
+            // Use the granular state, not just the bool.
+            let state = await provider.limitedAccessDiagnosis()
+            await MainActor.run {
+                self.limitedAccessState = state
+                switch state {
+                case .definite, .heuristic: self.limitedAccessGranted = true
+                case .open, .denied, .restricted: self.limitedAccessGranted = false
+                }
+            }
         }
         stage = .review
     }
@@ -356,6 +376,7 @@ public final class ReviewSession: ObservableObject {
                         businessTargets.append(c)
                     } else if droppedSamples.count < 20 {
                         droppedSamples.append(SampleDroppedContact(
+                            contactID: c.id,
                             displayName: c.displayName,
                             reason: "Business card with existing photo (Skip Photos)",
                             givenName: c.givenName,
@@ -370,6 +391,7 @@ public final class ReviewSession: ObservableObject {
                         protectedCount += 1
                         if droppedSamples.count < 20 {
                             droppedSamples.append(SampleDroppedContact(
+                                contactID: c.id,
                                 displayName: c.displayName,
                                 reason: "Person with existing photo",
                                 givenName: c.givenName,
@@ -383,6 +405,7 @@ public final class ReviewSession: ObservableObject {
                         protectedCount += 1
                         if droppedSamples.count < 20 {
                             droppedSamples.append(SampleDroppedContact(
+                                contactID: c.id,
                                 displayName: c.displayName,
                                 reason: "Person with no org / work email / brand-tail",
                                 givenName: c.givenName,

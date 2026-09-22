@@ -1081,16 +1081,26 @@ final class AffiliatedContactTests: XCTestCase {
     func testSampleDroppedContactEquality() {
         // 2026-09-21 follow-up — the published sampleDroppedContacts must
         // be a regular value type so the iOS list can use the id-based
-        // diff.
+        // diff.  Two identical 'John Smith / no org' rows must NOT
+        // collapse into one — distinct contactID keeps them distinct.
         let a = ReviewSession.SampleDroppedContact(
+            contactID: "1",
             displayName: "Maya Chen", reason: "Person with no org",
             givenName: "Maya", familyName: "Chen", organization: nil
         )
         let b = ReviewSession.SampleDroppedContact(
+            contactID: "1",
             displayName: "Maya Chen", reason: "Person with no org",
             givenName: "Maya", familyName: "Chen", organization: nil
         )
         XCTAssertEqual(a, b)
+        XCTAssertEqual(a.id, "1")
+        let c = ReviewSession.SampleDroppedContact(
+            contactID: "2",
+            displayName: "Maya Chen", reason: "Person with no org",
+            givenName: "Maya", familyName: "Chen", organization: nil
+        )
+        XCTAssertNotEqual(a, c, "duplicate display fields with distinct contactID must remain distinct")
     }
 
     func testRoleOrTitleInOrganizationIsNotAnAffiliation() {

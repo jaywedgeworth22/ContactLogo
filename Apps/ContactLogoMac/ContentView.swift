@@ -131,8 +131,8 @@ struct ReviewQueueView: View {
         VStack(alignment: .leading, spacing: 12) {
             if case .definite = model.limitedAccessState {
                 MacLimitedAccessBlocker()
-            } else if case .heuristic = model.limitedAccessState {
-                MacLimitedAccessHeuristicNotice(visibleCount: 0)
+            } else if case .heuristic(let count) = model.limitedAccessState {
+                MacLimitedAccessHeuristicNotice(visibleCount: count)
             } else if model.limitedAccessGranted {
                 LimitedAccessBanner()
             }
