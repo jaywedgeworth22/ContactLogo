@@ -1,5 +1,12 @@
 # ContactLogo — agent notes
 
+> ⚠️ **2026-09-22 [MM]: Bundle-identifier migration lane** — iOS app + Kit-iOS gained the `.ios`
+> suffix; macOS app + Kit-macOS unchanged (they already carried `.macos`).  New
+> App Group `group.com.contactlogo` on both shells; Associated Domain
+> `contactlogo.com` on iOS via `com.apple.developer.associated-domains`.  See
+> [`docs/rollouts/2026-09-22-bundle-id-migration.md`](docs/rollouts/2026-09-22-bundle-id-migration.md)
+> for the full migration table, owner action items, and archaeology notes.
+
 Brand icons for the address book.  Review-first matching on macOS, iOS, Android,
 and the web.
 
@@ -37,4 +44,28 @@ under `~/apps/` once fleet onboard lands.  Read `docs/CONTACTLOGO.md`,
 
 Do not commit scan dumps, AddressBook exports, or `.contactlogo/` / `.badgebook/`
 artifacts.
+
+## Bundle identifiers (canonical, post-2026-09-22 migration)
+
+| Surface | Bundle ID | Notes |
+|---|---|---|
+| iOS app (`ContactLogoiOS`) | `com.contactlogo.ios` | renamed from `com.contactlogo` |
+| macOS app (`ContactLogoMac`) | `com.contactlogo.macos` | unchanged |
+| ContactLogoKit iOS framework | `com.contactlogo.kit.ios` | renamed from `com.contactlogo.kit` |
+| ContactLogoKit macOS framework | `com.contactlogo.kit.macos` | unchanged |
+| iOS BGTaskScheduler identifier | `com.contactlogo.ios.match` | renamed from `com.contactlogo.match`; must match `BGTaskSchedulerPermittedIdentifiers` in `Apps/ContactLogoiOS/Info.plist` |
+| iOS match-ready notification identifier | `com.contactlogo.ios.match-ready` | renamed from `com.contactlogo.match-ready` |
+| App Group (new, both shells) | `group.com.contactlogo` | registered per-App-ID in Apple Developer Portal; the iOS side is `Apps/ContactLogoiOS/ContactLogoiOS.entitlements`, the macOS side is `Apps/ContactLogoMac/ContactLogoMac.entitlements` |
+| Associated Domain (new, iOS only) | `contactlogo.com` | `applinks:contactlogo.com`, `webcredentials:contactlogo.com` in the iOS entitlements; requires AASA at `https://contactlogo.com/.well-known/apple-app-site-association` |
+
+The Keychain service name `com.contactlogo.credentials` inside
+`Sources/ContactLogoKit/Store/SettingsStore.swift` is intentionally
+**unchanged** — it is an internal Keychain service string, not a bundle ID,
+and renaming it would invalidate existing Brandfetch credentials on user
+devices.
+
+The Android Java package `com.contactlogo.*` is intentionally **out of scope**
+for this lane (matches the Autorotate Android handling); a separate future
+rename PR will need to decide whether to align Android with the `.ios` suffix
+convention.
 

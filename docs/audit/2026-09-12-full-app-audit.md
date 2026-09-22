@@ -121,7 +121,7 @@ In macOS Sonoma (14.0+) and iOS 17+, Apple introduced `.limited` authorization f
 - **Strengths:**
   - Modern SwiftUI lifecycle with inline navigation titles and dark/light adaptive palettes.
   - Sentry Cocoa integration supporting Session Replay (100% error, 10% session) and Swift 6 background task safety (`MatchBackgroundTask.register()` nonisolated).
-  - Background processing task (`com.contactlogo.match`) persists review queue before notifying.
+  - Background processing task (`com.contactlogo.match` → renamed to `com.contactlogo.ios.match` on 2026-09-22 alongside the iOS bundle-ID migration) persists review queue before notifying.
 - **Identified Issues:**
   - **Issue #71 (P0):** Same candidate shape drop as macOS.
   - **Issue #74 (P2):** Misses first-party logo cache.
