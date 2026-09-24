@@ -3,6 +3,30 @@ import Foundation
 import Contacts
 #endif
 
+/// One dropped contact from the last scan, with the reason the engine skipped
+/// it.  Top-level (not nested in `ReviewSession`) so the persisted snapshot can
+/// carry it on platforms without Combine; `ReviewSession.SampleDroppedContact`
+/// is a typealias for this type.  `contactID` is the CNContact identifier and
+/// doubles as the SwiftUI `ForEach` ID, so duplicate "John Smith / no org"
+/// rows stay distinct.
+public struct DroppedContactSample: Codable, Sendable, Equatable, Hashable, Identifiable {
+    public let contactID: String
+    public let displayName: String
+    public let reason: String
+    public let givenName: String?
+    public let familyName: String?
+    public let organization: String?
+    public var id: String { contactID }
+    public init(contactID: String, displayName: String, reason: String, givenName: String?, familyName: String?, organization: String?) {
+        self.contactID = contactID
+        self.displayName = displayName
+        self.reason = reason
+        self.givenName = givenName
+        self.familyName = familyName
+        self.organization = organization
+    }
+}
+
 /// On-disk snapshot of a completed match run (issue #32).
 ///
 /// Written to Application Support so an iOS `BGProcessingTask` can persist
@@ -31,6 +55,11 @@ public struct PersistedReviewQueue: Codable, Equatable, Sendable {
     /// status across app restarts so the banner that explains the small
     /// restored queue is shown, not hidden, when the user re-launches.
     public var limitedAccessGranted: Bool?
+    /// PR #102 review — the Diagnostic screen's dropped-contact sample.
+    /// Persisted so a queue restored after the process dies (the normal
+    /// background-scan flow) still explains what was skipped.  Optional so
+    /// older payloads decode cleanly.
+    public var sampleDroppedContacts: [DroppedContactSample]?
 
     public init(schemaVersion: Int = PersistedReviewQueue.currentSchemaVersion,
                 scannedAt: Date,
@@ -43,7 +72,8 @@ public struct PersistedReviewQueue: Codable, Equatable, Sendable {
                 protectedPersonCount: Int? = nil,
                 businessTargetsCount: Int? = nil,
                 affiliatedTargetsCount: Int? = nil,
-                limitedAccessGranted: Bool? = nil) {
+                limitedAccessGranted: Bool? = nil,
+                sampleDroppedContacts: [DroppedContactSample]? = nil) {
         self.schemaVersion = schemaVersion
         self.scannedAt = scannedAt
         self.contactStoreChangeToken = contactStoreChangeToken
@@ -56,6 +86,7 @@ public struct PersistedReviewQueue: Codable, Equatable, Sendable {
         self.businessTargetsCount = businessTargetsCount
         self.affiliatedTargetsCount = affiliatedTargetsCount
         self.limitedAccessGranted = limitedAccessGranted
+        self.sampleDroppedContacts = sampleDroppedContacts
     }
 }
 
