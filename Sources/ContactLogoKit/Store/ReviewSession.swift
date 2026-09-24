@@ -60,26 +60,8 @@ public final class ReviewSession: ObservableObject {
     @Published public internal(set) var sampleDroppedContacts: [SampleDroppedContact] = []
     /// 2026-09-21 — when the engine filter rejects a contact BEFORE scoring,
     /// the reason is captured here so the Diagnostic screen can group them.
-    /// `contactID` is the CNContact identifier — used as the SwiftUI
-    /// `ForEach` ID so duplicate "John Smith / no org" rows are still
-    /// distinct entries rather than collapsing under `\.self` identity.
-    public struct SampleDroppedContact: Sendable, Equatable, Hashable, Identifiable {
-        public let contactID: String
-        public let displayName: String
-        public let reason: String
-        public let givenName: String?
-        public let familyName: String?
-        public let organization: String?
-        public var id: String { contactID }
-        public init(contactID: String, displayName: String, reason: String, givenName: String?, familyName: String?, organization: String?) {
-            self.contactID = contactID
-            self.displayName = displayName
-            self.reason = reason
-            self.givenName = givenName
-            self.familyName = familyName
-            self.organization = organization
-        }
-    }
+    /// Defined at top level (ReviewQueueStore.swift) so it can be persisted.
+    public typealias SampleDroppedContact = DroppedContactSample
 
     public var autoAccepted: [MatchResult] { results.filter { $0.confidence == .high } }
     public var needsReview: [MatchResult] { results.filter { $0.confidence == .medium || $0.confidence == .low } }
@@ -144,6 +126,7 @@ public final class ReviewSession: ObservableObject {
         protectedPersonCount = snapshot.protectedPersonCount ?? 0
         businessTargetsCount = snapshot.businessTargetsCount ?? 0
         affiliatedTargetsCount = snapshot.affiliatedTargetsCount ?? 0
+        sampleDroppedContacts = snapshot.sampleDroppedContacts ?? []
         // 2026-09-20 audit — the snapshot's authorization state is
         // stale the moment the user changes Contacts access in
         // Settings.  Restore the snapshot, then refresh from the live
@@ -194,7 +177,8 @@ public final class ReviewSession: ObservableObject {
                 protectedPersonCount: protectedPersonCount,
                 businessTargetsCount: businessTargetsCount,
                 affiliatedTargetsCount: affiliatedTargetsCount,
-                limitedAccessGranted: limitedAccessGranted
+                limitedAccessGranted: limitedAccessGranted,
+                sampleDroppedContacts: sampleDroppedContacts
             )
             try queueStore.save(snapshot)
             return true
@@ -413,6 +397,20 @@ public final class ReviewSession: ObservableObject {
                                 organization: c.organization
                             ))
                         }
+                    }
+                } else if klass == .nonBrand {
+                    // PR #102 review — generic non-brand names ("Hospital",
+                    // "Gift Card", printers) are dropped too; sample them so
+                    // the Diagnostic screen can explain that category.
+                    if droppedSamples.count < 20 {
+                        droppedSamples.append(SampleDroppedContact(
+                            contactID: c.id,
+                            displayName: c.displayName,
+                            reason: "Generic non-brand name (e.g. Hospital, Gift Card, printer)",
+                            givenName: c.givenName,
+                            familyName: c.familyName,
+                            organization: c.organization
+                        ))
                     }
                 }
             }
