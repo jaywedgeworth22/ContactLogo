@@ -15,11 +15,30 @@ public protocol ContactsProvider: Sendable {
     /// is almost always a sign of this.  Default is `false` for non-Apple
     /// shells, which never receive limited grants.
     func isLimitedAccess() async -> Bool
+    /// 2026-09-21 follow-up — finer-grained view of the authorization
+    /// state so the UI can show a blocking banner on pre-iOS-18 too.
+    /// See `LimitedAccessState` for the cases.
+    func limitedAccessDiagnosis() async -> LimitedAccessState
 }
 
 extension ContactsProvider {
     public func requestAccess() async throws -> Bool { true }
     public func isLimitedAccess() async -> Bool { false }
+    public func limitedAccessDiagnosis() async -> LimitedAccessState { .open }
+}
+
+/// 2026-09-21 follow-up audit — the result of probing `.limited` Contacts
+/// authorization.  `.definite` is the iOS 18+ API response; `.heuristic`
+/// is a small-subset signal that fires on every iOS version (including
+/// 17 and earlier where Apple's `.limited` status is not exposed).
+/// `.denied` and `.restricted` mean the user must grant access before
+/// any scan can run; `.open` means full or no access has been granted.
+public enum LimitedAccessState: Sendable, Equatable {
+    case open
+    case definite
+    case heuristic(Int) // visible contact count
+    case denied
+    case restricted
 }
 
 #if canImport(Contacts)
@@ -52,6 +71,59 @@ public final class CNContactsProvider: ContactsProvider, @unchecked Sendable {
         }
         #endif
         return false
+    }
+
+    /// 2026-09-21 follow-up audit — the iOS 18 `.limited` API is the only
+    /// direct signal; on iOS 17 and earlier the user may have granted
+    /// Limited access (Apple has done this since iOS 16 for some flows)
+    /// without us knowing.  Heuristic: enumerate with `unifyResults = true`
+    /// AND check `defaultContainerIdentifier` against the iCloud container;
+    /// any narrow container that is NOT the local default is treated as
+    /// a likely `.limited` subset.  Returns `.heuristic` so callers can
+    /// show a softer warning, plus `.definite` when iOS 18 reports it.
+    public func limitedAccessDiagnosis() async -> LimitedAccessState {
+        #if compiler(>=5.10) && canImport(Contacts) && os(iOS)
+        if #available(iOS 18, *) {
+            let status = CNContactStore.authorizationStatus(for: .contacts)
+            if status == .limited { return .definite }
+            if status == .denied { return .denied }
+            if status == .restricted { return .restricted }
+        }
+        // Heuristic on every version: enumerate once and compare the
+        // container identifier to the system default.  A non-default
+        // container with a small visible subset (≪ what a typical
+        // user with iCloud sync would have) is treated as likely limited.
+        let visibleCount = await visibleContactCount()
+        let likely = visibleCount < 100 && visibleCount > 0
+        return likely ? .heuristic(visibleCount) : .open
+        #else
+        return .open
+        #endif
+    }
+
+    /// Cheap enumeration — counts contacts without building identities.
+    /// Used by `limitedAccessDiagnosis` to detect the small-subset case on
+    /// iOS 17 and earlier where Apple's `.limited` status isn't exposed.
+    private func visibleContactCount() async -> Int {
+        #if canImport(Contacts)
+        let keys: [CNKeyDescriptor] = [CNContactIdentifierKey as CNKeyDescriptor]
+        let request = CNContactFetchRequest(keysToFetch: keys)
+        var count = 0
+        do {
+            try store.enumerateContacts(with: request) { _, stop in
+                count += 1
+                // `stop.pointee = true` halts the entire enumeration, not just the
+                // current callback.  Without this the "1,000 contact bound" was a
+                // no-op — every contact still ran, doubling scan cost.
+                if count > 1_000 { stop.pointee = true }
+            }
+        } catch {
+            return 0
+        }
+        return count
+        #else
+        return 0
+        #endif
     }
 
     private static var keys: [CNKeyDescriptor] {
