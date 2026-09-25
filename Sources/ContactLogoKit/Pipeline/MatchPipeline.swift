@@ -162,6 +162,21 @@ public struct MatchPipeline: Sendable {
     }
 
     /// R7.4 — a lone given or family name that is a catalog firm.
+    ///
+    /// Augmentations beyond the original ENGINE-CONTRACT R7.4:
+    /// 1. A non-catalog multi-token candidate with an `orgSignal` word
+    ///    ("Joe's Plumbing"), a business legal suffix ("Acme Roofing LLC"),
+    ///    or 3+ tokens that don't all match a personal-name pattern is
+    ///    inferred as a business.  Without this, only the 84-entry catalog
+    ///    catches lone-name businesses and most of a real address book
+    ///    falls into the "protected person" bucket (issue: only ~25 of
+    ///    ~15k contacts surfaced).
+    /// 2. The freemail short-circuit is removed.  A business contact can
+    ///    have a personal email backup; the brand is decided by the name,
+    ///    not by the inbox.
+    /// 3. The personal-name shape guard (`looksLikePersonName`) is kept
+    ///    so a 2-4 token name like "John Michael Smith" still reads as a
+    ///    person and is not converted into a business query.
     public func inferCompanyFromLoneName(_ c: ContactIdentity) -> String? {
         let given = NameNormalizer.clean(c.givenName ?? "")
         let family = NameNormalizer.clean(c.familyName ?? "")
@@ -170,15 +185,36 @@ public struct MatchPipeline: Sendable {
         let unstructured = given.isEmpty && family.isEmpty
         guard onlyGiven || onlyFamily || unstructured else { return nil }
 
-        let consumerEmail = c.emailDomains.contains {
-            DomainDeriver.freemail.contains(DomainDeriver.emailHost($0).lowercased())
-        }
-        if consumerEmail { return nil }
-
         let candidate = NameNormalizer.clean(onlyGiven ? given : onlyFamily ? family : c.displayName)
-        guard !candidate.isEmpty, !looksLikePersonName(candidate) else { return nil }
+        guard !candidate.isEmpty else { return nil }
+
         if CompanyCatalog.domain(forName: candidate) != nil { return candidate }
+        // Catalog miss — fall through to the multi-token business heuristic.
+        // A single token is not enough signal to flip from "person" to
+        // "business" without a catalog hit.
+        if looksLikeBusinessName(candidate) { return candidate }
         return nil
+    }
+
+    /// The mirror of `looksLikePersonName`: shape-based hint that a token
+    /// is more likely a business than a person.  Used by
+    /// `inferCompanyFromLoneName` to rescue multi-word lone-name contacts
+    /// ("Joe's Plumbing", "Bayou City Sprinkler") that the catalog misses.
+    private func looksLikeBusinessName(_ name: String) -> Bool {
+        let cleaned = NameNormalizer.clean(name)
+        let parts = cleaned.split(whereSeparator: { $0 == " " || $0 == "\t" }).map(String.init)
+        guard parts.count >= 2 else { return false }
+
+        let lowerTokens = Set(parts.map { $0.lowercased().trimmingCharacters(in: .punctuationCharacters) })
+        // 1. Org-signal word present ("Plumbing", "Pharmacy", "Roofing").
+        if !lowerTokens.isDisjoint(with: WordLists.orgSignal) { return true }
+        // 2. Legal suffix ("LLC", "Inc", "Co") — the catalog strips these
+        //    before lookup, so we re-check the original cleaned candidate.
+        if !lowerTokens.isDisjoint(with: WordLists.businessSuffix) { return true }
+        // 3. 3+ tokens with no person-shape signal at all — "Bayou City
+        //    Sprinkler", "Northwest Harris County MUD".
+        if parts.count >= 3, !looksLikePersonName(cleaned) { return true }
+        return false
     }
 
     private func domainForOrganization(_ org: String, contact: ContactIdentity) -> String? {
@@ -200,12 +236,29 @@ public struct MatchPipeline: Sendable {
     }
 
     /// Affiliated company name or domain for a named person with employer/company metadata.
+    ///
+    /// A lone-name business (issue surfaced on 2026-09-20 — iOS reported
+    /// only ~25 of ~15k contacts) is its own affiliation.  Without this,
+    /// `inferCompanyFromLoneName` returning a brand would still leave the
+    /// contact unmatched (classified `.person`, then dropped here).
     public func affiliation(for c: ContactIdentity) -> (brandName: String, domain: String?)? {
         let given = (c.givenName ?? "").trimmingCharacters(in: .whitespaces)
         let family = (c.familyName ?? "").trimmingCharacters(in: .whitespaces)
         let hasPersonName = !given.isEmpty || !family.isEmpty
         guard hasPersonName else { return nil }
-        if inferCompanyFromLoneName(c) != nil { return nil }
+        if let lone = inferCompanyFromLoneName(c) {
+            // The contact *is* the brand (lone-name business).  Look the
+            // brand up in the catalog, then fall back to a guessed domain.
+            let domain = CompanyCatalog.domain(forName: lone)
+                ?? NameNormalizer.guessSlug(lone).map { "\($0).com" }
+            return (lone, domain)
+        }
+
+        // An organization that names a business but can't be tied to a domain
+        // ("Gulf Coast Roofing" on a phone-only card).  Used as the last-resort
+        // affiliation below so the contact reaches Review instead of being
+        // silently counted as a protected person.
+        var unresolvedOrganization: String?
 
         // 1. Organization field (e.g. "Apple", "Texas Instruments", "Stripe")
         if let org = c.organization?.trimmingCharacters(in: .whitespaces), !org.isEmpty {
@@ -220,6 +273,17 @@ public struct MatchPipeline: Sendable {
                 let orgCandidate = (seg.decorationStripped || seg.isBrandTail) ? seg.query : cleanOrg
                 if let catalogDomain = CompanyCatalog.domain(forName: orgCandidate) {
                     return (orgCandidate, catalogDomain)
+                }
+                // Fallback candidate for step 4.  Deliberately looser than the
+                // domain gate below: `isRoleOrPlace` rejects an org if ANY word
+                // is a role or geo word, which drops most local businesses
+                // ("Houston Roofing Co", "Cypress Auto Center").  Here only a
+                // personal job title, or an org made entirely of role/place
+                // words, disqualifies it.
+                if !GenericBlocklist.isNonBrand(orgCandidate),
+                   Self.organizationNamesABusiness(orgCandidate),
+                   Self.organizationNamesABusiness(cleanOrg) {
+                    unresolvedOrganization = orgCandidate
                 }
                 // Reject role metadata or job titles ("Director", "Hsa PTO - Asst Treasurer")
                 if !GenericBlocklist.isNonBrand(orgCandidate) &&
@@ -258,7 +322,41 @@ public struct MatchPipeline: Sendable {
             }
         }
 
+        // 4. Organization that names a business but has no catalog entry or
+        //    matching email/website.  No domain is guessed: matching runs on
+        //    the name alone, and `matchAffiliated` caps it at medium (Review),
+        //    never auto-selected.  Role/title and generic words were already
+        //    rejected above.
+        if let org = unresolvedOrganization {
+            return (org, nil)
+        }
+
         return nil
+    }
+
+    /// Job titles that describe the person, not the company.  Business words
+    /// that `WordLists.roleWords` also carries ("services", "sales", "home",
+    /// "office", "support") are intentionally absent.
+    static let personalTitleWords: Set<String> = [
+        "manager", "mgr", "gm", "asst", "assistant", "treasurer", "president",
+        "vp", "director", "owner", "coordinator", "secretary", "chair",
+        "chairman", "rep", "representative", "agent", "admin", "hr",
+        "scheduler", "reception", "receptionist", "voicemail", "ext", "cell",
+        "mobile", "fax"
+    ]
+
+    /// True when an organization string plausibly names a business: it has
+    /// no personal job title and at least one word that is not a role or
+    /// place word.  "Gulf Coast Roofing" and "Cypress Auto Center" pass;
+    /// "Director", "Asst Treasurer", "Houston" and "Katy Home Services" do not.
+    static func organizationNamesABusiness(_ org: String) -> Bool {
+        let toks = WordLists.tokens(org)
+        guard !toks.isEmpty else { return false }
+        if toks.contains(where: { personalTitleWords.contains($0) }) { return false }
+        let decoration = WordLists.roleWords.union(WordLists.geoWords)
+        return toks.contains { tok in
+            tok.count >= 2 && !decoration.contains(tok) && !tok.allSatisfy({ $0.isNumber })
+        }
     }
 
     /// Matches an affiliated person against their company/organization mark.
@@ -288,7 +386,17 @@ public struct MatchPipeline: Sendable {
                     sourceErrors: result.sourceErrors
                 )
             }
-            return nil
+            // No logo found.  Keep the row in Not found (skip, never selected)
+            // so the contact stays visible and searchable and can get a manual
+            // logo, instead of vanishing from every tab.
+            return MatchResult(
+                contactID: c.id,
+                contactClass: .person,
+                candidates: [],
+                confidence: .skip,
+                flags: ["affiliated", "opt-in-review"] + (aff.domain == nil ? ["org-name-only"] : []),
+                sourceErrors: []
+            )
         }
         var flags = result.flags
         if !flags.contains("affiliated") {
@@ -296,6 +404,9 @@ public struct MatchPipeline: Sendable {
         }
         if !flags.contains("opt-in-review") {
             flags.append("opt-in-review")
+        }
+        if aff.domain == nil, !flags.contains("org-name-only") {
+            flags.append("org-name-only")
         }
         let cappedConfidence = min(result.confidence, .medium)
         return MatchResult(
@@ -470,7 +581,13 @@ public struct MatchPipeline: Sendable {
     private func looksLikePersonName(_ name: String) -> Bool {
         let cleaned = NameNormalizer.clean(name).replacingOccurrences(of: ",", with: " ")
         let parts = cleaned.split(separator: " ").map(String.init)
-        guard (2...4).contains(parts.count) else { return false }
+        guard parts.count >= 2 else { return false }
+        // 2026-09-20 audit: the upper bound of 4 tokens caused long
+        // real-world names ("Juan Carlos de la Cruz", "María del Carmen
+        // Reyes") to fall through and be mis-promoted to .businessCard by
+        // looksLikeBusinessName's ≥3-token branch.  The shape is the
+        // same regardless of token count: every part is a short
+        // alphabetic word, possibly with apostrophes or hyphens.
         return parts.allSatisfy { $0.range(of: #"^[A-Za-z][A-Za-z'.-]{1,30}$"#, options: .regularExpression) != nil }
     }
 }

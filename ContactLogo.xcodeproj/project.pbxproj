@@ -26,6 +26,7 @@
 		2CE8F74A2766F2F4E0866C15 /* MatchPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22FEC6F6504CCE6E79E4CAFF /* MatchPipeline.swift */; };
 		30E08547A52BFFFA601404CA /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = F820656E4A3ABCD04FC49168 /* Models.swift */; };
 		3386BC5AE4329A706961FEAC /* BrandfetchSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10FE0C32FC2442090989354 /* BrandfetchSource.swift */; };
+		37DC555141505BA907E1EBDE /* ContactLogoCacheSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = A97E49B99E2F0F2577E6AFDD /* ContactLogoCacheSource.swift */; };
 		394F7AC53FEC7D352D09E06B /* SVGRasterizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5ED8D6C0517E1AE6081E879C /* SVGRasterizer.swift */; };
 		3BC0131CA87BEA135FAC7140 /* MatchPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22FEC6F6504CCE6E79E4CAFF /* MatchPipeline.swift */; };
 		3C46C9CF19FF9F9C87269F1D /* GenericBlocklist.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98997F8A612379F7F3F60A43 /* GenericBlocklist.swift */; };
@@ -71,6 +72,7 @@
 		C1FCCD7148A8844104DE19AC /* DefaultSources.swift in Sources */ = {isa = PBXBuildFile; fileRef = E363321D372087081BC5666C /* DefaultSources.swift */; };
 		C2508AE86F24A9C06767E1E9 /* UndoLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7391AC474DA50FB01E0BF294 /* UndoLog.swift */; };
 		C363DBA04A219A74EF97535A /* PreferredMarksSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F9CD8E8CE34EC75A0104A85 /* PreferredMarksSource.swift */; };
+		C5F588EBA62B3EA1DDC2B6B4 /* ContactLogoCacheSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = A97E49B99E2F0F2577E6AFDD /* ContactLogoCacheSource.swift */; };
 		C6BFAE917D3F8761478E8259 /* CandidateFileName.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39EEECF2529DD56CDDB234FC /* CandidateFileName.swift */; };
 		C963AA407E3D6C2CA3819674 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19B063D75543B34805CD5F1C /* SettingsView.swift */; };
 		CA91FC9CFC2D73B6A9E770E7 /* LogoSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F13C914BB55CC5108C409D4 /* LogoSource.swift */; };
@@ -165,6 +167,7 @@
 		97A4D290499E32073943EB24 /* SentryTelemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SentryTelemetry.swift; sourceTree = "<group>"; };
 		98997F8A612379F7F3F60A43 /* GenericBlocklist.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenericBlocklist.swift; sourceTree = "<group>"; };
 		A52EDB8D876C3D24B6B18B8E /* ManualOverrideSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualOverrideSheet.swift; sourceTree = "<group>"; };
+		A97E49B99E2F0F2577E6AFDD /* ContactLogoCacheSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactLogoCacheSource.swift; sourceTree = "<group>"; };
 		B57A945885E5C85324DE0C5A /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		B93FC49350414117E0A9F619 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
 		BE7B747DFFEB1E11CFF70A34 /* DomainDeriver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DomainDeriver.swift; sourceTree = "<group>"; };
@@ -178,6 +181,7 @@
 		D79CC86B84746C889E1B7462 /* FaviconSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FaviconSource.swift; sourceTree = "<group>"; };
 		E04865AB793CE93A696E583A /* CandidateRanker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CandidateRanker.swift; sourceTree = "<group>"; };
 		E363321D372087081BC5666C /* DefaultSources.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultSources.swift; sourceTree = "<group>"; };
+		E367D12C2FBC4FB53F09631F /* ContactLogoiOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ContactLogoiOS.entitlements; sourceTree = "<group>"; };
 		E5740648826FBF7D7003C356 /* ContactLogoMacApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactLogoMacApp.swift; sourceTree = "<group>"; };
 		E7387A0CA93D250803C638E8 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		EA4B4EE97BCDD22F4C6B44F7 /* CompanyCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanyCatalog.swift; sourceTree = "<group>"; };
@@ -281,6 +285,7 @@
 			children = (
 				0C95E9161210A4E38C45148E /* AppUpdatePrompt.swift */,
 				25365E7DBFE88D90575DBBA4 /* Assets.xcassets */,
+				E367D12C2FBC4FB53F09631F /* ContactLogoiOS.entitlements */,
 				681346B29861440FC8ECDB60 /* ContactLogoiOSApp.swift */,
 				56605D3FFDA7F1FA949DABF3 /* ContentView.swift */,
 				7F1E53FE9C778F7B0A55F79F /* Info.plist */,
@@ -326,6 +331,7 @@
 			children = (
 				C10FE0C32FC2442090989354 /* BrandfetchSource.swift */,
 				F54AE3ACB7FFE84AB4A3AC6C /* CompaniesLogoSource.swift */,
+				A97E49B99E2F0F2577E6AFDD /* ContactLogoCacheSource.swift */,
 				D79CC86B84746C889E1B7462 /* FaviconSource.swift */,
 				C98D5B3CD005C6DA5DB36B57 /* HTTPRetry.swift */,
 				BF04212A05BD18249FFCADBD /* ImageFlags.swift */,
@@ -534,6 +540,7 @@
 				02848CAA91730AA6A8CD9AA4 /* CandidateRanker.swift in Sources */,
 				6AE8A1498C59CB7B58305D0E /* CompaniesLogoSource.swift in Sources */,
 				879E4773057DAEE3D22F1911 /* CompanyCatalog.swift in Sources */,
+				C5F588EBA62B3EA1DDC2B6B4 /* ContactLogoCacheSource.swift in Sources */,
 				7B2F55EB61AAA8853A737099 /* ContactsProvider.swift in Sources */,
 				C1FCCD7148A8844104DE19AC /* DefaultSources.swift in Sources */,
 				A965E0E97A8B9CD17293BC0D /* DomainDeriver.swift in Sources */,
@@ -571,6 +578,7 @@
 				66A6BA19C6F3EB06181C2A0E /* CandidateRanker.swift in Sources */,
 				1E41FAE9CACFEFEB66CE1A4E /* CompaniesLogoSource.swift in Sources */,
 				09E79A9F1F1ECE8DA660D31A /* CompanyCatalog.swift in Sources */,
+				37DC555141505BA907E1EBDE /* ContactLogoCacheSource.swift in Sources */,
 				A11808266B0D9CDD5E977B89 /* ContactsProvider.swift in Sources */,
 				5C0BFA7FEFCD6A82F8A3C079 /* DefaultSources.swift in Sources */,
 				AE8B9779BA31A084B3007032 /* DomainDeriver.swift in Sources */,
@@ -696,7 +704,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.contactlogo.kit;
+				PRODUCT_BUNDLE_IDENTIFIER = com.contactlogo.kit.ios;
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -806,6 +814,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Apps/ContactLogoiOS/ContactLogoiOS.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -823,7 +832,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.contactlogo;
+				PRODUCT_BUNDLE_IDENTIFIER = com.contactlogo.ios;
 				PRODUCT_NAME = ContactLogo;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -847,7 +856,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.contactlogo.kit;
+				PRODUCT_BUNDLE_IDENTIFIER = com.contactlogo.kit.ios;
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -859,6 +868,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Apps/ContactLogoiOS/ContactLogoiOS.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -876,7 +886,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.contactlogo;
+				PRODUCT_BUNDLE_IDENTIFIER = com.contactlogo.ios;
 				PRODUCT_NAME = ContactLogo;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";

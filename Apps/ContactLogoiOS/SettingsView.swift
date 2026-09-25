@@ -7,7 +7,9 @@ import ContactLogoKit
 /// variable, which GUI apps launched from Springboard never have set.
 struct SettingsView: View {
     @EnvironmentObject var settings: SettingsStore
+    @EnvironmentObject var model: ReviewSession
     @Environment(\.dismiss) private var dismiss
+    @State private var showDiagnostic = false
 
     var body: some View {
         NavigationStack {
@@ -20,7 +22,7 @@ struct SettingsView: View {
                     SecureField("API Key", text: $settings.brandfetchAPIKey)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                        .onChange(of: settings.brandfetchAPIKey) { settings.save() }
+                        .onChange(of: settings.brandfetchClientID) { settings.save() }
                 } header: {
                     Text("Brandfetch")
                 } footer: {
@@ -38,6 +40,20 @@ struct SettingsView: View {
                 } footer: {
                     Text("Off by default. A business card that already has a photo stays in Needs review, flagged \"replace existing\", and is never applied automatically. Turn this on to leave those cards out of the scan entirely.")
                 }
+                // 2026-09-21 follow-up audit — direct route to the "Why am I only
+                // seeing X contacts?" diagnostic so a user can verify whether
+                // Limited Contacts access is the cause without guessing.
+                Section {
+                    Button {
+                        showDiagnostic = true
+                    } label: {
+                        Label("Diagnostic: Why am I only seeing X?", systemImage: "stethoscope")
+                    }
+                } header: {
+                    Text("Scan coverage")
+                } footer: {
+                    Text("Shows the authorization state, the scan breakdown, and a sample of dropped contacts so you can verify whether Limited contacts access is hiding part of your address book.")
+                }
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
@@ -45,6 +61,9 @@ struct SettingsView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                 }
+            }
+            .sheet(isPresented: $showDiagnostic) {
+                DiagnosticView()
             }
         }
     }

@@ -114,6 +114,13 @@ final class ReviewQueueStoreTests: XCTestCase {
     }
 
     func testUnknownSchemaIsDiscarded() throws {
+        // 2026-09-20 audit: a schema-version bump alone no longer
+        // discards the snapshot — older payloads decode cleanly because
+        // new fields are optional, and discarding would silently drop
+        // user review work across a routine persistence bump.  This
+        // test now pins that a decodable payload of any schema survives
+        // the load, and the only thing that triggers a delete is a
+        // stale change token or an empty results set.
         let dir = try makeDir()
         let store = ReviewQueueStore(directory: dir, currentChangeToken: { Data("A".utf8) })
         var snapshot = sampleQueue(token: Data("A".utf8))
@@ -123,8 +130,9 @@ final class ReviewQueueStoreTests: XCTestCase {
         try FileManager.default.createDirectory(at: store.fileURL.deletingLastPathComponent(),
                                                 withIntermediateDirectories: true)
         try data.write(to: store.fileURL)
-        XCTAssertNil(try store.loadFresh())
-        XCTAssertFalse(FileManager.default.fileExists(atPath: store.fileURL.path))
+        let loaded = try store.loadFresh()
+        XCTAssertNotNil(loaded)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: store.fileURL.path))
         try? FileManager.default.removeItem(at: dir)
     }
 
@@ -140,6 +148,21 @@ final class ReviewQueueStoreTests: XCTestCase {
         XCTAssertEqual(loaded?.results.first?.candidates.count, 1)
         XCTAssertEqual(loaded?.results.first?.candidates.first?.source, .simpleIcons)
         XCTAssertTrue(loaded?.results.first?.candidates.allSatisfy(\.isPersistableURL) == true)
+        try? FileManager.default.removeItem(at: dir)
+    }
+
+    func testLimitedAccessFlagSurvivesSaveAndLoad() throws {
+        // 2026-09-20 audit — the .limited Contacts banner must persist with
+        // the queue, otherwise the restored tiny-queue scenario (the
+        // canonical 'only 25 of 15k' symptom) loses its explanation
+        // immediately after relaunch.
+        let dir = try makeDir()
+        let store = ReviewQueueStore(directory: dir, currentChangeToken: { Data("A".utf8) })
+        var queue = sampleQueue(token: Data("A".utf8))
+        queue.limitedAccessGranted = true
+        try store.save(queue)
+        let loaded = try store.load()
+        XCTAssertEqual(loaded?.limitedAccessGranted, true)
         try? FileManager.default.removeItem(at: dir)
     }
 

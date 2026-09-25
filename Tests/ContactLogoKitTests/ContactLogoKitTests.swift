@@ -1032,9 +1032,139 @@ final class AffiliatedContactTests: XCTestCase {
         XCTAssertEqual(aff?.brandName, "Root Insurance")
     }
 
-    func testLoneFirmNameIsNotAnAffiliation() {
+    func testLoneFirmNameIsAffiliatedToItself() {
+        // 2026-09-20 audit: a lone-name business contact is its own
+        // affiliation.  Without this, classifying as a business but then
+        // failing to match leaves the row invisible — the bug that made
+        // iOS report "only 25 of 15k contacts" for lone-name businesses.
         let target = ContactIdentity(id: "5", displayName: "Target", givenName: "Target")
-        XCTAssertNil(pipeline.affiliation(for: target))
+        let aff = pipeline.affiliation(for: target)
+        XCTAssertNotNil(aff)
+        XCTAssertEqual(aff?.brandName, "Target")
+        XCTAssertEqual(aff?.domain, "target.com")
+    }
+
+    func testLoneFirmNameNotInCatalogGetsGuessedDomain() {
+        let plumbing = ContactIdentity(id: "10", displayName: "Joe's Plumbing", givenName: "Joe's Plumbing")
+        let aff = pipeline.affiliation(for: plumbing)
+        XCTAssertNotNil(aff)
+        XCTAssertEqual(aff?.brandName, "Joe's Plumbing")
+        XCTAssertEqual(aff?.domain, "joesplumbing.com")
+    }
+
+    func testLoneFirmNameWithFreemailStillCatalogWins() {
+        // The old behavior blocked lone-firm-name inference for any contact
+        // with a consumer email — the dominant "only 25" failure mode.
+        let walgreens = ContactIdentity(id: "11", displayName: "Walgreens",
+                                        givenName: "Walgreens",
+                                        emailDomains: ["gmail.com"])
+        let aff = pipeline.affiliation(for: walgreens)
+        XCTAssertNotNil(aff)
+        XCTAssertEqual(aff?.domain, "walgreens.com")
+    }
+
+    func testLimitedAccessStateEquatableAndSendable() {
+        // 2026-09-21 follow-up — the new diagnostic state must be a
+        // regular value type so the iOS UI can pattern-match on it.
+        let a: LimitedAccessState = .open
+        let b: LimitedAccessState = .open
+        let c: LimitedAccessState = .definite
+        XCTAssertEqual(a, b)
+        XCTAssertNotEqual(a, c)
+        let d: LimitedAccessState = .heuristic(25)
+        let e: LimitedAccessState = .heuristic(25)
+        let f: LimitedAccessState = .heuristic(15000)
+        XCTAssertEqual(d, e)
+        XCTAssertNotEqual(d, f)
+    }
+
+    func testSampleDroppedContactEquality() {
+        // 2026-09-21 follow-up — the published sampleDroppedContacts must
+        // be a regular value type so the iOS list can use the id-based
+        // diff.  Two identical 'John Smith / no org' rows must NOT
+        // collapse into one — distinct contactID keeps them distinct.
+        let a = ReviewSession.SampleDroppedContact(
+            contactID: "1",
+            displayName: "Maya Chen", reason: "Person with no org",
+            givenName: "Maya", familyName: "Chen", organization: nil
+        )
+        let b = ReviewSession.SampleDroppedContact(
+            contactID: "1",
+            displayName: "Maya Chen", reason: "Person with no org",
+            givenName: "Maya", familyName: "Chen", organization: nil
+        )
+        XCTAssertEqual(a, b)
+        XCTAssertEqual(a.id, "1")
+        let c = ReviewSession.SampleDroppedContact(
+            contactID: "2",
+            displayName: "Maya Chen", reason: "Person with no org",
+            givenName: "Maya", familyName: "Chen", organization: nil
+        )
+        XCTAssertNotEqual(a, c, "duplicate display fields with distinct contactID must remain distinct")
+    }
+
+    func testPersonWithUnresolvableOrganizationFallsBackToOrgName() {
+        // 2026-09-24: an iOS scan found 22 targets in 15k+ contacts.  A
+        // business saved under a person's name with an org and only a phone
+        // number was counted as a protected person and never reached Review.
+        let mike = ContactIdentity(id: "20", displayName: "Mike Johnson", givenName: "Mike", familyName: "Johnson",
+                                   organization: "Gulf Coast Roofing", phoneNumbers: ["+17135550100"])
+        let aff = pipeline.affiliation(for: mike)
+        XCTAssertNotNil(aff)
+        XCTAssertEqual(aff?.brandName, "Gulf Coast Roofing")
+        XCTAssertNil(aff?.domain, "no domain is guessed for an org-name-only affiliation")
+    }
+
+    func testLocalBusinessOrgWithPlaceWordStillFallsBack() {
+        // `isRoleOrPlace` rejects any org with a single geo word ("Houston"),
+        // which dropped most local businesses.  The fallback does not.
+        let dana = ContactIdentity(id: "21", displayName: "Dana Lee", givenName: "Dana", familyName: "Lee",
+                                   organization: "Houston Roofing", emailDomains: ["gmail.com"])
+        let aff = pipeline.affiliation(for: dana)
+        XCTAssertNotNil(aff)
+        XCTAssertNil(aff?.domain)
+    }
+
+    func testOrgMadeOnlyOfRoleOrPlaceWordsIsNotAnAffiliation() {
+        let a = ContactIdentity(id: "22", displayName: "Pat Kim", givenName: "Pat", familyName: "Kim",
+                                organization: "Houston")
+        XCTAssertNil(pipeline.affiliation(for: a))
+        let b = ContactIdentity(id: "23", displayName: "Sam Ortiz", givenName: "Sam", familyName: "Ortiz",
+                                organization: "Sales Manager")
+        XCTAssertNil(pipeline.affiliation(for: b))
+    }
+
+    func testOrgNameOnlyAffiliationWithNoLogoStaysVisibleAsNotFound() async {
+        let mike = ContactIdentity(id: "24", displayName: "Mike Johnson", givenName: "Mike", familyName: "Johnson",
+                                   organization: "Gulf Coast Roofing", phoneNumbers: ["+17135550100"])
+        let res = await pipeline.matchAffiliated(mike)
+        XCTAssertNotNil(res, "an affiliated contact with no logo must not vanish from every tab")
+        XCTAssertEqual(res?.confidence, .skip)
+        XCTAssertEqual(res?.flags.contains("affiliated"), true)
+        XCTAssertEqual(res?.flags.contains("org-name-only"), true)
+    }
+
+    @MainActor
+    func testScanFailureSurfacesError() async {
+        struct ThrowingProvider: ContactsProvider {
+            struct Boom: Error {}
+            func requestAccess() async throws -> Bool { true }
+            func fetchCandidates() async throws -> [ContactIdentity] { throw Boom() }
+            func imageData(forContactID id: String) async throws -> Data? { nil }
+            func setImage(_ data: Data, forContactID id: String) async throws {}
+            func removeImage(forContactID id: String) async throws {}
+        }
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let store = ReviewQueueStore(directory: tempDir, currentChangeToken: { nil })
+        let session = ReviewSession(queueStore: store)
+        session.contactsProviderForTesting = ThrowingProvider()
+        session.pipelineForTesting = MatchPipeline(sources: [], fetchImage: { _ in Data() })
+        let completed = await session.scanAndMatch()
+        XCTAssertFalse(completed)
+        XCTAssertEqual(session.stage, .idle)
+        guard case .scanFailed = session.lastError else {
+            return XCTFail("a thrown scan must set lastError, got \(String(describing: session.lastError))")
+        }
     }
 
     func testRoleOrTitleInOrganizationIsNotAnAffiliation() {
@@ -1132,6 +1262,66 @@ final class AffiliatedContactTests: XCTestCase {
         XCTAssertEqual(restoredSession.protectedPersonCount, 7120)
         XCTAssertEqual(restoredSession.businessTargetsCount, 200)
         XCTAssertEqual(restoredSession.affiliatedTargetsCount, 92)
+    }
+
+    @MainActor
+    func testPersistedReviewQueueSavesAndRestoresDroppedSamples() throws {
+        // PR #102 review — a restored background scan must keep the
+        // Diagnostic screen's dropped-contact sample.
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let store = ReviewQueueStore(directory: tempDir, currentChangeToken: { Data([4, 5, 6]) })
+        let session = ReviewSession(queueStore: store)
+        session.results = [
+            MatchResult(contactID: "10", contactClass: .businessCard,
+                        candidates: [LogoCandidate(source: .simpleIcons, imageURL: URL(string: "https://example.com/logo.png")!, pixelWidth: 128, pixelHeight: 128, assetType: "icon", hasAlpha: true)],
+                        confidence: .high)
+        ]
+        let samples = [
+            ReviewSession.SampleDroppedContact(contactID: "a", displayName: "John Smith",
+                                               reason: "Person with no org / work email / brand-tail",
+                                               givenName: "John", familyName: "Smith", organization: nil),
+            ReviewSession.SampleDroppedContact(contactID: "b", displayName: "Front Desk - Hospital",
+                                               reason: "Generic non-brand name (e.g. Hospital, Gift Card, printer)",
+                                               givenName: nil, familyName: nil, organization: nil)
+        ]
+        session.sampleDroppedContacts = samples
+        XCTAssertTrue(session.persistReviewQueue())
+        XCTAssertEqual(try store.load()?.sampleDroppedContacts, samples)
+
+        let restoredSession = ReviewSession(queueStore: store)
+        XCTAssertEqual(restoredSession.sampleDroppedContacts, samples)
+    }
+
+    func testPersistedReviewQueueWithoutDroppedSamplesStillDecodes() throws {
+        // Older snapshots have no sampleDroppedContacts key.
+        let json = #"{"schemaVersion":2,"scannedAt":"2026-09-20T00:00:00Z","results":[],"selected":[],"chosenIndex":{},"names":{}}"#
+        let decoded = try ReviewQueueStore.makeDecoder().decode(PersistedReviewQueue.self, from: Data(json.utf8))
+        XCTAssertNil(decoded.sampleDroppedContacts)
+    }
+
+    @MainActor
+    func testNonBrandContactsAppearInDroppedSamples() async {
+        // PR #102 review — .nonBrand contacts were dropped silently, never
+        // reaching the Diagnostic sample.
+        struct MockProvider: ContactsProvider {
+            let contacts: [ContactIdentity]
+            func requestAccess() async throws -> Bool { true }
+            func fetchCandidates() async throws -> [ContactIdentity] { contacts }
+            func fetchCandidate(id: String) async -> ContactIdentity? { contacts.first(where: { $0.id == id }) }
+            func imageData(forContactID id: String) async throws -> Data? { nil }
+            func setImage(_ data: Data, forContactID id: String) async throws {}
+            func removeImage(forContactID id: String) async throws {}
+        }
+        let hospital = ContactIdentity(id: "h1", displayName: "Front Desk - Hospital")
+        XCTAssertEqual(pipeline.classify(hospital), .nonBrand)
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let store = ReviewQueueStore(directory: tempDir, currentChangeToken: { nil })
+        let session = ReviewSession(queueStore: store)
+        session.contactsProviderForTesting = MockProvider(contacts: [hospital])
+        session.pipelineForTesting = MatchPipeline(sources: [], fetchImage: { _ in Data() })
+        await session.scanAndMatch()
+        XCTAssertEqual(session.sampleDroppedContacts.map(\.contactID), ["h1"])
+        XCTAssertTrue(session.sampleDroppedContacts.first?.reason.contains("non-brand") ?? false)
     }
 }
 #endif

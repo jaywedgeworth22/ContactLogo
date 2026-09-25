@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 2026-09-22 [MM]: Created as part of the bundle-identifier migration lane.
+     App Group group.com.contactlogo is shared with the macOS app so future
+     UserDefaults / shared-container work has a home.  Associated Domain
+     contactlogo.com carries Universal Links (applinks) for any future deep
+     links from the landing page and webcredentials for the shared Safari
+     password flow.  See docs/rollouts/2026-09-22-bundle-id-migration.md.
+     Owner still needs to register the App Group + associated-domain
+     capability on the new com.contactlogo.ios App ID in Apple Developer
+     Portal, and host https://contactlogo.com/.well-known/apple-app-site-association
+     for the entitlements to validate. -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>group.com.contactlogo</string>
+    </array>
+    <key>com.apple.developer.associated-domains</key>
+    <array>
+        <string>applinks:contactlogo.com</string>
+        <string>webcredentials:contactlogo.com</string>
+    </array>
+</dict>
+</plist>

@@ -54,15 +54,157 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Brand icons for your address book.  Review every logo before it is written.")
                 .foregroundStyle(.secondary)
+            if case .definite = model.limitedAccessState {
+                LimitedAccessBlocker()
+            } else if case .heuristic(let count) = model.limitedAccessState {
+                LimitedAccessHeuristicNotice(visibleCount: count)
+            } else if model.limitedAccessGranted {
+                LimitedAccessBanner()
+            }
+            if case .scanFailed(let underlying) = model.lastError {
+                Label("The last scan failed (\(underlying)). Tap Scan contacts to try again.",
+                      systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.red)
+                    .font(.footnote)
+            }
             Label("Ready to apply (\(model.autoAccepted.count))", systemImage: "checkmark.circle.fill")
             Label("Needs review (\(model.needsReview.count))", systemImage: "questionmark.circle")
             Label("Not found (\(model.notFound.count))", systemImage: "minus.circle")
+            if model.totalScannedCount > 0 {
+                ScanBreakdownRow(
+                    scanned: model.totalScannedCount,
+                    business: model.businessTargetsCount,
+                    affiliated: model.affiliatedTargetsCount,
+                    protected: model.protectedPersonCount
+                )
+            }
             Button("Scan contacts") { Task { await model.scanAndMatch() } }
                 .buttonStyle(.borderedProminent)
             Spacer()
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// 2026-09-20 audit — surfaces Apple `.limited` Contacts access.  Without
+/// this, a user who picks "Only selected contacts" sees a tiny queue with
+/// no explanation (the canonical "only 25 of 15k contacts" symptom).
+struct LimitedAccessBanner: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("Limited contacts access", systemImage: "person.crop.circle.badge.exclamationmark")
+                .font(.subheadline.bold())
+                .foregroundStyle(.orange)
+            Text("ContactLogo can only see the contacts you chose in iOS Settings.  Grant full access to scan your whole address book.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Button("Open iOS Settings") {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            }
+            .font(.caption.bold())
+            .padding(.top, 2)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.10))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+/// 2026-09-21 follow-up audit — when the iOS 18 `.limited` API returns
+/// true, surface a BLOCKING full-screen call to action.  The user CANNOT
+/// proceed with a scan until they tap "Open iOS Settings" and expand
+/// contacts access.  This is the only path I could ship that actually
+/// closes the "only 25 contacts" loop for a user who picked Limited in the
+/// iOS permission prompt.
+struct LimitedAccessBlocker: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Limited contacts access detected", systemImage: "person.crop.circle.badge.exclamationmark.fill")
+                .font(.headline)
+                .foregroundStyle(.orange)
+            Text("ContactLogo is set to 'Only selected contacts'. To scan your full address book of 15,000 contacts, open iOS Settings and select 'All Contacts' for ContactLogo.")
+                .font(.subheadline)
+            Text("**How to fix:**")
+                .font(.subheadline.bold())
+            VStack(alignment: .leading, spacing: 4) {
+                Text("1. Tap 'Open iOS Settings' below.")
+                Text("2. Scroll to ContactLogo in the app list.")
+                Text("3. Tap Contacts.")
+                Text("4. Select 'All Contacts'.")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            Button {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            } label: {
+                Label("Open iOS Settings", systemImage: "arrow.up.right.square.fill")
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.12))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+/// 2026-09-21 follow-up — pre-iOS-18 fallback.  When the OS API is silent
+/// about `.limited`, we infer it from the visible contact count.  If
+/// the scan returned ~25 of an expected 15,000, this notice shows the
+/// same fix instructions but with the softer framing that we are
+/// making an educated guess.
+struct LimitedAccessHeuristicNotice: View {
+    let visibleCount: Int
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Only \(visibleCount) contacts are visible", systemImage: "exclamationmark.triangle.fill")
+                .font(.subheadline.bold())
+                .foregroundStyle(.orange)
+            Text("ContactLogo scanned your address book and only found \(visibleCount) entries — far fewer than a full address book. If you granted Limited access in iOS Settings, only the contacts you selected are visible. Tap below to open Settings and choose 'All Contacts'.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Button("Open iOS Settings") {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            }
+            .font(.caption.bold())
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.10))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+/// Bottom-of-idle scan breakdown so a user can tell at a glance whether
+/// the address book was actually scanned (vs. an empty `.limited` subset)
+/// and how the 15k contacts split across business / affiliated / personal.
+struct ScanBreakdownRow: View {
+    let scanned: Int
+    let business: Int
+    let affiliated: Int
+    let protected: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Last scan breakdown")
+                .font(.caption.bold())
+                .foregroundStyle(.secondary)
+            Text("\(scanned.formatted()) contacts scanned · \(business.formatted()) business · \(affiliated.formatted()) affiliated · \(protected.formatted()) personal protected")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.top, 8)
     }
 }
 
@@ -75,15 +217,19 @@ struct ReviewQueueView: View {
     @State private var showError = false
 
     var rows: [MatchResult] {
-        let base: [MatchResult]
-        switch bucket {
-        case .auto: base = model.autoAccepted
-        case .review: base = model.needsReview
-        case .notFound: base = model.notFound
+        let trimmed = searchText.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else {
+            switch bucket {
+            case .auto: return model.autoAccepted
+            case .review: return model.needsReview
+            case .notFound: return model.notFound
+            }
         }
-        guard !searchText.trimmingCharacters(in: .whitespaces).isEmpty else { return base }
-        let query = searchText.lowercased()
-        return base.filter { result in
+        // Search spans every tab.  Filtering only the selected tab (default
+        // Ready) hid every Review / Not found row from search, which read as
+        // "search only finds the same ~25 contacts".
+        let query = trimmed.lowercased()
+        return model.results.filter { result in
             let name = model.displayName(for: result.contactID).lowercased()
             let flags = result.flags.joined(separator: " ").lowercased()
             return name.contains(query) || flags.contains(query)
@@ -92,6 +238,23 @@ struct ReviewQueueView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            if case .definite = model.limitedAccessState {
+                LimitedAccessBlocker()
+                    .padding(.horizontal)
+            } else if case .heuristic(let count) = model.limitedAccessState {
+                LimitedAccessHeuristicNotice(visibleCount: count)
+                    .padding(.horizontal)
+            } else if model.limitedAccessGranted {
+                LimitedAccessBanner()
+                    .padding(.horizontal)
+            }
+            if case .scanIncomplete(let matched, let total) = model.lastError {
+                Label("Scan stopped early: matched \(matched) of \(total). Tap Scan to finish.",
+                      systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal)
+            }
             if model.totalScannedCount > 0 {
                 HStack(spacing: 6) {
                     Image(systemName: "shield.checkmark.fill")
@@ -160,7 +323,7 @@ struct ReviewQueueView: View {
                     }
                 }
             }
-            .searchable(text: $searchText, prompt: "Search brands or flags…")
+            .searchable(text: $searchText, prompt: "Search all tabs…")
         }
         .sheet(item: $previewResult) { result in
             ContactSimulatorSheet(result: result)
@@ -213,6 +376,10 @@ struct ReviewQueueView: View {
             return "Couldn't undo batch \(batchID.prefix(8)) (\(underlying)). You can try again."
         case .noBatchToUndo:
             return "There's no batch to undo."
+        case .scanFailed(let underlying):
+            return "The scan failed (\(underlying)). Tap Scan to try again."
+        case .scanIncomplete(let matched, let total):
+            return "The scan stopped early: matched \(matched) of \(total). Showing what finished. Tap Scan to run it again."
         }
     }
 }
@@ -471,5 +638,91 @@ struct LogoThumb: View {
         Image(systemName: "photo")
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// 2026-09-21 follow-up — a "Why am I only seeing X contacts?" Diagnostic
+/// screen.  Shows the authorization state, the breakdown, and a sample of
+/// the dropped contacts with the reason each was skipped.  Read-only; no
+/// settings to change here.  Accessed from the Settings sheet.
+struct DiagnosticView: View {
+    @EnvironmentObject var model: ReviewSession
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("Authorization") {
+                    HStack {
+                        Text("State")
+                        Spacer()
+                        Text(authStateText)
+                            .foregroundStyle(authStateColor)
+                    }
+                    if case .heuristic(let visible) = model.limitedAccessState {
+                        HStack {
+                            Text("Visible contacts")
+                            Spacer()
+                            Text("\(visible)")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                Section("Last scan") {
+                    LabeledContent("Scanned", value: "\(model.totalScannedCount)")
+                    LabeledContent("Business cards", value: "\(model.businessTargetsCount)")
+                    LabeledContent("Affiliated", value: "\(model.affiliatedTargetsCount)")
+                    LabeledContent("Personal protected", value: "\(model.protectedPersonCount)")
+                }
+                if !model.sampleDroppedContacts.isEmpty {
+                    Section("Sample of dropped contacts (max 20)") {
+                        ForEach(model.sampleDroppedContacts) { sample in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(sample.displayName.isEmpty ? "(unnamed contact)" : sample.displayName)
+                                    .font(.subheadline.bold())
+                                Text(sample.reason)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                if let org = sample.organization, !org.isEmpty {
+                                    Text("Org: \(org)")
+                                        .font(.caption2)
+                                        .foregroundStyle(.tertiary)
+                                }
+                            }
+                            .padding(.vertical, 4)
+                        }
+                    }
+                }
+                Section("How matching works") {
+                    Text("ContactLogo is review-first, so a contact is only marked as a logo target when a brand can be inferred confidently. The engine treats as a business card: a given-only brand name, a contact whose name OR organization field matches the CompanyCatalog, or a contact with brand-tail decoration (e.g. 'Maya Chen - Texas Instruments'). Personal contacts with no organization, no work email, and no brand-tail are protected — adding a brand to someone's headshot is the wrong-logo outcome the product exists to prevent.")
+                        .font(.caption)
+                }
+            }
+            .navigationTitle("Diagnostic")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+
+    private var authStateText: String {
+        switch model.limitedAccessState {
+        case .open: return model.limitedAccessGranted ? "Detected limited (heuristic)" : "Full access"
+        case .definite: return "Limited (iOS 18)"
+        case .heuristic: return "Likely limited (heuristic)"
+        case .denied: return "Denied"
+        case .restricted: return "Restricted"
+        }
+    }
+
+    private var authStateColor: any ShapeStyle {
+        switch model.limitedAccessState {
+        case .open where model.limitedAccessGranted: return AnyShapeStyle(.orange)
+        case .definite, .heuristic: return AnyShapeStyle(.orange)
+        case .denied, .restricted: return AnyShapeStyle(.red)
+        case .open: return AnyShapeStyle(.green)
+        }
     }
 }

@@ -14,7 +14,7 @@ enum NotificationScheduler {
         content.sound = .default
 
         let request = UNNotificationRequest(
-            identifier: "com.contactlogo.match-ready",
+            identifier: "com.contactlogo.ios.match-ready",
             content: content,
             trigger: nil
         )

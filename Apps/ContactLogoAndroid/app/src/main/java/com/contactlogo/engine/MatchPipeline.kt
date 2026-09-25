@@ -213,7 +213,11 @@ object MatchPipeline {
 
     private fun looksLikePersonName(n: String): Boolean {
         val parts = Normalize.clean(n).replace(",", " ").split(Regex("""\s+""")).filter { it.isNotBlank() }
-        if (parts.size !in 2..4) return false
+        // 2026-09-20 audit: the upper bound of 4 tokens caused long
+        // real-world names ("Juan Carlos de la Cruz") to fall through
+        // and be mis-promoted by looksLikeBusinessName's ≥3-token branch.
+        // Kept identical to the Swift engine.
+        if (parts.size < 2) return false
         return parts.all { it.matches(Regex("""^[A-Za-z][A-Za-z'.-]{1,30}$""")) }
     }
 
@@ -234,6 +238,35 @@ object MatchPipeline {
         return d in Blocklists.FREEMAIL
     }
 
+    private fun looksLikeBusinessName(candidate: String): Boolean {
+        val cleaned = Normalize.clean(candidate)
+        val parts = cleaned.split(Regex("""\s+""")).filter { it.isNotBlank() }
+        if (parts.size < 2) return false
+        // 2026-09-20 audit: strip trailing punctuation before signal/suffix
+        // checks ("Joe's Plumbing." → "Plumbing") so a sentence-ending period
+        // doesn't drop a real business.  Mirrors the Swift engine.
+        val stripped = parts.map { it.trimEnd('.', ',', ';', '!', '?') }
+        if (stripped.any { Normalize.isBusinessSuffixWord(it) }) return true
+        if (stripped.any { Normalize.isOrgSignalWord(it) }) return true
+        if (parts.size >= 3 && !looksLikePersonName(cleaned)) return true
+        return false
+    }
+
+    /**
+     * R7.4 — a lone first/last that is a known firm.
+     *
+     * 2026-09-20 audit:
+     *  - Dropped the freemail short-circuit.  A real business contact can
+     *    carry a personal email backup; the brand is decided by the name.
+     *    The 15k contacts / 25 visible symptom was largely caused by this.
+     *  - Dropped the `looksLikePersonName` early-return: it was the
+     *    reason "Acme Roofing LLC" was rejected despite the legal suffix
+     *    that unambiguously marks a business.
+     *  - Added a `looksLikeBusinessName` fallback for catalog misses
+     *    ("Joe's Plumbing", "Acme Roofing LLC").  Kept identical to the
+     *    Swift and TypeScript engines — all three share the same
+     *    fixtures/golden-corpus.json conformance test.
+     */
     private fun inferLoneFirmName(contact: ContactIdentity): String? {
         val given = Normalize.clean(contact.givenName)
         val family = Normalize.clean(contact.familyName)
@@ -241,15 +274,15 @@ object MatchPipeline {
         val onlyFamily = family.isNotEmpty() && given.isEmpty()
         val unstructured = given.isEmpty() && family.isEmpty()
         if (!onlyGiven && !onlyFamily && !unstructured) return null
-        if (contact.emailAddresses.any { isFreemailAddress(it) }) return null
 
         val candidate = when {
             onlyGiven -> given
             onlyFamily -> family
             else -> Normalize.clean(contact.displayName)
         }
-        if (candidate.isEmpty() || looksLikePersonName(candidate)) return null
+        if (candidate.isEmpty()) return null
         if (CompanyCatalog.domainForName(candidate) != null) return candidate
+        if (looksLikeBusinessName(candidate)) return candidate
         return null
     }
 

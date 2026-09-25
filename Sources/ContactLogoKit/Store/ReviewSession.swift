@@ -15,6 +15,12 @@ public enum ReviewSessionError: Error, Equatable, Sendable {
     case undoFailed(batchID: String, underlying: String)
     /// `undoLast()` was called with no recorded batch.
     case noBatchToUndo
+    /// The scan threw before matching finished (Contacts read failed, etc.).
+    /// Previously swallowed: the shell fell back to `.idle` with no message.
+    case scanFailed(underlying: String)
+    /// Matching was cancelled part-way (background expiration, user cancel).
+    /// The rows that finished are published instead of being thrown away.
+    case scanIncomplete(matched: Int, total: Int)
 }
 
 /// Shared scan → match → review → apply session for macOS and iOS.
@@ -43,6 +49,25 @@ public final class ReviewSession: ObservableObject {
     @Published public internal(set) var protectedPersonCount: Int = 0
     @Published public internal(set) var businessTargetsCount: Int = 0
     @Published public internal(set) var affiliatedTargetsCount: Int = 0
+    /// True when the most recent scan ran under Apple `.limited` contacts
+    /// authorization — only the contacts the user picked are visible.  A
+    /// tiny scan with `.limited == true` is the canonical "why am I only
+    /// seeing 25 contacts" symptom.  Shells surface this as a banner.
+    @Published public internal(set) var limitedAccessGranted: Bool = false
+    /// 2026-09-21 follow-up audit — finer-grained authorization view so the
+    /// iOS UI can render a blocking banner on pre-iOS-18 too.  Promoted
+    /// from `limitedAccessGranted` (Bool, iOS-18-only signal) to
+    /// `LimitedAccessState` (definite | heuristic | denied | restricted).
+    @Published public internal(set) var limitedAccessState: LimitedAccessState = .open
+    /// 2026-09-21 — sample of dropped contacts (people with no business
+    /// signals) so a Settings → Diagnostic screen can explain "your other
+    /// 14,975 contacts are personal entries with no business signals —
+    /// see a sample below".  Refreshed on every `scanAndMatch`.
+    @Published public internal(set) var sampleDroppedContacts: [SampleDroppedContact] = []
+    /// 2026-09-21 — when the engine filter rejects a contact BEFORE scoring,
+    /// the reason is captured here so the Diagnostic screen can group them.
+    /// Defined at top level (ReviewQueueStore.swift) so it can be persisted.
+    public typealias SampleDroppedContact = DroppedContactSample
 
     public var autoAccepted: [MatchResult] { results.filter { $0.confidence == .high } }
     public var needsReview: [MatchResult] { results.filter { $0.confidence == .medium || $0.confidence == .low } }
@@ -107,6 +132,32 @@ public final class ReviewSession: ObservableObject {
         protectedPersonCount = snapshot.protectedPersonCount ?? 0
         businessTargetsCount = snapshot.businessTargetsCount ?? 0
         affiliatedTargetsCount = snapshot.affiliatedTargetsCount ?? 0
+        sampleDroppedContacts = snapshot.sampleDroppedContacts ?? []
+        // 2026-09-20 audit — the snapshot's authorization state is
+        // stale the moment the user changes Contacts access in
+        // Settings.  Restore the snapshot, then refresh from the live
+        // ContactsProvider so the banner tracks current state.
+        limitedAccessGranted = snapshot.limitedAccessGranted ?? false
+        // 2026-09-21 follow-up — limitedAccessState is a richer signal than
+        // the persisted Bool, so derive the closest equivalent from the
+        // snapshot and let the live diagnosis below converge to the true
+        // state.  Without this restore, the diagnostic screen shows the
+        // default `.open` until the next scan — confusing the user who
+        // came to the diagnostic to verify the small subset.
+        limitedAccessState = limitedAccessGranted ? .definite : .open
+        Task { [weak self] in
+            guard let self else { return }
+            let provider = self.contactsProviderForTesting ?? CNContactsProvider()
+            // Use the granular state, not just the bool.
+            let state = await provider.limitedAccessDiagnosis()
+            await MainActor.run {
+                self.limitedAccessState = state
+                switch state {
+                case .definite, .heuristic: self.limitedAccessGranted = true
+                case .open, .denied, .restricted: self.limitedAccessGranted = false
+                }
+            }
+        }
         stage = .review
     }
 
@@ -131,7 +182,9 @@ public final class ReviewSession: ObservableObject {
                 totalScannedCount: totalScannedCount,
                 protectedPersonCount: protectedPersonCount,
                 businessTargetsCount: businessTargetsCount,
-                affiliatedTargetsCount: affiliatedTargetsCount
+                affiliatedTargetsCount: affiliatedTargetsCount,
+                limitedAccessGranted: limitedAccessGranted,
+                sampleDroppedContacts: sampleDroppedContacts
             )
             try queueStore.save(snapshot)
             return true
@@ -257,12 +310,27 @@ public final class ReviewSession: ObservableObject {
         return nil
     }
 
+    /// Installs a finished (or partially finished) match pass as the review
+    /// queue.  Shared by the complete and the cancelled-with-progress paths.
+    private func publish(_ out: [MatchResult]) {
+        results = out
+        chosenIndex = [:]
+        // ONLY high-confidence pure business cards start selected.
+        // Affiliated contacts are NEVER auto-selected; users explicitly opt-in to update them.
+        selected = Set(out.filter { $0.confidence == .high && !$0.flags.contains("affiliated") }.map(\.contactID))
+        affiliatedTargetsCount = out.filter { $0.flags.contains("affiliated") }.count
+        businessTargetsCount = out.filter { !$0.flags.contains("affiliated") }.count
+        stage = .review
+    }
+
     /// Cooperative cancellation for background runs — checked between
-    /// contacts, so a cancelled scan stops promptly and publishes nothing.
+    /// contacts, so a cancelled scan stops promptly.  Rows that already
+    /// finished are published with `lastError = .scanIncomplete`.
     public func requestCancel() { cancelRequested = true }
 
-    /// Returns true when matching ran to completion, false when it was
-    /// cancelled (no partial results are published in that case).
+    /// Returns true when matching ran to completion, false otherwise.  A
+    /// cancelled run that finished some rows publishes them as the queue and
+    /// sets `lastError = .scanIncomplete`; a thrown scan sets `.scanFailed`.
     @discardableResult
     public func scanAndMatch() async -> Bool {
         lastError = nil
@@ -279,10 +347,25 @@ public final class ReviewSession: ObservableObject {
                 stage = .idle
                 return false
             }
+            // 2026-09-21 follow-up — finer-grained authorization view so
+            // the iOS UI can render a blocking banner on pre-iOS-18 too.
+            // The simpler `limitedAccessGranted` Bool is kept for callers
+            // that only want the boolean (it equals `state == .definite`
+            // OR `state == .heuristic(_)`).
+            let diag = await provider.limitedAccessDiagnosis()
+            limitedAccessState = diag
+            switch diag {
+            case .definite, .heuristic: limitedAccessGranted = true
+            case .open, .denied, .restricted: limitedAccessGranted = false
+            }
             let contacts = try await provider.fetchCandidates()
             totalScannedCount = contacts.count
             names = Dictionary(uniqueKeysWithValues: contacts.map { ($0.id, $0.displayName) })
             let pipeline = configuredPipeline()
+            // 2026-09-21 — sample 20 dropped contacts with their drop reason
+            // so the user can see in Diagnostic view what the engine
+            // decided and why.
+            var droppedSamples: [SampleDroppedContact] = []
             // Default off: a business card with a photo stays in the queue as
             // `replace-existing` (MATCHING-ENGINE section 1, CONTACTLOGO.md:53).
             let skipPhotos = settings?.skipContactsWithExistingPhoto ?? false
@@ -296,19 +379,65 @@ public final class ReviewSession: ObservableObject {
                 if klass == .businessCard {
                     if !(skipPhotos && c.hasImage) {
                         businessTargets.append(c)
+                    } else if droppedSamples.count < 20 {
+                        droppedSamples.append(SampleDroppedContact(
+                            contactID: c.id,
+                            displayName: c.displayName,
+                            reason: "Business card with existing photo (Skip Photos)",
+                            givenName: c.givenName,
+                            familyName: c.familyName,
+                            organization: c.organization
+                        ))
                     }
                 } else if klass == .person {
                     if c.hasImage {
                         // People with existing headshots are NEVER logo targets,
                         // regardless of skipPhotos setting.
                         protectedCount += 1
+                        if droppedSamples.count < 20 {
+                            droppedSamples.append(SampleDroppedContact(
+                                contactID: c.id,
+                                displayName: c.displayName,
+                                reason: "Person with existing photo",
+                                givenName: c.givenName,
+                                familyName: c.familyName,
+                                organization: c.organization
+                            ))
+                        }
                     } else if pipeline.affiliation(for: c) != nil {
                         affiliatedTargets.append(c)
                     } else {
                         protectedCount += 1
+                        if droppedSamples.count < 20 {
+                            droppedSamples.append(SampleDroppedContact(
+                                contactID: c.id,
+                                displayName: c.displayName,
+                                reason: (c.organization ?? "").trimmingCharacters(in: .whitespaces).isEmpty
+                                    ? "Person with no org / work email / brand-tail"
+                                    : "Person whose org is a role or generic word (not a business name)",
+                                givenName: c.givenName,
+                                familyName: c.familyName,
+                                organization: c.organization
+                            ))
+                        }
+                    }
+                } else if klass == .nonBrand {
+                    // PR #102 review — generic non-brand names ("Hospital",
+                    // "Gift Card", printers) are dropped too; sample them so
+                    // the Diagnostic screen can explain that category.
+                    if droppedSamples.count < 20 {
+                        droppedSamples.append(SampleDroppedContact(
+                            contactID: c.id,
+                            displayName: c.displayName,
+                            reason: "Generic non-brand name (e.g. Hospital, Gift Card, printer)",
+                            givenName: c.givenName,
+                            familyName: c.familyName,
+                            organization: c.organization
+                        ))
                     }
                 }
             }
+            sampleDroppedContacts = droppedSamples
 
             protectedPersonCount = protectedCount
             businessTargetsCount = businessTargets.count
@@ -335,7 +464,10 @@ public final class ReviewSession: ObservableObject {
                 return false
             }
 
-            let maxConcurrency = 8
+            // iOS recommends a max of 6 concurrent network tasks on cellular.
+            // 8 trips Apple's per-process NSURLSession ceiling on small
+            // devices and shows up in Sentry as flaky background runs.
+            let maxConcurrency = 6
             var indexedResults: [MatchResult?] = Array(repeating: nil, count: allTargets.count)
             var doneCount = 0
 
@@ -404,25 +536,32 @@ public final class ReviewSession: ObservableObject {
             }
 
             guard completedAll else {
-                stage = .idle
+                // Keep what finished.  An all-or-nothing scan over thousands
+                // of network matches rarely survives a background window, and
+                // throwing the work away left the previous (stale) queue on
+                // screen with no explanation.
+                let partial = indexedResults.compactMap { $0 }
+                guard doneCount > 0, !partial.isEmpty else {
+                    stage = .idle
+                    return false
+                }
+                publish(partial)
+                lastError = .scanIncomplete(matched: doneCount, total: allTargets.count)
+                _ = persistReviewQueue()
+                // Still `false`: the run did not complete, so the background
+                // runner must not post "your queue is ready".
                 return false
             }
 
             let out = indexedResults.compactMap { $0 }
-            results = out
-            chosenIndex = [:]
-            // ONLY high-confidence pure business cards start selected.
-            // Affiliated contacts are NEVER auto-selected; users explicitly opt-in to update them.
-            selected = Set(out.filter { $0.confidence == .high && !$0.flags.contains("affiliated") }.map(\.contactID))
-            affiliatedTargetsCount = out.filter { $0.flags.contains("affiliated") }.count
-            businessTargetsCount = out.filter { !$0.flags.contains("affiliated") }.count
-            stage = .review
+            publish(out)
             // Best-effort for a foreground scan; the background runner treats
             // a failed persist as an unsuccessful run so it will not notify.
             _ = persistReviewQueue()
             return true
         } catch {
             stage = .idle
+            lastError = .scanFailed(underlying: error.localizedDescription)
             return false
         }
         #else

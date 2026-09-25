@@ -3,6 +3,30 @@ import Foundation
 import Contacts
 #endif
 
+/// One dropped contact from the last scan, with the reason the engine skipped
+/// it.  Top-level (not nested in `ReviewSession`) so the persisted snapshot can
+/// carry it on platforms without Combine; `ReviewSession.SampleDroppedContact`
+/// is a typealias for this type.  `contactID` is the CNContact identifier and
+/// doubles as the SwiftUI `ForEach` ID, so duplicate "John Smith / no org"
+/// rows stay distinct.
+public struct DroppedContactSample: Codable, Sendable, Equatable, Hashable, Identifiable {
+    public let contactID: String
+    public let displayName: String
+    public let reason: String
+    public let givenName: String?
+    public let familyName: String?
+    public let organization: String?
+    public var id: String { contactID }
+    public init(contactID: String, displayName: String, reason: String, givenName: String?, familyName: String?, organization: String?) {
+        self.contactID = contactID
+        self.displayName = displayName
+        self.reason = reason
+        self.givenName = givenName
+        self.familyName = familyName
+        self.organization = organization
+    }
+}
+
 /// On-disk snapshot of a completed match run (issue #32).
 ///
 /// Written to Application Support so an iOS `BGProcessingTask` can persist
@@ -11,7 +35,7 @@ import Contacts
 /// write.  Display names travel with the contact identifiers so the review
 /// UI can re-open without a second Contacts pass.
 public struct PersistedReviewQueue: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 1
+    public static let currentSchemaVersion = 2
 
     public var schemaVersion: Int
     public var scannedAt: Date
@@ -27,6 +51,15 @@ public struct PersistedReviewQueue: Codable, Equatable, Sendable {
     public var protectedPersonCount: Int?
     public var businessTargetsCount: Int?
     public var affiliatedTargetsCount: Int?
+    /// 2026-09-20 audit — preserve the `.limited` Contacts authorization
+    /// status across app restarts so the banner that explains the small
+    /// restored queue is shown, not hidden, when the user re-launches.
+    public var limitedAccessGranted: Bool?
+    /// PR #102 review — the Diagnostic screen's dropped-contact sample.
+    /// Persisted so a queue restored after the process dies (the normal
+    /// background-scan flow) still explains what was skipped.  Optional so
+    /// older payloads decode cleanly.
+    public var sampleDroppedContacts: [DroppedContactSample]?
 
     public init(schemaVersion: Int = PersistedReviewQueue.currentSchemaVersion,
                 scannedAt: Date,
@@ -38,7 +71,9 @@ public struct PersistedReviewQueue: Codable, Equatable, Sendable {
                 totalScannedCount: Int? = nil,
                 protectedPersonCount: Int? = nil,
                 businessTargetsCount: Int? = nil,
-                affiliatedTargetsCount: Int? = nil) {
+                affiliatedTargetsCount: Int? = nil,
+                limitedAccessGranted: Bool? = nil,
+                sampleDroppedContacts: [DroppedContactSample]? = nil) {
         self.schemaVersion = schemaVersion
         self.scannedAt = scannedAt
         self.contactStoreChangeToken = contactStoreChangeToken
@@ -50,6 +85,8 @@ public struct PersistedReviewQueue: Codable, Equatable, Sendable {
         self.protectedPersonCount = protectedPersonCount
         self.businessTargetsCount = businessTargetsCount
         self.affiliatedTargetsCount = affiliatedTargetsCount
+        self.limitedAccessGranted = limitedAccessGranted
+        self.sampleDroppedContacts = sampleDroppedContacts
     }
 }
 
@@ -125,12 +162,16 @@ public struct ReviewQueueStore: Sendable {
         return try Self.makeDecoder().decode(PersistedReviewQueue.self, from: data)
     }
 
-    /// Production read: returns a non-empty, current-schema snapshot whose
-    /// change token still matches.  Anything else is deleted.
+    /// Production read: returns a non-empty snapshot whose change token
+    /// still matches.  2026-09-20 audit: a schema-version bump alone does
+    /// not discard the snapshot — older payloads decode cleanly because
+    /// new fields are optional.  Only an undecodable file or a stale
+    /// change token clears the queue; the previous "schema mismatch
+    /// deletes everything" policy was silently dropping user review work
+    /// across a routine persistence bump.
     public func loadFresh() throws -> PersistedReviewQueue? {
         guard let snapshot = try load() else { return nil }
-        let usable = snapshot.schemaVersion == PersistedReviewQueue.currentSchemaVersion
-            && !snapshot.results.isEmpty
+        let usable = !snapshot.results.isEmpty
             && Self.tokensMatch(stored: snapshot.contactStoreChangeToken,
                                 current: currentChangeToken())
         if usable { return snapshot }

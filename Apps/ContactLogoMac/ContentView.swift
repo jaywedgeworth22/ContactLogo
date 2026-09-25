@@ -27,8 +27,23 @@ struct ContentView: View {
                     ContentUnavailableView("Scan your contacts",
                                            systemImage: "person.crop.square.filled.and.at.rectangle",
                                            description: Text("ContactLogo finds brand logos for the businesses in your address book — you approve every change."))
+                    if case .definite = model.limitedAccessState {
+                        MacLimitedAccessBlocker()
+                    } else if case .heuristic(let count) = model.limitedAccessState {
+                        MacLimitedAccessHeuristicNotice(visibleCount: count)
+                    } else if model.limitedAccessGranted {
+                        LimitedAccessBanner()
+                    }
                     Button("Scan contacts") { Task { await model.scanAndMatch() } }
                         .buttonStyle(.borderedProminent)
+                    if model.totalScannedCount > 0 {
+                        MacScanBreakdown(
+                            scanned: model.totalScannedCount,
+                            business: model.businessTargetsCount,
+                            affiliated: model.affiliatedTargetsCount,
+                            protected: model.protectedPersonCount
+                        )
+                    }
                 case .scanning:
                     ProgressView("Reading contacts…")
                 case .matching(let done, let total):
@@ -45,6 +60,51 @@ struct ContentView: View {
     }
 }
 
+/// 2026-09-20 audit — surfaces Apple `.limited` Contacts access on macOS.
+struct LimitedAccessBanner: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("Limited contacts access", systemImage: "person.crop.circle.badge.exclamationmark")
+                .font(.subheadline.bold())
+                .foregroundStyle(.orange)
+            Text("ContactLogo can only see the contacts you chose.  Open System Settings → Privacy & Security → Contacts to grant full access.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Button("Open System Settings") {
+                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Contacts") {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+            .font(.caption.bold())
+            .padding(.top, 2)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.10))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+/// macOS idle scan breakdown — same shape as the iOS card, no UIKit import.
+struct MacScanBreakdown: View {
+    let scanned: Int
+    let business: Int
+    let affiliated: Int
+    let protected: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Last scan breakdown")
+                .font(.caption.bold())
+                .foregroundStyle(.secondary)
+            Text("\(scanned.formatted()) contacts scanned · \(business.formatted()) business · \(affiliated.formatted()) affiliated · \(protected.formatted()) personal protected")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.top, 8)
+    }
+}
+
 struct ReviewQueueView: View {
     @EnvironmentObject var model: ReviewSession
     @State private var searchText = ""
@@ -52,15 +112,17 @@ struct ReviewQueueView: View {
     @State private var showError = false
 
     var rows: [MatchResult] {
-        let base: [MatchResult]
-        switch model.bucket {
-        case .auto: base = model.autoAccepted
-        case .review: base = model.needsReview
-        case .notFound: base = model.notFound
+        let trimmed = searchText.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else {
+            switch model.bucket {
+            case .auto: return model.autoAccepted
+            case .review: return model.needsReview
+            case .notFound: return model.notFound
+            }
         }
-        guard !searchText.trimmingCharacters(in: .whitespaces).isEmpty else { return base }
-        let query = searchText.lowercased()
-        return base.filter { result in
+        // Search spans every tab, not just the selected one.
+        let query = trimmed.lowercased()
+        return model.results.filter { result in
             let name = model.displayName(for: result.contactID).lowercased()
             let flags = result.flags.joined(separator: " ").lowercased()
             return name.contains(query) || flags.contains(query)
@@ -69,6 +131,13 @@ struct ReviewQueueView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            if case .definite = model.limitedAccessState {
+                MacLimitedAccessBlocker()
+            } else if case .heuristic(let count) = model.limitedAccessState {
+                MacLimitedAccessHeuristicNotice(visibleCount: count)
+            } else if model.limitedAccessGranted {
+                LimitedAccessBanner()
+            }
             HStack {
                 Text("Review queue").font(.title2.bold())
                 Spacer()
@@ -116,7 +185,7 @@ struct ReviewQueueView: View {
                     manualOverrideResult = result
                 })
             }
-            .searchable(text: $searchText, prompt: "Search brands or domains…")
+            .searchable(text: $searchText, prompt: "Search all tabs…")
         }
         .sheet(item: $manualOverrideResult) { result in
             ManualOverrideSheet(contactID: result.contactID)
@@ -141,6 +210,10 @@ struct ReviewQueueView: View {
             return "Couldn't undo batch \(batchID.prefix(8)) (\(underlying)). You can try again."
         case .noBatchToUndo:
             return "There's no batch to undo."
+        case .scanFailed(let underlying):
+            return "The scan failed (\(underlying)). Click Scan to try again."
+        case .scanIncomplete(let matched, let total):
+            return "The scan stopped early: matched \(matched) of \(total). Showing what finished. Click Scan to run it again."
         }
     }
 }
@@ -310,6 +383,63 @@ struct LogoThumb: View {
         Image(systemName: "photo")
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// 2026-09-21 follow-up — macOS blocking call to action when Limited
+/// contacts access is detected.  Same shape as the iOS blocker but with
+/// a System Settings deep-link to Privacy & Security → Contacts.
+struct MacLimitedAccessBlocker: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Limited contacts access detected", systemImage: "person.crop.circle.badge.exclamationmark.fill")
+                .font(.headline)
+                .foregroundStyle(.orange)
+            Text("ContactLogo is set to 'Only selected contacts'. To scan your full address book, open System Settings → Privacy & Security → Contacts and select 'All Contacts' for ContactLogo.")
+                .font(.subheadline)
+            Button {
+                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Contacts") {
+                    NSWorkspace.shared.open(url)
+                }
+            } label: {
+                Label("Open System Settings", systemImage: "arrow.up.right.square.fill")
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.12))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+/// 2026-09-21 — pre-macOS-14 / pre-iOS-18 fallback when the OS is silent
+/// about Limited.  Soft warning + the same fix instructions.
+struct MacLimitedAccessHeuristicNotice: View {
+    let visibleCount: Int
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("Only \(visibleCount) contacts are visible", systemImage: "exclamationmark.triangle.fill")
+                .font(.subheadline.bold())
+                .foregroundStyle(.orange)
+            Text("ContactLogo scanned your address book and only found \(visibleCount) entries. If you granted Limited access in System Settings, only the contacts you selected are visible.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Button("Open System Settings") {
+                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Contacts") {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+            .font(.caption.bold())
+            .padding(.top, 2)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.10))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
 

@@ -1,5 +1,11 @@
 # Handoff — what has to be finished on a local machine
 
+<!-- 2026-09-22 [MM] archaeology note: references to BG identifier
+     `com.contactlogo.match` on line 57 below reflect the pre-rename state; as
+     of 2026-09-22 the iOS BGTaskScheduler identifier is `com.contactlogo.ios.match`
+     (matching the renamed iOS bundle ID).  See
+     docs/rollouts/2026-09-22-bundle-id-migration.md. -->
+
 **Updated 2026-08-28 21:20 UTC.**  Branch `claude/full-app-evaluation-wwwwk1` · PR #24 · head `2144ea8`
 · audit of record `docs/EVALUATION-2026-08.md`.
 
