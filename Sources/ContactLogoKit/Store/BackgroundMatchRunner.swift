@@ -20,8 +20,8 @@ public final class BackgroundMatchRunner {
     /// `stage` is `.review`, and the queue is on disk); false when it was
     /// cancelled or the queue could not be persisted — in those cases the
     /// caller must not post the "queue is ready" notification.  A cancelled
-    /// run leaves the session `.idle` with no partial results, so the next
-    /// foreground scan starts clean.
+    /// run publishes whatever rows finished (flagged `.scanIncomplete`) instead
+    /// of leaving a stale queue on screen.
     @discardableResult
     public func run() async -> Bool {
         guard !cancelled else { return false }
