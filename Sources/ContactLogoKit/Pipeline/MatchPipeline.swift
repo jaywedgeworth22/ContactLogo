@@ -254,6 +254,12 @@ public struct MatchPipeline: Sendable {
             return (lone, domain)
         }
 
+        // An organization that names a business but can't be tied to a domain
+        // ("Gulf Coast Roofing" on a phone-only card).  Used as the last-resort
+        // affiliation below so the contact reaches Review instead of being
+        // silently counted as a protected person.
+        var unresolvedOrganization: String?
+
         // 1. Organization field (e.g. "Apple", "Texas Instruments", "Stripe")
         if let org = c.organization?.trimmingCharacters(in: .whitespaces), !org.isEmpty {
             let cleanOrg = NameNormalizer.clean(org)
@@ -267,6 +273,17 @@ public struct MatchPipeline: Sendable {
                 let orgCandidate = (seg.decorationStripped || seg.isBrandTail) ? seg.query : cleanOrg
                 if let catalogDomain = CompanyCatalog.domain(forName: orgCandidate) {
                     return (orgCandidate, catalogDomain)
+                }
+                // Fallback candidate for step 4.  Deliberately looser than the
+                // domain gate below: `isRoleOrPlace` rejects an org if ANY word
+                // is a role or geo word, which drops most local businesses
+                // ("Houston Roofing Co", "Cypress Auto Center").  Here only a
+                // personal job title, or an org made entirely of role/place
+                // words, disqualifies it.
+                if !GenericBlocklist.isNonBrand(orgCandidate),
+                   Self.organizationNamesABusiness(orgCandidate),
+                   Self.organizationNamesABusiness(cleanOrg) {
+                    unresolvedOrganization = orgCandidate
                 }
                 // Reject role metadata or job titles ("Director", "Hsa PTO - Asst Treasurer")
                 if !GenericBlocklist.isNonBrand(orgCandidate) &&
@@ -305,7 +322,41 @@ public struct MatchPipeline: Sendable {
             }
         }
 
+        // 4. Organization that names a business but has no catalog entry or
+        //    matching email/website.  No domain is guessed: matching runs on
+        //    the name alone, and `matchAffiliated` caps it at medium (Review),
+        //    never auto-selected.  Role/title and generic words were already
+        //    rejected above.
+        if let org = unresolvedOrganization {
+            return (org, nil)
+        }
+
         return nil
+    }
+
+    /// Job titles that describe the person, not the company.  Business words
+    /// that `WordLists.roleWords` also carries ("services", "sales", "home",
+    /// "office", "support") are intentionally absent.
+    static let personalTitleWords: Set<String> = [
+        "manager", "mgr", "gm", "asst", "assistant", "treasurer", "president",
+        "vp", "director", "owner", "coordinator", "secretary", "chair",
+        "chairman", "rep", "representative", "agent", "admin", "hr",
+        "scheduler", "reception", "receptionist", "voicemail", "ext", "cell",
+        "mobile", "fax"
+    ]
+
+    /// True when an organization string plausibly names a business: it has
+    /// no personal job title and at least one word that is not a role or
+    /// place word.  "Gulf Coast Roofing" and "Cypress Auto Center" pass;
+    /// "Director", "Asst Treasurer", "Houston" and "Katy Home Services" do not.
+    static func organizationNamesABusiness(_ org: String) -> Bool {
+        let toks = WordLists.tokens(org)
+        guard !toks.isEmpty else { return false }
+        if toks.contains(where: { personalTitleWords.contains($0) }) { return false }
+        let decoration = WordLists.roleWords.union(WordLists.geoWords)
+        return toks.contains { tok in
+            tok.count >= 2 && !decoration.contains(tok) && !tok.allSatisfy({ $0.isNumber })
+        }
     }
 
     /// Matches an affiliated person against their company/organization mark.
@@ -335,7 +386,17 @@ public struct MatchPipeline: Sendable {
                     sourceErrors: result.sourceErrors
                 )
             }
-            return nil
+            // No logo found.  Keep the row in Not found (skip, never selected)
+            // so the contact stays visible and searchable and can get a manual
+            // logo, instead of vanishing from every tab.
+            return MatchResult(
+                contactID: c.id,
+                contactClass: .person,
+                candidates: [],
+                confidence: .skip,
+                flags: ["affiliated", "opt-in-review"] + (aff.domain == nil ? ["org-name-only"] : []),
+                sourceErrors: []
+            )
         }
         var flags = result.flags
         if !flags.contains("affiliated") {
@@ -343,6 +404,9 @@ public struct MatchPipeline: Sendable {
         }
         if !flags.contains("opt-in-review") {
             flags.append("opt-in-review")
+        }
+        if aff.domain == nil, !flags.contains("org-name-only") {
+            flags.append("org-name-only")
         }
         let cappedConfidence = min(result.confidence, .medium)
         return MatchResult(

@@ -15,6 +15,12 @@ public enum ReviewSessionError: Error, Equatable, Sendable {
     case undoFailed(batchID: String, underlying: String)
     /// `undoLast()` was called with no recorded batch.
     case noBatchToUndo
+    /// The scan threw before matching finished (Contacts read failed, etc.).
+    /// Previously swallowed: the shell fell back to `.idle` with no message.
+    case scanFailed(underlying: String)
+    /// Matching was cancelled part-way (background expiration, user cancel).
+    /// The rows that finished are published instead of being thrown away.
+    case scanIncomplete(matched: Int, total: Int)
 }
 
 /// Shared scan → match → review → apply session for macOS and iOS.
@@ -304,12 +310,27 @@ public final class ReviewSession: ObservableObject {
         return nil
     }
 
+    /// Installs a finished (or partially finished) match pass as the review
+    /// queue.  Shared by the complete and the cancelled-with-progress paths.
+    private func publish(_ out: [MatchResult]) {
+        results = out
+        chosenIndex = [:]
+        // ONLY high-confidence pure business cards start selected.
+        // Affiliated contacts are NEVER auto-selected; users explicitly opt-in to update them.
+        selected = Set(out.filter { $0.confidence == .high && !$0.flags.contains("affiliated") }.map(\.contactID))
+        affiliatedTargetsCount = out.filter { $0.flags.contains("affiliated") }.count
+        businessTargetsCount = out.filter { !$0.flags.contains("affiliated") }.count
+        stage = .review
+    }
+
     /// Cooperative cancellation for background runs — checked between
-    /// contacts, so a cancelled scan stops promptly and publishes nothing.
+    /// contacts, so a cancelled scan stops promptly.  Rows that already
+    /// finished are published with `lastError = .scanIncomplete`.
     public func requestCancel() { cancelRequested = true }
 
-    /// Returns true when matching ran to completion, false when it was
-    /// cancelled (no partial results are published in that case).
+    /// Returns true when matching ran to completion, false otherwise.  A
+    /// cancelled run that finished some rows publishes them as the queue and
+    /// sets `lastError = .scanIncomplete`; a thrown scan sets `.scanFailed`.
     @discardableResult
     public func scanAndMatch() async -> Bool {
         lastError = nil
@@ -391,7 +412,9 @@ public final class ReviewSession: ObservableObject {
                             droppedSamples.append(SampleDroppedContact(
                                 contactID: c.id,
                                 displayName: c.displayName,
-                                reason: "Person with no org / work email / brand-tail",
+                                reason: (c.organization ?? "").trimmingCharacters(in: .whitespaces).isEmpty
+                                    ? "Person with no org / work email / brand-tail"
+                                    : "Person whose org is a role or generic word (not a business name)",
                                 givenName: c.givenName,
                                 familyName: c.familyName,
                                 organization: c.organization
@@ -513,25 +536,32 @@ public final class ReviewSession: ObservableObject {
             }
 
             guard completedAll else {
-                stage = .idle
+                // Keep what finished.  An all-or-nothing scan over thousands
+                // of network matches rarely survives a background window, and
+                // throwing the work away left the previous (stale) queue on
+                // screen with no explanation.
+                let partial = indexedResults.compactMap { $0 }
+                guard doneCount > 0, !partial.isEmpty else {
+                    stage = .idle
+                    return false
+                }
+                publish(partial)
+                lastError = .scanIncomplete(matched: doneCount, total: allTargets.count)
+                _ = persistReviewQueue()
+                // Still `false`: the run did not complete, so the background
+                // runner must not post "your queue is ready".
                 return false
             }
 
             let out = indexedResults.compactMap { $0 }
-            results = out
-            chosenIndex = [:]
-            // ONLY high-confidence pure business cards start selected.
-            // Affiliated contacts are NEVER auto-selected; users explicitly opt-in to update them.
-            selected = Set(out.filter { $0.confidence == .high && !$0.flags.contains("affiliated") }.map(\.contactID))
-            affiliatedTargetsCount = out.filter { $0.flags.contains("affiliated") }.count
-            businessTargetsCount = out.filter { !$0.flags.contains("affiliated") }.count
-            stage = .review
+            publish(out)
             // Best-effort for a foreground scan; the background runner treats
             // a failed persist as an unsuccessful run so it will not notify.
             _ = persistReviewQueue()
             return true
         } catch {
             stage = .idle
+            lastError = .scanFailed(underlying: error.localizedDescription)
             return false
         }
         #else

@@ -112,15 +112,17 @@ struct ReviewQueueView: View {
     @State private var showError = false
 
     var rows: [MatchResult] {
-        let base: [MatchResult]
-        switch model.bucket {
-        case .auto: base = model.autoAccepted
-        case .review: base = model.needsReview
-        case .notFound: base = model.notFound
+        let trimmed = searchText.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else {
+            switch model.bucket {
+            case .auto: return model.autoAccepted
+            case .review: return model.needsReview
+            case .notFound: return model.notFound
+            }
         }
-        guard !searchText.trimmingCharacters(in: .whitespaces).isEmpty else { return base }
-        let query = searchText.lowercased()
-        return base.filter { result in
+        // Search spans every tab, not just the selected one.
+        let query = trimmed.lowercased()
+        return model.results.filter { result in
             let name = model.displayName(for: result.contactID).lowercased()
             let flags = result.flags.joined(separator: " ").lowercased()
             return name.contains(query) || flags.contains(query)
@@ -183,7 +185,7 @@ struct ReviewQueueView: View {
                     manualOverrideResult = result
                 })
             }
-            .searchable(text: $searchText, prompt: "Search brands or domains…")
+            .searchable(text: $searchText, prompt: "Search all tabs…")
         }
         .sheet(item: $manualOverrideResult) { result in
             ManualOverrideSheet(contactID: result.contactID)
@@ -208,6 +210,10 @@ struct ReviewQueueView: View {
             return "Couldn't undo batch \(batchID.prefix(8)) (\(underlying)). You can try again."
         case .noBatchToUndo:
             return "There's no batch to undo."
+        case .scanFailed(let underlying):
+            return "The scan failed (\(underlying)). Click Scan to try again."
+        case .scanIncomplete(let matched, let total):
+            return "The scan stopped early: matched \(matched) of \(total). Showing what finished. Click Scan to run it again."
         }
     }
 }

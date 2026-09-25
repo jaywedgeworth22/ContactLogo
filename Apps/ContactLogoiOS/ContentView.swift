@@ -61,6 +61,12 @@ struct ContentView: View {
             } else if model.limitedAccessGranted {
                 LimitedAccessBanner()
             }
+            if case .scanFailed(let underlying) = model.lastError {
+                Label("The last scan failed (\(underlying)). Tap Scan contacts to try again.",
+                      systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.red)
+                    .font(.footnote)
+            }
             Label("Ready to apply (\(model.autoAccepted.count))", systemImage: "checkmark.circle.fill")
             Label("Needs review (\(model.needsReview.count))", systemImage: "questionmark.circle")
             Label("Not found (\(model.notFound.count))", systemImage: "minus.circle")
@@ -211,15 +217,19 @@ struct ReviewQueueView: View {
     @State private var showError = false
 
     var rows: [MatchResult] {
-        let base: [MatchResult]
-        switch bucket {
-        case .auto: base = model.autoAccepted
-        case .review: base = model.needsReview
-        case .notFound: base = model.notFound
+        let trimmed = searchText.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else {
+            switch bucket {
+            case .auto: return model.autoAccepted
+            case .review: return model.needsReview
+            case .notFound: return model.notFound
+            }
         }
-        guard !searchText.trimmingCharacters(in: .whitespaces).isEmpty else { return base }
-        let query = searchText.lowercased()
-        return base.filter { result in
+        // Search spans every tab.  Filtering only the selected tab (default
+        // Ready) hid every Review / Not found row from search, which read as
+        // "search only finds the same ~25 contacts".
+        let query = trimmed.lowercased()
+        return model.results.filter { result in
             let name = model.displayName(for: result.contactID).lowercased()
             let flags = result.flags.joined(separator: " ").lowercased()
             return name.contains(query) || flags.contains(query)
@@ -236,6 +246,13 @@ struct ReviewQueueView: View {
                     .padding(.horizontal)
             } else if model.limitedAccessGranted {
                 LimitedAccessBanner()
+                    .padding(.horizontal)
+            }
+            if case .scanIncomplete(let matched, let total) = model.lastError {
+                Label("Scan stopped early: matched \(matched) of \(total). Tap Scan to finish.",
+                      systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
                     .padding(.horizontal)
             }
             if model.totalScannedCount > 0 {
@@ -306,7 +323,7 @@ struct ReviewQueueView: View {
                     }
                 }
             }
-            .searchable(text: $searchText, prompt: "Search brands or flags…")
+            .searchable(text: $searchText, prompt: "Search all tabs…")
         }
         .sheet(item: $previewResult) { result in
             ContactSimulatorSheet(result: result)
@@ -359,6 +376,10 @@ struct ReviewQueueView: View {
             return "Couldn't undo batch \(batchID.prefix(8)) (\(underlying)). You can try again."
         case .noBatchToUndo:
             return "There's no batch to undo."
+        case .scanFailed(let underlying):
+            return "The scan failed (\(underlying)). Tap Scan to try again."
+        case .scanIncomplete(let matched, let total):
+            return "The scan stopped early: matched \(matched) of \(total). Showing what finished. Tap Scan to run it again."
         }
     }
 }
