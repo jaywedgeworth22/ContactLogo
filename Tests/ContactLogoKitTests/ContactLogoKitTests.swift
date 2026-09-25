@@ -1103,6 +1103,70 @@ final class AffiliatedContactTests: XCTestCase {
         XCTAssertNotEqual(a, c, "duplicate display fields with distinct contactID must remain distinct")
     }
 
+    func testPersonWithUnresolvableOrganizationFallsBackToOrgName() {
+        // 2026-09-24: an iOS scan found 22 targets in 15k+ contacts.  A
+        // business saved under a person's name with an org and only a phone
+        // number was counted as a protected person and never reached Review.
+        let mike = ContactIdentity(id: "20", displayName: "Mike Johnson", givenName: "Mike", familyName: "Johnson",
+                                   organization: "Gulf Coast Roofing", phoneNumbers: ["+17135550100"])
+        let aff = pipeline.affiliation(for: mike)
+        XCTAssertNotNil(aff)
+        XCTAssertEqual(aff?.brandName, "Gulf Coast Roofing")
+        XCTAssertNil(aff?.domain, "no domain is guessed for an org-name-only affiliation")
+    }
+
+    func testLocalBusinessOrgWithPlaceWordStillFallsBack() {
+        // `isRoleOrPlace` rejects any org with a single geo word ("Houston"),
+        // which dropped most local businesses.  The fallback does not.
+        let dana = ContactIdentity(id: "21", displayName: "Dana Lee", givenName: "Dana", familyName: "Lee",
+                                   organization: "Houston Roofing", emailDomains: ["gmail.com"])
+        let aff = pipeline.affiliation(for: dana)
+        XCTAssertNotNil(aff)
+        XCTAssertNil(aff?.domain)
+    }
+
+    func testOrgMadeOnlyOfRoleOrPlaceWordsIsNotAnAffiliation() {
+        let a = ContactIdentity(id: "22", displayName: "Pat Kim", givenName: "Pat", familyName: "Kim",
+                                organization: "Houston")
+        XCTAssertNil(pipeline.affiliation(for: a))
+        let b = ContactIdentity(id: "23", displayName: "Sam Ortiz", givenName: "Sam", familyName: "Ortiz",
+                                organization: "Sales Manager")
+        XCTAssertNil(pipeline.affiliation(for: b))
+    }
+
+    func testOrgNameOnlyAffiliationWithNoLogoStaysVisibleAsNotFound() async {
+        let mike = ContactIdentity(id: "24", displayName: "Mike Johnson", givenName: "Mike", familyName: "Johnson",
+                                   organization: "Gulf Coast Roofing", phoneNumbers: ["+17135550100"])
+        let res = await pipeline.matchAffiliated(mike)
+        XCTAssertNotNil(res, "an affiliated contact with no logo must not vanish from every tab")
+        XCTAssertEqual(res?.confidence, .skip)
+        XCTAssertEqual(res?.flags.contains("affiliated"), true)
+        XCTAssertEqual(res?.flags.contains("org-name-only"), true)
+    }
+
+    @MainActor
+    func testScanFailureSurfacesError() async {
+        struct ThrowingProvider: ContactsProvider {
+            struct Boom: Error {}
+            func requestAccess() async throws -> Bool { true }
+            func fetchCandidates() async throws -> [ContactIdentity] { throw Boom() }
+            func imageData(forContactID id: String) async throws -> Data? { nil }
+            func setImage(_ data: Data, forContactID id: String) async throws {}
+            func removeImage(forContactID id: String) async throws {}
+        }
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let store = ReviewQueueStore(directory: tempDir, currentChangeToken: { nil })
+        let session = ReviewSession(queueStore: store)
+        session.contactsProviderForTesting = ThrowingProvider()
+        session.pipelineForTesting = MatchPipeline(sources: [], fetchImage: { _ in Data() })
+        let completed = await session.scanAndMatch()
+        XCTAssertFalse(completed)
+        XCTAssertEqual(session.stage, .idle)
+        guard case .scanFailed = session.lastError else {
+            return XCTFail("a thrown scan must set lastError, got \(String(describing: session.lastError))")
+        }
+    }
+
     func testRoleOrTitleInOrganizationIsNotAnAffiliation() {
         let director = ContactIdentity(id: "6", displayName: "Jane Doe", givenName: "Jane", familyName: "Doe",
                                        organization: "Director")
