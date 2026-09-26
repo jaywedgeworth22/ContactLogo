@@ -9,7 +9,7 @@
       "groupName": "non-major dependencies",
       "automerge": true,
       "automergeType": "pr",
-      "platformAutomerge": true
+      "platformAutomerge": false
     },
     {
       "matchUpdateTypes": ["major"],
